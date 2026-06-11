@@ -1,0 +1,68 @@
+/* Keel CRM v2 — design tokens (§7 of KEEL_CRM_PLAN.md)
+   Paper-and-navy civic software with one brass spine.
+   All colour pairs WCAG-verified per the plan. */
+
+:root {
+  /* Surfaces */
+  --paper:     #F6F7F4;
+  --surface:   #FFFFFF;
+
+  /* Text */
+  --ink:       #16212E;   /* 15.1:1 on paper, 16.3:1 on white */
+  --ink-muted: #51606F;   /* 6.5:1 on white */
+
+  /* Brand */
+  --hull:      #1C3D5A;   /* primary buttons, white text — 11.3:1 */
+  --brass:     #F0B429;   /* signature accent fill, dark text */
+  --brass-text:#10100A;   /* text on brass fill — 10.2:1 */
+  --brass-ink: #8A5A06;   /* brass as text on white — 5.9:1 */
+  --link:      #1C5D8F;   /* 7.0:1 */
+  --danger:    #A8231A;   /* 7.2:1 */
+  --success:   #1D5C38;   /* 8.0:1 */
+
+  /* Lines & focus */
+  --line:        rgba(22, 33, 46, 0.12);
+  --line-strong: rgba(22, 33, 46, 0.25);
+  --focus-ring:  var(--hull);
+
+  /* Stage badges: text colour / tinted background */
+  --stage-lead-fg: #3D4B5C;        --stage-lead-bg: #E4E9EE;
+  --stage-referred-fg: #174E78;    --stage-referred-bg: #DCEAF5;
+  --stage-viewing-fg: #5B3E8F;     --stage-viewing-bg: #E9E2F6;
+  --stage-offer-fg: #7A4D04;       --stage-offer-bg: #FBEED3;
+  --stage-placed-fg: #1D5C38;      --stage-placed-bg: #DDF0E4;
+  --stage-fee_invoiced-fg: #7A4D04;--stage-fee_invoiced-bg: #FBEED3;
+  --stage-fee_paid-fg: #FFFFFF;    --stage-fee_paid-bg: #1D5C38;  /* solid — 8.0:1 */
+  --stage-lost-fg: #8C2B23;        --stage-lost-bg: #F9E2DF;
+
+  /* Type */
+  --font-display: 'Bricolage Grotesque', 'IBM Plex Sans', system-ui, sans-serif;
+  --font-body:    'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono:    'IBM Plex Mono', ui-monospace, monospace;
+
+  /* Scale: 13 / 15 (base) / 18 / 22 / 28 */
+  --text-xs: 13px;
+  --text-sm: 15px;
+  --text-md: 18px;
+  --text-lg: 22px;
+  --text-xl: 28px;
+
+  /* Elevation */
+  --shadow-card: 0 1px 2px rgba(22,33,46,0.06), 0 1px 4px rgba(22,33,46,0.04);
+  --shadow-pop:  0 4px 16px rgba(22,33,46,0.12), 0 2px 6px rgba(22,33,46,0.06);
+}
+
+[data-theme='dark'] {
+  --paper:     #0C141F;
+  --surface:   #16212E;
+  --ink:       #EDF1F5;   /* 16.3:1 */
+  --ink-muted: #9AAABB;   /* 7.8:1 */
+  --line:        rgba(237, 241, 245, 0.14);
+  --line-strong: rgba(237, 241, 245, 0.28);
+  --link:      #6FB0E0;
+  --danger:    #E8847C;
+  --success:   #7BC89C;
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.30), 0 1px 4px rgba(0,0,0,0.20);
+  --shadow-pop:  0 4px 16px rgba(0,0,0,0.40), 0 2px 6px rgba(0,0,0,0.25);
+  /* brass unchanged as fill */
+}
