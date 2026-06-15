@@ -1,137 +1,166 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApplicants, useMoveStage } from '../../lib/hooks';
-import { useToast } from '../../components/ui';
+import { Card, useToast } from '../../components/ui';
 import { APPLICANT_STAGES } from '../../types/extraction';
 import type { ApplicantStage } from '../../types/extraction';
 import type { Applicant } from '../../lib/types';
 import { money, timeAgo } from '../../lib/format';
-
-const BOARD_STAGES = APPLICANT_STAGES.filter((s) => s !== 'lost') as ApplicantStage[];
 
 const STAGE_LABEL: Record<ApplicantStage, string> = {
   lead: 'Lead', referred: 'Referred', viewing: 'Viewing', offer: 'Offer',
   placed: 'Placed', fee_invoiced: 'Fee invoiced', fee_paid: 'Fee paid', lost: 'Lost',
 };
 
-/** Pipeline kanban (§8.2). Drag a card to a later column to advance the stage;
- *  each move logs an activity. Backwards moves are blocked (monotonic). */
+type SortKey = 'name' | 'borough' | 'budget' | 'stage' | 'updated';
+
+/** Pipeline as a sortable, filterable table (§8.2, tabular variant).
+ *  Change a row's stage from the inline dropdown; each change logs activity. */
 export function PipelinePage() {
   const { data: applicants = [], isLoading } = useApplicants();
   const moveStage = useMoveStage();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [dragId, setDragId] = useState<string | null>(null);
-  const [overStage, setOverStage] = useState<ApplicantStage | null>(null);
 
-  const byStage = (stage: ApplicantStage) => applicants.filter((a) => a.stage === stage);
+  const [filter, setFilter] = useState<ApplicantStage | 'all' | 'active'>('active');
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'updated', dir: -1 });
 
-  const handleDrop = (to: ApplicantStage) => {
-    setOverStage(null);
-    const a = applicants.find((x) => x.id === dragId);
-    setDragId(null);
-    if (!a || a.stage === to) return;
-    const fromIdx = BOARD_STAGES.indexOf(a.stage);
-    const toIdx = BOARD_STAGES.indexOf(to);
-    if (toIdx < fromIdx) {
-      toast('Stages only move forward. Open the record to move it back.', 'danger');
-      return;
-    }
+  const counts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const a of applicants) m.set(a.stage, (m.get(a.stage) ?? 0) + 1);
+    return m;
+  }, [applicants]);
+
+  const rows = useMemo(() => {
+    let r = applicants;
+    if (filter === 'active') r = r.filter((a) => a.stage !== 'lost' && a.stage !== 'fee_paid');
+    else if (filter !== 'all') r = r.filter((a) => a.stage === filter);
+
+    const stageIdx = (s: ApplicantStage) => APPLICANT_STAGES.indexOf(s);
+    const cmp = (a: Applicant, b: Applicant): number => {
+      switch (sort.key) {
+        case 'name': return a.full_name.localeCompare(b.full_name);
+        case 'borough': return (a.referring_borough ?? '').localeCompare(b.referring_borough ?? '');
+        case 'budget': return (a.budget_pcm ?? 0) - (b.budget_pcm ?? 0);
+        case 'stage': return stageIdx(a.stage) - stageIdx(b.stage);
+        case 'updated': return new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
+      }
+    };
+    return [...r].sort((a, b) => cmp(a, b) * sort.dir);
+  }, [applicants, filter, sort]);
+
+  const toggleSort = (key: SortKey) =>
+    setSort((s) => (s.key === key ? { key, dir: (s.dir * -1) as 1 | -1 } : { key, dir: 1 }));
+
+  const changeStage = (a: Applicant, to: ApplicantStage) => {
+    if (to === a.stage) return;
     moveStage.mutate(
       { id: a.id, from: a.stage, to },
       { onSuccess: () => toast(`${a.full_name.split(' ')[0]} → ${STAGE_LABEL[to]}`, 'success') },
     );
   };
 
-  const lost = byStage('lost');
-
   if (isLoading) return <div className="grid min-h-[50vh] place-items-center text-[var(--ink-muted)]">Loading…</div>;
 
   return (
-    <div className="flex h-[calc(100vh-49px)] flex-col p-6">
-      <header className="mb-4">
+    <div className="mx-auto flex max-w-[1000px] flex-col gap-4 p-6 pb-24">
+      <header>
         <h1 className="m-0 text-[28px] font-bold text-[var(--ink)]">Pipeline</h1>
-        <p className="m-0 mt-1 text-[15px] text-[var(--ink-muted)]">
-          {applicants.length} applicants · drag a card forward to advance
-        </p>
+        <p className="m-0 mt-1 text-[15px] text-[var(--ink-muted)]">{applicants.length} applicants</p>
       </header>
 
-      <div className="flex flex-1 gap-3 overflow-x-auto pb-4">
-        {BOARD_STAGES.map((stage) => {
-          const cards = byStage(stage);
-          return (
-            <div
-              key={stage}
-              onDragOver={(e) => { e.preventDefault(); setOverStage(stage); }}
-              onDragLeave={() => setOverStage((s) => (s === stage ? null : s))}
-              onDrop={() => handleDrop(stage)}
-              className="flex w-[260px] shrink-0 flex-col rounded-lg border transition-colors"
-              style={{
-                borderColor: overStage === stage ? 'var(--brass)' : 'var(--line)',
-                background: overStage === stage ? 'var(--stage-offer-bg)' : 'var(--surface)',
-              }}
-            >
-              <div className="flex items-center justify-between border-b border-[var(--line)] px-3 py-2">
-                <span className="text-[15px] font-semibold text-[var(--ink)]">{STAGE_LABEL[stage]}</span>
-                <span className="font-mono text-[13px] text-[var(--ink-muted)]">{cards.length}</span>
-              </div>
-              <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-2">
-                {cards.map((a) => (
-                  <ApplicantCard
-                    key={a.id}
-                    a={a}
-                    onDragStart={() => setDragId(a.id)}
-                    onClick={() => navigate(`/applicants/${a.id}`)}
-                  />
-                ))}
-                {cards.length === 0 && (
-                  <div className="grid h-16 place-items-center text-[13px] text-[var(--ink-muted)]">—</div>
-                )}
-              </div>
-            </div>
-          );
-        })}
+      {/* Filter chips */}
+      <div className="flex flex-wrap gap-2">
+        <FilterChip active={filter === 'active'} onClick={() => setFilter('active')}>
+          Active <Count n={applicants.filter((a) => a.stage !== 'lost' && a.stage !== 'fee_paid').length} />
+        </FilterChip>
+        <FilterChip active={filter === 'all'} onClick={() => setFilter('all')}>
+          All <Count n={applicants.length} />
+        </FilterChip>
+        {APPLICANT_STAGES.map((s) => (
+          <FilterChip key={s} active={filter === s} onClick={() => setFilter(s)}>
+            {STAGE_LABEL[s]} <Count n={counts.get(s) ?? 0} />
+          </FilterChip>
+        ))}
       </div>
 
-      {lost.length > 0 && (
-        <div className="mt-2 flex items-center gap-2 text-[13px] text-[var(--ink-muted)]">
-          <span className="rounded bg-[var(--stage-lost-bg)] px-2 py-0.5 text-[var(--stage-lost-fg)]">Lost</span>
-          {lost.map((a) => (
-            <button key={a.id} onClick={() => navigate(`/applicants/${a.id}`)} className="hover:text-[var(--ink)] hover:underline">
-              {a.full_name}
-            </button>
-          ))}
-        </div>
-      )}
+      <Card className="overflow-x-auto">
+        <table className="w-full min-w-[720px] border-collapse text-[15px]">
+          <thead>
+            <tr className="text-left text-[13px] text-[var(--ink-muted)]">
+              <Th onClick={() => toggleSort('name')} active={sort.key === 'name'} dir={sort.dir}>Name</Th>
+              <Th onClick={() => toggleSort('borough')} active={sort.key === 'borough'} dir={sort.dir}>Borough</Th>
+              <th className="px-3 py-2 font-medium">Benefit</th>
+              <Th onClick={() => toggleSort('budget')} active={sort.key === 'budget'} dir={sort.dir} right>Budget</Th>
+              <Th onClick={() => toggleSort('stage')} active={sort.key === 'stage'} dir={sort.dir}>Stage</Th>
+              <Th onClick={() => toggleSort('updated')} active={sort.key === 'updated'} dir={sort.dir} right>Updated</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((a) => (
+              <tr key={a.id} className="border-t border-[var(--line)] hover:bg-[var(--paper)]">
+                <td className="px-5 py-3">
+                  <button onClick={() => navigate(`/applicants/${a.id}`)} className="text-left text-[var(--ink)] hover:underline">
+                    {a.full_name}
+                  </button>
+                  {a.phone && <div className="font-mono text-[13px] text-[var(--ink-muted)]">{a.phone}</div>}
+                </td>
+                <td className="px-3 py-3 text-[var(--ink-muted)]">{a.referring_borough ?? '—'}</td>
+                <td className="px-3 py-3 text-[var(--ink-muted)]">{a.benefit_type ?? '—'}</td>
+                <td className="px-3 py-3 text-right font-mono text-[var(--ink)]">{a.budget_pcm ? money(a.budget_pcm) : '—'}</td>
+                <td className="px-3 py-3">
+                  <select
+                    value={a.stage}
+                    onChange={(e) => changeStage(a, e.target.value as ApplicantStage)}
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label={`Stage for ${a.full_name}`}
+                    className="min-h-[36px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[13px] text-[var(--ink)]"
+                  >
+                    {APPLICANT_STAGES.map((s) => (
+                      <option key={s} value={s}>{STAGE_LABEL[s]}</option>
+                    ))}
+                  </select>
+                </td>
+                <td className="px-5 py-3 text-right font-mono text-[13px] text-[var(--ink-muted)]">{timeAgo(a.updated_at)}</td>
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr><td colSpan={6} className="px-5 py-10 text-center text-[var(--ink-muted)]">No applicants in this view.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </Card>
     </div>
   );
 }
 
-function ApplicantCard({ a, onDragStart, onClick }: { a: Applicant; onDragStart: () => void; onClick: () => void }) {
-  const lhaGap = a.budget_pcm; // budget shown; LHA delta added in property context
-  const days = Math.floor((Date.now() - new Date(a.updated_at).getTime()) / 86_400_000);
+function Th({ children, onClick, active, dir, right }: { children: React.ReactNode; onClick: () => void; active: boolean; dir: 1 | -1; right?: boolean }) {
   return (
-    <article
-      draggable
-      onDragStart={onDragStart}
-      onClick={onClick}
-      className="cursor-pointer rounded-md border border-[var(--line)] bg-[var(--paper)] p-3 transition-shadow hover:shadow-[var(--shadow-card)]"
-    >
-      <div className="text-[15px] font-medium text-[var(--ink)]">{a.full_name}</div>
-      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[13px] text-[var(--ink-muted)]">
-        {a.referring_borough && <span>{a.referring_borough}</span>}
-        {a.benefit_type && <span>· {a.benefit_type}</span>}
-      </div>
-      <div className="mt-2 flex items-center justify-between">
-        {lhaGap != null ? (
-          <span className="rounded bg-[var(--stage-offer-bg)] px-1.5 py-0.5 font-mono text-[13px] text-[var(--stage-offer-fg)]">
-            {money(lhaGap)}
-          </span>
-        ) : <span />}
-        <span className="font-mono text-[13px] text-[var(--ink-muted)]" title={`Updated ${timeAgo(a.updated_at)}`}>
-          {days === 0 ? 'today' : `${days}d`}
-        </span>
-      </div>
-    </article>
+    <th className={`px-3 py-2 font-medium first:pl-5 last:pr-5 ${right ? 'text-right' : ''}`}>
+      <button onClick={onClick} className="inline-flex items-center gap-1 hover:text-[var(--ink)]">
+        {children}
+        {active && <span aria-hidden>{dir === 1 ? '↑' : '↓'}</span>}
+      </button>
+    </th>
   );
+}
+
+function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className="rounded-full border px-3 py-1 text-[13px] transition-colors"
+      style={{
+        borderColor: active ? 'var(--hull)' : 'var(--line-strong)',
+        background: active ? 'var(--hull)' : 'transparent',
+        color: active ? '#fff' : 'var(--ink-muted)',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Count({ n }: { n: number }) {
+  return <span className="font-mono opacity-70">{n}</span>;
 }

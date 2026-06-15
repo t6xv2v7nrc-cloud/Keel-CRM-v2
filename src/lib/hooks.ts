@@ -90,6 +90,22 @@ export function useActivities(entityType: string, entityId: string | undefined) 
   });
 }
 
+/** Most recent activity across all entities — for the dashboard feed. */
+export function useRecentActivity(limit = 12) {
+  return useQuery({
+    queryKey: ['activities', 'recent', limit],
+    queryFn: async (): Promise<Activity[]> => {
+      const { data, error } = await supabase
+        .from('activities')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (error) throw error;
+      return data as Activity[];
+    },
+  });
+}
+
 // ── Contacts ────────────────────────────────────────────────────────
 export function useContacts() {
   return useQuery({

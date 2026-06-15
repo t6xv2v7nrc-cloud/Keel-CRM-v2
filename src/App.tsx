@@ -1,8 +1,10 @@
-import { useEffect } from 'react';
-import { BrowserRouter, NavLink, Route, Routes, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { BrowserRouter, Link, NavLink, Route, Routes, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthGate } from './features/auth/AuthGate';
+import { useAuth } from './features/auth/useAuth';
 import { ToastProvider } from './components/ui';
+import { DashboardPage } from './features/dashboard/DashboardPage';
 import { BinPage } from './features/bin/BinPage';
 import { PipelinePage } from './features/pipeline/PipelinePage';
 import { ApplicantPage } from './features/applicants/ApplicantPage';
@@ -18,7 +20,8 @@ const queryClient = new QueryClient({
 });
 
 const NAV = [
-  { to: '/', label: 'Bin' },
+  { to: '/', label: 'Home' },
+  { to: '/bin', label: 'Bin' },
   { to: '/pipeline', label: 'Pipeline' },
   { to: '/properties', label: 'Properties' },
   { to: '/contacts', label: 'Contacts' },
@@ -50,6 +53,7 @@ export default function App() {
 
 function Shell() {
   const navigate = useNavigate();
+  const { email, signOut } = useAuth();
 
   // Keyboard shortcut: V jumps to the Bin ready to paste (ignored while typing).
   useEffect(() => {
@@ -57,7 +61,7 @@ function Shell() {
       const el = e.target as HTMLElement;
       const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable;
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key.toLowerCase() === 'v') navigate('/');
+      if (e.key.toLowerCase() === 'v') navigate('/bin');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -66,9 +70,13 @@ function Shell() {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-30 flex items-center gap-1 border-b border-[var(--line)] bg-[var(--surface)] px-4 py-2">
-        <span aria-hidden className="mr-3 grid h-7 w-7 rotate-45 place-items-center rounded-sm" style={{ background: 'var(--hull)' }}>
-          <span className="h-2.5 w-2.5 rounded-[2px]" style={{ background: 'var(--brass)' }} />
-        </span>
+        {/* Clickable home / brand */}
+        <Link to="/" aria-label="Home" title="Home" className="mr-3 flex items-center gap-2 rounded-md p-1 transition-colors hover:bg-[var(--paper)]">
+          <span aria-hidden className="grid h-7 w-7 rotate-45 place-items-center rounded-sm" style={{ background: 'var(--hull)' }}>
+            <span className="h-2.5 w-2.5 rounded-[2px]" style={{ background: 'var(--brass)' }} />
+          </span>
+          <span className="hidden font-[var(--font-display)] text-[18px] font-bold text-[var(--ink)] sm:block">Keel</span>
+        </Link>
         <nav className="flex items-center gap-1 overflow-x-auto">
           {NAV.map((item) => (
             <NavLink
@@ -87,18 +95,20 @@ function Shell() {
             </NavLink>
           ))}
         </nav>
-        <div className="ml-auto flex items-center gap-3">
-          <span className="hidden items-center gap-1 font-mono text-[13px] text-[var(--ink-muted)] sm:flex">
+        <div className="ml-auto flex items-center gap-2">
+          <span className="hidden items-center gap-1 font-mono text-[13px] text-[var(--ink-muted)] lg:flex">
             <kbd className="rounded border border-[var(--line)] px-1.5 py-0.5">Ctrl K</kbd>
             <span>search</span>
           </span>
           <ThemeToggle />
+          <UserMenu email={email} onSignOut={signOut} />
         </div>
       </header>
 
       <main className="flex-1">
         <Routes>
-          <Route path="/" element={<BinPage />} />
+          <Route path="/" element={<DashboardPage />} />
+          <Route path="/bin" element={<BinPage />} />
           <Route path="/pipeline" element={<PipelinePage />} />
           <Route path="/applicants/:id" element={<ApplicantPage />} />
           <Route path="/properties" element={<PropertiesPage />} />
@@ -108,6 +118,48 @@ function Shell() {
       </main>
 
       <CommandSearch />
+    </div>
+  );
+}
+
+function UserMenu({ email, onSignOut }: { email: string | null; onSignOut: () => void }) {
+  const [open, setOpen] = useState(false);
+  const initials = email ? email.slice(0, 2).toUpperCase() : '··';
+
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [open]);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        className="grid h-9 w-9 place-items-center rounded-full bg-[var(--hull)] text-[13px] font-semibold text-white"
+        aria-label="Account menu"
+        title={email ?? 'Account'}
+      >
+        {initials}
+      </button>
+      {open && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="absolute right-0 top-11 z-50 w-56 overflow-hidden rounded-lg border border-[var(--line-strong)] bg-[var(--surface)] shadow-[var(--shadow-pop)]"
+        >
+          <div className="border-b border-[var(--line)] px-4 py-3">
+            <div className="text-[13px] text-[var(--ink-muted)]">Signed in as</div>
+            <div className="truncate text-[15px] text-[var(--ink)]">{email ?? '—'}</div>
+          </div>
+          <button
+            onClick={onSignOut}
+            className="block w-full px-4 py-3 text-left text-[15px] text-[var(--danger)] transition-colors hover:bg-[var(--paper)]"
+          >
+            Log out
+          </button>
+        </div>
+      )}
     </div>
   );
 }
