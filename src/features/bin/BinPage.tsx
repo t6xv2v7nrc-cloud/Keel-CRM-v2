@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button, Card, CardHeader, Field, useToast } from '../../components/ui';
-import { ocrImage } from '../../lib/ocr';
 import { extractFromText } from '../../lib/extract';
 import { runMatching } from '../../lib/matching';
 import { compressImage, uploadToBin } from './capture';
@@ -61,8 +60,10 @@ export function BinPage() {
       setProgressLabel('Compressing…');
       const blob = await compressImage(staged.file);
 
-      // 2. OCR (the slow step on first run — downloads language data)
+      // 2. OCR (the slow step on first run — downloads language data).
+      //    Lazy-loaded so Tesseract is not in the main bundle.
       setProgressLabel('Reading text…');
+      const { ocrImage } = await import('../../lib/ocr');
       const text = await ocrImage(blob, (f) => setProgress(f));
 
       // 3. Extract + match

@@ -135,6 +135,39 @@ export function usePlacements() {
   });
 }
 
+export function useUpdatePlacement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...patch }: Partial<Placement> & { id: string }) => {
+      const { data, error } = await supabase
+        .from('placements')
+        .update(patch)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      // Mirror fee status onto the applicant stage where it makes sense.
+      if (patch.fee_status && data) {
+        const stage = patch.fee_status === 'paid' ? 'fee_paid' : patch.fee_status === 'invoiced' ? 'fee_invoiced' : null;
+        if (stage) {
+          await supabase.from('applicants').update({ stage }).eq('id', (data as Placement).applicant_id);
+          await supabase.from('activities').insert({
+            entity_type: 'applicant',
+            entity_id: (data as Placement).applicant_id,
+            kind: 'stage_change',
+            body: `Fee ${patch.fee_status} — stage → ${stage}`,
+          });
+        }
+      }
+      return data as Placement;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['placements'] });
+      qc.invalidateQueries({ queryKey: ['applicants'] });
+    },
+  });
+}
+
 export function usePlacementForApplicant(applicantId: string | undefined) {
   return useQuery({
     queryKey: ['placements', 'applicant', applicantId],

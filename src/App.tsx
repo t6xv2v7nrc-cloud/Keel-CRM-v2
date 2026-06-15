@@ -1,4 +1,5 @@
-import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom';
+import { useEffect } from 'react';
+import { BrowserRouter, NavLink, Route, Routes, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthGate } from './features/auth/AuthGate';
 import { ToastProvider } from './components/ui';
@@ -7,7 +8,9 @@ import { PipelinePage } from './features/pipeline/PipelinePage';
 import { ApplicantPage } from './features/applicants/ApplicantPage';
 import { PropertiesPage } from './features/properties/PropertiesPage';
 import { ContactsPage } from './features/contacts/ContactsPage';
+import { FeesPage } from './features/fees/FeesPage';
 import { CommandSearch } from './features/search/CommandSearch';
+import { ThemeToggle } from './components/ThemeToggle';
 import DevTokens from './routes/DevTokens';
 
 const queryClient = new QueryClient({
@@ -46,6 +49,20 @@ export default function App() {
 }
 
 function Shell() {
+  const navigate = useNavigate();
+
+  // Keyboard shortcut: V jumps to the Bin ready to paste (ignored while typing).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement;
+      const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable;
+      if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key.toLowerCase() === 'v') navigate('/');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [navigate]);
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-30 flex items-center gap-1 border-b border-[var(--line)] bg-[var(--surface)] px-4 py-2">
@@ -70,10 +87,13 @@ function Shell() {
             </NavLink>
           ))}
         </nav>
-        <span className="ml-auto hidden items-center gap-1 font-mono text-[13px] text-[var(--ink-muted)] sm:flex">
-          <kbd className="rounded border border-[var(--line)] px-1.5 py-0.5">Ctrl K</kbd>
-          <span>search</span>
-        </span>
+        <div className="ml-auto flex items-center gap-3">
+          <span className="hidden items-center gap-1 font-mono text-[13px] text-[var(--ink-muted)] sm:flex">
+            <kbd className="rounded border border-[var(--line)] px-1.5 py-0.5">Ctrl K</kbd>
+            <span>search</span>
+          </span>
+          <ThemeToggle />
+        </div>
       </header>
 
       <main className="flex-1">
@@ -83,22 +103,11 @@ function Shell() {
           <Route path="/applicants/:id" element={<ApplicantPage />} />
           <Route path="/properties" element={<PropertiesPage />} />
           <Route path="/contacts" element={<ContactsPage />} />
-          <Route path="/fees" element={<Placeholder name="Fees" hint="Fee status, splits, monthly totals (Phase 4)" />} />
+          <Route path="/fees" element={<FeesPage />} />
         </Routes>
       </main>
 
       <CommandSearch />
-    </div>
-  );
-}
-
-function Placeholder({ name, hint }: { name: string; hint: string }) {
-  return (
-    <div className="grid min-h-[60vh] place-items-center p-6 text-center">
-      <div>
-        <h1 className="m-0 text-[28px] font-bold text-[var(--ink)]">{name}</h1>
-        <p className="mt-2 text-[15px] text-[var(--ink-muted)]">{hint}</p>
-      </div>
     </div>
   );
 }
