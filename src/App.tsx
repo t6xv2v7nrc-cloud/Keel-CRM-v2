@@ -2,6 +2,7 @@ import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthGate } from './features/auth/AuthGate';
 import { ToastProvider } from './components/ui';
+import { BinPage } from './features/bin/BinPage';
 import DevTokens from './routes/DevTokens';
 
 const queryClient = new QueryClient({
@@ -68,7 +69,7 @@ function Shell() {
 
       <main className="flex-1">
         <Routes>
-          <Route path="/" element={<Placeholder name="The Bin" hint="Paste a screenshot anywhere — Ctrl/Cmd+V (Phase 2)" />} />
+          <Route path="/" element={<BinPage />} />
           <Route path="/pipeline" element={<Placeholder name="Pipeline" hint="Kanban by stage (Phase 3)" />} />
           <Route path="/properties" element={<Placeholder name="Properties" hint="Voids, rent vs LHA (Phase 3)" />} />
           <Route path="/contacts" element={<Placeholder name="Contacts" hint="Officers, partners, landlords (Phase 3)" />} />
