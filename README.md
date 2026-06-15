@@ -23,5 +23,5 @@ Design system reference renders at `/dev/tokens`.
 - [x] Phase 0 — Scaffold (tokens, auth gate, /dev/tokens)
 - [x] Phase 1 — Schema (migration, RLS, bin bucket, seed) — _run `supabase/0001_init.sql` in the dashboard; see [supabase/README.md](supabase/README.md)_
 - [x] Phase 2 — The Bin (capture → OCR → extract → match → review → confirm). Uses **client-side Tesseract.js OCR** (free, no API key). Claude vision is a drop-in upgrade later via the same `Extraction` contract.
-- [ ] Phase 3 — Pipeline & records
+- [x] Phase 3 — Pipeline (kanban, drag to advance), applicant pages (Keel Line timeline with screenshot provenance), properties (rent vs LHA), contacts (referral counts), global ⌘K search
 - [ ] Phase 4 — Fees & polish

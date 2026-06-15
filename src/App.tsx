@@ -3,6 +3,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthGate } from './features/auth/AuthGate';
 import { ToastProvider } from './components/ui';
 import { BinPage } from './features/bin/BinPage';
+import { PipelinePage } from './features/pipeline/PipelinePage';
+import { ApplicantPage } from './features/applicants/ApplicantPage';
+import { PropertiesPage } from './features/properties/PropertiesPage';
+import { ContactsPage } from './features/contacts/ContactsPage';
+import { CommandSearch } from './features/search/CommandSearch';
 import DevTokens from './routes/DevTokens';
 
 const queryClient = new QueryClient({
@@ -65,17 +70,24 @@ function Shell() {
             </NavLink>
           ))}
         </nav>
+        <span className="ml-auto hidden items-center gap-1 font-mono text-[13px] text-[var(--ink-muted)] sm:flex">
+          <kbd className="rounded border border-[var(--line)] px-1.5 py-0.5">Ctrl K</kbd>
+          <span>search</span>
+        </span>
       </header>
 
       <main className="flex-1">
         <Routes>
           <Route path="/" element={<BinPage />} />
-          <Route path="/pipeline" element={<Placeholder name="Pipeline" hint="Kanban by stage (Phase 3)" />} />
-          <Route path="/properties" element={<Placeholder name="Properties" hint="Voids, rent vs LHA (Phase 3)" />} />
-          <Route path="/contacts" element={<Placeholder name="Contacts" hint="Officers, partners, landlords (Phase 3)" />} />
+          <Route path="/pipeline" element={<PipelinePage />} />
+          <Route path="/applicants/:id" element={<ApplicantPage />} />
+          <Route path="/properties" element={<PropertiesPage />} />
+          <Route path="/contacts" element={<ContactsPage />} />
           <Route path="/fees" element={<Placeholder name="Fees" hint="Fee status, splits, monthly totals (Phase 4)" />} />
         </Routes>
       </main>
+
+      <CommandSearch />
     </div>
   );
 }
