@@ -1,12 +1,14 @@
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Card, CardHeader, KeelLine, StageBadge } from '../../components/ui';
+import { Button, Card, CardHeader, Field, KeelLine, StageBadge, useToast } from '../../components/ui';
 import {
   useActivities,
   useApplicant,
   usePlacementForApplicant,
+  useUpdateApplicant,
 } from '../../lib/hooks';
 import { money, shortDate, timeAgo } from '../../lib/format';
-import type { Activity } from '../../lib/types';
+import type { Activity, Applicant } from '../../lib/types';
 
 export function ApplicantPage() {
   const { id } = useParams<{ id: string }>();
@@ -29,31 +31,7 @@ export function ApplicantPage() {
         ← Pipeline
       </button>
 
-      {/* Hero */}
-      <Card className="p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="m-0 text-[28px] font-bold text-[var(--ink)]">{applicant.full_name}</h1>
-            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[15px] text-[var(--ink-muted)]">
-              {applicant.phone && <span>{applicant.phone}</span>}
-              {applicant.referring_borough && <span>{applicant.referring_borough}</span>}
-              {applicant.benefit_type && <span>{applicant.benefit_type}</span>}
-            </div>
-          </div>
-          <StageBadge stage={applicant.stage} />
-        </div>
-
-        <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-[var(--line)] pt-5 sm:grid-cols-4">
-          <Meta label="Household" value={household || '—'} />
-          <Meta label="Budget" value={applicant.budget_pcm ? money(applicant.budget_pcm) : '—'} mono />
-          <Meta label="LHA band" value={applicant.lha_band || '—'} />
-          <Meta label="Source" value={applicant.source || '—'} />
-        </dl>
-
-        {applicant.requirements && (
-          <p className="mt-4 mb-0 text-[15px] text-[var(--ink)]">{applicant.requirements}</p>
-        )}
-      </Card>
+      <HeroCard applicant={applicant} household={household} />
 
       <div className="grid gap-6 md:grid-cols-[1fr_320px]">
         {/* Timeline with screenshot provenance */}
@@ -126,6 +104,127 @@ function TimelineRow({ act }: { act: Activity }) {
         </div>
       </div>
     </li>
+  );
+}
+
+/** Applicant hero with an inline edit mode. */
+function HeroCard({ applicant, household }: { applicant: Applicant; household: string }) {
+  const update = useUpdateApplicant();
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<Partial<Applicant>>({});
+
+  const start = () => {
+    setDraft({
+      full_name: applicant.full_name,
+      phone: applicant.phone ?? '',
+      email: applicant.email ?? '',
+      referring_borough: applicant.referring_borough ?? '',
+      benefit_type: applicant.benefit_type ?? '',
+      budget_pcm: applicant.budget_pcm ?? undefined,
+      lha_band: applicant.lha_band ?? '',
+      adults: applicant.adults ?? 1,
+      children: applicant.children ?? 0,
+      requirements: applicant.requirements ?? '',
+      notes: applicant.notes ?? '',
+    });
+    setEditing(true);
+  };
+
+  const set = (k: keyof Applicant, v: string | number) => setDraft((d) => ({ ...d, [k]: v }));
+
+  const save = async () => {
+    if (!draft.full_name?.trim()) { toast('Name is required', 'danger'); return; }
+    try {
+      await update.mutateAsync({
+        id: applicant.id,
+        full_name: draft.full_name,
+        phone: draft.phone || null,
+        email: draft.email || null,
+        referring_borough: draft.referring_borough || null,
+        benefit_type: draft.benefit_type || null,
+        budget_pcm: draft.budget_pcm ? Number(draft.budget_pcm) : null,
+        lha_band: draft.lha_band || null,
+        adults: draft.adults != null ? Number(draft.adults) : null,
+        children: draft.children != null ? Number(draft.children) : null,
+        requirements: draft.requirements || null,
+        notes: draft.notes || null,
+      });
+      toast('Applicant updated', 'success');
+      setEditing(false);
+    } catch (e) {
+      toast(`Save failed: ${(e as Error).message}`, 'danger');
+    }
+  };
+
+  if (editing) {
+    return (
+      <Card className="p-6">
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Full name" value={draft.full_name ?? ''} onChange={(e) => set('full_name', e.target.value)} />
+          <Field label="Phone" mono value={draft.phone ?? ''} onChange={(e) => set('phone', e.target.value)} />
+          <Field label="Email" value={draft.email ?? ''} onChange={(e) => set('email', e.target.value)} />
+          <Field label="Borough" value={draft.referring_borough ?? ''} onChange={(e) => set('referring_borough', e.target.value)} />
+          <Field label="Benefit (UC/HB)" value={draft.benefit_type ?? ''} onChange={(e) => set('benefit_type', e.target.value)} />
+          <Field label="Budget pcm" mono type="number" value={String(draft.budget_pcm ?? '')} onChange={(e) => set('budget_pcm', e.target.value)} />
+          <Field label="Adults" type="number" value={String(draft.adults ?? '')} onChange={(e) => set('adults', e.target.value)} />
+          <Field label="Children" type="number" value={String(draft.children ?? '')} onChange={(e) => set('children', e.target.value)} />
+          <Field label="LHA band" value={draft.lha_band ?? ''} onChange={(e) => set('lha_band', e.target.value)} />
+        </div>
+        <label className="mt-4 flex flex-col gap-1">
+          <span className="text-[13px] font-medium text-[var(--ink-muted)]">Requirements</span>
+          <textarea
+            value={draft.requirements ?? ''}
+            onChange={(e) => set('requirements', e.target.value)}
+            rows={2}
+            className="rounded-md border border-[var(--line-strong)] bg-[var(--surface)] p-2 text-[15px] text-[var(--ink)] outline-none focus:border-[var(--hull)]"
+          />
+        </label>
+        <label className="mt-4 flex flex-col gap-1">
+          <span className="text-[13px] font-medium text-[var(--ink-muted)]">Notes</span>
+          <textarea
+            value={draft.notes ?? ''}
+            onChange={(e) => set('notes', e.target.value)}
+            rows={2}
+            className="rounded-md border border-[var(--line-strong)] bg-[var(--surface)] p-2 text-[15px] text-[var(--ink)] outline-none focus:border-[var(--hull)]"
+          />
+        </label>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button onClick={() => setEditing(false)} disabled={update.isPending}>Cancel</Button>
+          <Button variant="primary" onClick={save} disabled={update.isPending}>{update.isPending ? 'Saving…' : 'Save'}</Button>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="p-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="m-0 text-[28px] font-bold text-[var(--ink)]">{applicant.full_name}</h1>
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[15px] text-[var(--ink-muted)]">
+            {applicant.phone && <span>{applicant.phone}</span>}
+            {applicant.email && <span>{applicant.email}</span>}
+            {applicant.referring_borough && <span>{applicant.referring_borough}</span>}
+            {applicant.benefit_type && <span>{applicant.benefit_type}</span>}
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <StageBadge stage={applicant.stage} />
+          <Button onClick={start} className="min-h-0 px-3 py-1.5 text-[13px]">Edit</Button>
+        </div>
+      </div>
+
+      <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-[var(--line)] pt-5 sm:grid-cols-4">
+        <Meta label="Household" value={household || '—'} />
+        <Meta label="Budget" value={applicant.budget_pcm ? money(applicant.budget_pcm) : '—'} mono />
+        <Meta label="LHA band" value={applicant.lha_band || '—'} />
+        <Meta label="Source" value={applicant.source || '—'} />
+      </dl>
+
+      {applicant.requirements && <p className="mt-4 mb-0 text-[15px] text-[var(--ink)]">{applicant.requirements}</p>}
+      {applicant.notes && <p className="mt-2 mb-0 text-[15px] text-[var(--ink-muted)]">{applicant.notes}</p>}
+    </Card>
   );
 }
 

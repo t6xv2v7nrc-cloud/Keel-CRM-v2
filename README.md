@@ -27,3 +27,9 @@ Design system reference renders at `/dev/tokens`.
 - [x] Phase 4 — Fees dashboard (net-of-split totals, mark invoiced/paid → advances stage), dark mode toggle (persisted, no-flash), lazy-loaded OCR chunk, V-to-Bin shortcut, mobile-friendly tables
 
 **All phases complete.** Remaining optional work: deploy to Netlify, run a Lighthouse a11y pass, and tune the extractor against real screenshot formats.
+
+### Beyond the plan
+- **Home dashboard**, logout, clickable home, **tabular pipeline** (kanban removed)
+- **Website enquiry sync** — paste the enquiry email into the Bin, or wire the
+  Netlify Forms webhook for fully automatic intake. See [docs/website-sync.md](docs/website-sync.md).
+- **Editable applicant pages**

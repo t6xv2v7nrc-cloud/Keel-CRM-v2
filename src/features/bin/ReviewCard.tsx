@@ -79,20 +79,30 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
   return (
     <Card className="overflow-hidden">
       <div className="grid gap-0 md:grid-cols-2">
-        {/* Screenshot */}
+        {/* Source: screenshot, or text for email/webhook enquiries */}
         <div className="border-b border-[var(--line)] bg-[var(--paper)] p-4 md:border-b-0 md:border-r">
-          <div className="mb-2 text-[13px] font-medium text-[var(--ink-muted)]">Screenshot</div>
-          {imgUrl ? (
-            <img src={imgUrl} alt="Pasted screenshot" className="max-h-[420px] w-full rounded-md border border-[var(--line)] object-contain" />
+          <div className="mb-2 text-[13px] font-medium text-[var(--ink-muted)]">
+            {imagePath ? 'Screenshot' : 'Source text'}
+          </div>
+          {imagePath ? (
+            imgUrl ? (
+              <img src={imgUrl} alt="Pasted screenshot" className="max-h-[420px] w-full rounded-md border border-[var(--line)] object-contain" />
+            ) : (
+              <div className="grid h-40 place-items-center text-[var(--ink-muted)]">Loading image…</div>
+            )
           ) : (
-            <div className="grid h-40 place-items-center text-[var(--ink-muted)]">Loading image…</div>
-          )}
-          <details className="mt-3">
-            <summary className="cursor-pointer text-[13px] text-[var(--ink-muted)]">Raw text</summary>
-            <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-[var(--surface)] p-2 font-mono text-[13px] text-[var(--ink-muted)]">
-              {draft.transcription || '(no text found)'}
+            <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap rounded-md border border-[var(--line)] bg-[var(--surface)] p-3 font-mono text-[13px] text-[var(--ink)]">
+              {draft.transcription || '(no text)'}
             </pre>
-          </details>
+          )}
+          {imagePath && (
+            <details className="mt-3">
+              <summary className="cursor-pointer text-[13px] text-[var(--ink-muted)]">Raw text</summary>
+              <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-[var(--surface)] p-2 font-mono text-[13px] text-[var(--ink-muted)]">
+                {draft.transcription || '(no text found)'}
+              </pre>
+            </details>
+          )}
         </div>
 
         {/* Fields + proposal */}

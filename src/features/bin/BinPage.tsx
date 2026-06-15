@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button, Card, CardHeader, Field, useToast } from '../../components/ui';
 import { extractFromText } from '../../lib/extract';
+import { parseEnquiryEmail } from '../../lib/parseEnquiry';
 import { runMatching } from '../../lib/matching';
 import { compressImage, uploadToBin } from './capture';
 import { useInbox, useCreateInboxItem, useUpdateInboxItem } from './useInbox';
@@ -101,6 +102,32 @@ export function BinPage() {
     setStage('idle');
   };
 
+  // Paste a website enquiry email body → structured review item (no OCR).
+  const [enquiryText, setEnquiryText] = useState('');
+  const processEnquiry = async () => {
+    const extraction = parseEnquiryEmail(enquiryText);
+    if (!extraction) {
+      toast('Could not find an enquiry. Paste the full email including "First Name:".', 'danger');
+      return;
+    }
+    try {
+      const matches = await runMatching(extraction);
+      await createItem.mutateAsync({
+        image_path: '',
+        source_hint: 'Website enquiry',
+        status: 'review',
+        detected_type: extraction.doc_type,
+        raw_text: extraction.transcription,
+        extraction,
+        matches,
+      });
+      setEnquiryText('');
+      toast('Enquiry parsed — review below', 'success');
+    } catch (e) {
+      toast(`Failed: ${(e as Error).message}`, 'danger');
+    }
+  };
+
   const reviewItems = inbox.filter((i) => i.status === 'review');
   const doneItems = inbox.filter((i) => i.status === 'confirmed').slice(0, 8);
 
@@ -140,6 +167,28 @@ export function BinPage() {
             <Button variant="brass" className="mt-4" onClick={() => fileRef.current?.click()}>Choose image</Button>
           </div>
         </div>
+      )}
+
+      {/* Paste a website enquiry email (structured — no OCR needed) */}
+      {stage === 'idle' && (
+        <Card>
+          <CardHeader title="Paste a website enquiry" sub="from keellettings.com" />
+          <div className="flex flex-col gap-3 p-4">
+            <textarea
+              value={enquiryText}
+              onChange={(e) => setEnquiryText(e.target.value)}
+              placeholder={'Paste the enquiry email body here, e.g.\n\nFirst Name: Omar\nLast Name: Mohamed\nEmail: ...\nPhone: ...\nMessage: ...'}
+              rows={5}
+              className="w-full rounded-md border border-[var(--line-strong)] bg-[var(--surface)] p-3 font-mono text-[13px] text-[var(--ink)] outline-none focus:border-[var(--hull)]"
+            />
+            <div className="flex items-center justify-between gap-3">
+              <p className="m-0 text-[13px] text-[var(--ink-muted)]">
+                Parses name, phone, household and budget instantly. For hands-off sync, see the Netlify webhook setup.
+              </p>
+              <Button variant="primary" onClick={processEnquiry} disabled={!enquiryText.trim()}>Parse enquiry</Button>
+            </div>
+          </div>
+        </Card>
       )}
 
       {/* Staging — add a hint, then process */}
