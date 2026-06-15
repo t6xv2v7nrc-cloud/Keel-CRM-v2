@@ -21,7 +21,7 @@ Design system reference renders at `/dev/tokens`.
 ## Build status
 
 - [x] Phase 0 — Scaffold (tokens, auth gate, /dev/tokens)
-- [ ] Phase 1 — Schema (migration, RLS, bin bucket, seed)
+- [x] Phase 1 — Schema (migration, RLS, bin bucket, seed) — _run `supabase/0001_init.sql` in the dashboard; see [supabase/README.md](supabase/README.md)_
 - [ ] Phase 2 — The Bin (capture → extract → review → confirm)
 - [ ] Phase 3 — Pipeline & records
 - [ ] Phase 4 — Fees & polish
