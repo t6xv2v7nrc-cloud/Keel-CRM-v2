@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Button, Card, CardHeader } from '../../components/ui';
+import { Button, Card, CardHeader, TierBadge } from '../../components/ui';
 import {
   useApplicants,
   usePlacements,
@@ -9,8 +9,14 @@ import {
 } from '../../lib/hooks';
 import { useAuth } from '../auth/useAuth';
 import { money, timeAgo } from '../../lib/format';
+import { computeTier, TIER_META, URGENCY_RANK } from '../../lib/tiering';
+import type { Tier } from '../../lib/tiering';
 import { APPLICANT_STAGES } from '../../types/extraction';
 import type { ApplicantStage } from '../../types/extraction';
+import type { Applicant } from '../../lib/types';
+
+const effTier = (a: Applicant): Tier => ((a.tier as Tier) || computeTier(a));
+const isActive = (a: Applicant) => a.stage !== 'lost' && a.stage !== 'fee_paid';
 
 const STAGE_LABEL: Record<ApplicantStage, string> = {
   lead: 'Lead', referred: 'Referred', viewing: 'Viewing', offer: 'Offer',
@@ -45,6 +51,18 @@ export function DashboardPage() {
     return { active, voids, feePending, feePaid };
   }, [applicants, placements, properties]);
 
+  // Tier triage over the active pipeline only (closed/placed don't need triage).
+  const tiers = useMemo(() => {
+    const active = applicants.filter(isActive);
+    const counts: Record<Tier, number> = { 1: 0, 2: 0, 3: 0 };
+    let urgent = 0;
+    for (const a of active) {
+      counts[effTier(a)] += 1;
+      if ((URGENCY_RANK[a.urgency ?? 'none'] ?? 0) >= 3) urgent += 1; // homeless / at-risk-56
+    }
+    return { counts, urgent, total: active.length };
+  }, [applicants]);
+
   const byStage = (stage: ApplicantStage) => applicants.filter((a) => a.stage === stage).length;
   const greeting = getGreeting();
 
@@ -67,6 +85,35 @@ export function DashboardPage() {
         <StatCard label="Fees pending" value={money(stats.feePending)} to="/fees" tone="var(--stage-offer-fg)" />
         <StatCard label="Fees paid" value={money(stats.feePaid)} to="/fees" tone="var(--success)" />
       </div>
+
+      {/* Tier triage */}
+      <Card>
+        <CardHeader title="Referral triage" sub={`${tiers.total} active`}>
+          {tiers.urgent > 0 && (
+            <span className="rounded px-2 py-0.5 text-[13px] font-semibold" style={{ background: 'var(--stage-lost-bg)', color: 'var(--stage-lost-fg)' }}>
+              {tiers.urgent} urgent
+            </span>
+          )}
+          <Link to="/pipeline" className="text-[13px] text-[var(--link)] hover:underline">Open</Link>
+        </CardHeader>
+        <div className="grid grid-cols-3 divide-x divide-[var(--line)]">
+          {([1, 2, 3] as Tier[]).map((t) => {
+            const count = tiers.counts[t];
+            const pct = tiers.total ? Math.round((count / tiers.total) * 100) : 0;
+            return (
+              <button
+                key={t}
+                onClick={() => navigate('/pipeline')}
+                className="flex flex-col items-center gap-2 p-5 text-center transition-colors hover:bg-[var(--paper)]"
+              >
+                <TierBadge tier={t} />
+                <div className="font-mono text-[28px] font-bold" style={{ color: TIER_META[t].fg }}>{count}</div>
+                <div className="text-[13px] text-[var(--ink-muted)]">{pct}% of active</div>
+              </button>
+            );
+          })}
+        </div>
+      </Card>
 
       <div className="grid gap-6 md:grid-cols-[1fr_360px]">
         {/* Pipeline breakdown */}
