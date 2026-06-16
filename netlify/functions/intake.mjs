@@ -209,6 +209,34 @@ function buildExtraction(f) {
   };
 }
 
+// Landlord / housing-officer / other enquiries → a contact + note, not an
+// applicant. No tier (tiering only applies to tenant referrals).
+function buildEnquiryExtraction(f) {
+  const kind = f.enquiryType || 'General';
+  return {
+    doc_type: 'officer_message',
+    transcription: [
+      f.full_name && `Name: ${f.full_name}`,
+      f.email && `Email: ${f.email}`,
+      f.phone && `Phone: ${f.phone}`,
+      f.enquiryType && `Enquiry type: ${f.enquiryType}`,
+      f.council && `Council: ${f.council}`,
+      f.message && `Message:\n${f.message}`,
+    ].filter(Boolean).join('\n'),
+    summary: `${kind} enquiry from ${f.full_name || f.email || 'someone'}${f.council ? ` (${f.council})` : ''}.`,
+    confidence: 0.9,
+    contact: {
+      full_name: f.full_name || undefined,
+      email: f.email || undefined,
+      phone: f.phone ? toE164(f.phone) : undefined,
+      borough: f.council || undefined,
+    },
+    suggested_actions: ['create_contact', 'log_note_only'],
+  };
+}
+
+const isTenantEnquiry = (t) => !t || /tenant|applicant|dss|benefit|housing/i.test(t);
+
 export default async (req) => {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
@@ -242,12 +270,14 @@ export default async (req) => {
     return new Response(JSON.stringify({ ok: true, parsed: false, keys: f.keys }), { status: 200, headers: { 'content-type': 'application/json' } });
   }
 
-  const extraction = buildExtraction(f);
+  // Tenant referrals get full tiering; landlord/officer/other become contacts.
+  const tenant = isTenantEnquiry(f.enquiryType);
+  const extraction = tenant ? buildExtraction(f) : buildEnquiryExtraction(f);
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
 
   const { error } = await supabase.from('inbox_items').insert({
     image_path: null,
-    source_hint: 'Website enquiry (auto)',
+    source_hint: tenant ? 'Website referral (auto)' : `Website ${f.enquiryType || 'enquiry'} (auto)`,
     status: 'review',
     detected_type: extraction.doc_type,
     raw_text: extraction.transcription,
