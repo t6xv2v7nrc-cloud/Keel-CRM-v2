@@ -4,6 +4,7 @@ import { Button, Card, CardHeader, Field, KeelLine, StageBadge, TierBadge, useTo
 import {
   useActivities,
   useApplicant,
+  useDeleteApplicant,
   usePlacementForApplicant,
   useUpdateApplicant,
 } from '../../lib/hooks';
@@ -19,9 +20,19 @@ export function ApplicantPage() {
   const { data: applicant, isLoading } = useApplicant(id);
   const { data: activities = [] } = useActivities('applicant', id);
   const { data: placement } = usePlacementForApplicant(id);
+  const deleteApplicant = useDeleteApplicant();
+  const { toast } = useToast();
 
   if (isLoading) return <div className="grid min-h-[50vh] place-items-center text-[var(--ink-muted)]">Loading…</div>;
   if (!applicant) return <div className="grid min-h-[50vh] place-items-center text-[var(--ink-muted)]">Applicant not found.</div>;
+
+  const handleDelete = () => {
+    if (!window.confirm(`Delete ${applicant.full_name}? This removes their record, activity and any placement. This cannot be undone.`)) return;
+    deleteApplicant.mutate(applicant.id, {
+      onSuccess: () => { toast(`Deleted ${applicant.full_name}`, 'success'); navigate('/pipeline'); },
+      onError: (e) => toast(`Delete failed: ${(e as Error).message}`, 'danger'),
+    });
+  };
 
   const household = [
     applicant.adults ? `${applicant.adults} adult${applicant.adults > 1 ? 's' : ''}` : null,
@@ -30,9 +41,14 @@ export function ApplicantPage() {
 
   return (
     <div className="mx-auto flex max-w-[960px] flex-col gap-6 p-6 pb-24">
-      <button onClick={() => navigate('/pipeline')} className="self-start text-[15px] text-[var(--link)] hover:underline">
-        ← Pipeline
-      </button>
+      <div className="flex items-center justify-between gap-4">
+        <button onClick={() => navigate('/pipeline')} className="text-[15px] text-[var(--link)] hover:underline">
+          ← Pipeline
+        </button>
+        <Button variant="danger" className="min-h-0 px-3 py-1.5 text-[13px]" onClick={handleDelete} disabled={deleteApplicant.isPending}>
+          {deleteApplicant.isPending ? 'Deleting…' : 'Delete'}
+        </Button>
+      </div>
 
       <HeroCard applicant={applicant} household={household} />
 

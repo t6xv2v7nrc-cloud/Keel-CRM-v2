@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useApplicants, useMoveStage } from '../../lib/hooks';
+import { useApplicants, useMoveStage, useDeleteApplicant } from '../../lib/hooks';
 import { Card, TierBadge, useToast } from '../../components/ui';
 import { APPLICANT_STAGES } from '../../types/extraction';
 import type { ApplicantStage } from '../../types/extraction';
@@ -22,6 +22,7 @@ type SortKey = 'name' | 'borough' | 'budget' | 'stage' | 'updated' | 'tier';
 export function PipelinePage() {
   const { data: applicants = [], isLoading } = useApplicants();
   const moveStage = useMoveStage();
+  const deleteApplicant = useDeleteApplicant();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -73,6 +74,14 @@ export function PipelinePage() {
     );
   };
 
+  const removeApplicant = (a: Applicant) => {
+    if (!window.confirm(`Delete ${a.full_name}? This removes their record, activity and any placement. This cannot be undone.`)) return;
+    deleteApplicant.mutate(a.id, {
+      onSuccess: () => toast(`Deleted ${a.full_name}`, 'success'),
+      onError: (e) => toast(`Delete failed: ${(e as Error).message}`, 'danger'),
+    });
+  };
+
   if (isLoading) return <div className="grid min-h-[50vh] place-items-center text-[var(--ink-muted)]">Loading…</div>;
 
   return (
@@ -119,6 +128,7 @@ export function PipelinePage() {
               <Th onClick={() => toggleSort('budget')} active={sort.key === 'budget'} dir={sort.dir} right>Budget</Th>
               <Th onClick={() => toggleSort('stage')} active={sort.key === 'stage'} dir={sort.dir}>Stage</Th>
               <Th onClick={() => toggleSort('updated')} active={sort.key === 'updated'} dir={sort.dir} right>Updated</Th>
+              <th className="px-3 py-2"></th>
             </tr>
           </thead>
           <tbody>
@@ -147,11 +157,21 @@ export function PipelinePage() {
                     ))}
                   </select>
                 </td>
-                <td className="px-5 py-3 text-right font-mono text-[13px] text-[var(--ink-muted)]">{timeAgo(a.updated_at)}</td>
+                <td className="px-3 py-3 text-right font-mono text-[13px] text-[var(--ink-muted)]">{timeAgo(a.updated_at)}</td>
+                <td className="px-3 py-3 text-right">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); removeApplicant(a); }}
+                    aria-label={`Delete ${a.full_name}`}
+                    title="Delete applicant"
+                    className="rounded px-2 py-1 text-[15px] text-[var(--ink-muted)] transition-colors hover:bg-[var(--stage-lost-bg)] hover:text-[var(--danger)]"
+                  >
+                    ✕
+                  </button>
+                </td>
               </tr>
             ))}
             {rows.length === 0 && (
-              <tr><td colSpan={7} className="px-5 py-10 text-center text-[var(--ink-muted)]">No applicants in this view.</td></tr>
+              <tr><td colSpan={8} className="px-5 py-10 text-center text-[var(--ink-muted)]">No applicants in this view.</td></tr>
             )}
           </tbody>
         </table>

@@ -50,6 +50,24 @@ export function useUpdateApplicant() {
   });
 }
 
+/** Delete an applicant and its activities. Placements cascade via the FK. */
+export function useDeleteApplicant() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      // activities have no FK cascade — remove them explicitly first
+      await supabase.from('activities').delete().eq('entity_type', 'applicant').eq('entity_id', id);
+      const { error } = await supabase.from('applicants').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['applicants'] });
+      qc.invalidateQueries({ queryKey: ['placements'] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
 /** Advance/move an applicant's stage and log the activity in one go. */
 export function useMoveStage() {
   const qc = useQueryClient();
