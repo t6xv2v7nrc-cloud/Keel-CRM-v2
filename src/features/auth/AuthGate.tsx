@@ -32,10 +32,22 @@ export function AuthGate({ children }: { children: ReactNode }) {
 }
 
 function Login() {
+  const [mode, setMode] = useState<'password' | 'link'>('password');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+
+  const signInPassword = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    const { error: err } = await supabase.auth.signInWithPassword({ email, password });
+    setBusy(false);
+    if (err) setError(err.message);
+    // success → onAuthStateChange in AuthGate swaps to the app
+  };
 
   const sendLink = async (e: FormEvent) => {
     e.preventDefault();
@@ -73,21 +85,28 @@ function Login() {
           <p className="text-[15px] text-[var(--ink)]">
             Check your email — we sent a sign-in link to <strong>{email}</strong>.
           </p>
+        ) : mode === 'password' ? (
+          <form onSubmit={signInPassword} className="flex flex-col gap-4">
+            <Field label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@keellettings.com" autoComplete="email" />
+            <Field label="Password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
+            {error && <p className="m-0 text-[13px] text-[var(--danger)]">{error}</p>}
+            <Button type="submit" variant="primary" disabled={busy || !email || !password}>
+              {busy ? 'Signing in…' : 'Sign in'}
+            </Button>
+            <button type="button" onClick={() => { setMode('link'); setError(''); }} className="text-[13px] text-[var(--link)] hover:underline">
+              Email me a sign-in link instead
+            </button>
+          </form>
         ) : (
           <form onSubmit={sendLink} className="flex flex-col gap-4">
-            <Field
-              label="Email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@keellettings.com"
-              autoComplete="email"
-            />
+            <Field label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@keellettings.com" autoComplete="email" />
             {error && <p className="m-0 text-[13px] text-[var(--danger)]">{error}</p>}
             <Button type="submit" variant="primary" disabled={busy || !email}>
               {busy ? 'Sending…' : 'Email me a sign-in link'}
             </Button>
+            <button type="button" onClick={() => { setMode('password'); setError(''); }} className="text-[13px] text-[var(--link)] hover:underline">
+              Use a password instead
+            </button>
           </form>
         )}
       </Card>

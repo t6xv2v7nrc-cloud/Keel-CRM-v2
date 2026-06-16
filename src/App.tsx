@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Link, NavLink, Route, Routes, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { supabase } from './lib/supabase';
 import { AuthGate } from './features/auth/AuthGate';
 import { useAuth } from './features/auth/useAuth';
 import { ToastProvider } from './components/ui';
@@ -124,14 +125,24 @@ function Shell() {
 
 function UserMenu({ email, onSignOut }: { email: string | null; onSignOut: () => void }) {
   const [open, setOpen] = useState(false);
+  const [setting, setSetting] = useState(false);
+  const [pw, setPw] = useState('');
+  const [msg, setMsg] = useState('');
   const initials = email ? email.slice(0, 2).toUpperCase() : '··';
 
   useEffect(() => {
     if (!open) return;
-    const close = () => setOpen(false);
+    const close = () => { setOpen(false); setSetting(false); setMsg(''); };
     window.addEventListener('click', close);
     return () => window.removeEventListener('click', close);
   }, [open]);
+
+  const savePassword = async () => {
+    if (pw.length < 6) { setMsg('At least 6 characters.'); return; }
+    const { error } = await supabase.auth.updateUser({ password: pw });
+    setMsg(error ? error.message : 'Password set — you can use it to sign in.');
+    if (!error) { setPw(''); setSetting(false); }
+  };
 
   return (
     <div className="relative">
@@ -146,12 +157,39 @@ function UserMenu({ email, onSignOut }: { email: string | null; onSignOut: () =>
       {open && (
         <div
           onClick={(e) => e.stopPropagation()}
-          className="absolute right-0 top-11 z-50 w-56 overflow-hidden rounded-lg border border-[var(--line-strong)] bg-[var(--surface)] shadow-[var(--shadow-pop)]"
+          className="absolute right-0 top-11 z-50 w-64 overflow-hidden rounded-lg border border-[var(--line-strong)] bg-[var(--surface)] shadow-[var(--shadow-pop)]"
         >
           <div className="border-b border-[var(--line)] px-4 py-3">
             <div className="text-[13px] text-[var(--ink-muted)]">Signed in as</div>
             <div className="truncate text-[15px] text-[var(--ink)]">{email ?? '—'}</div>
           </div>
+
+          {setting ? (
+            <div className="border-b border-[var(--line)] p-3">
+              <input
+                type="password"
+                value={pw}
+                onChange={(e) => setPw(e.target.value)}
+                placeholder="New password"
+                autoComplete="new-password"
+                className="w-full rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-3 py-2 text-[15px] text-[var(--ink)] outline-none focus:border-[var(--hull)]"
+              />
+              <div className="mt-2 flex justify-end gap-2">
+                <button onClick={() => { setSetting(false); setMsg(''); }} className="text-[13px] text-[var(--ink-muted)] hover:text-[var(--ink)]">Cancel</button>
+                <button onClick={savePassword} className="rounded-md bg-[var(--hull)] px-3 py-1 text-[13px] text-white">Save</button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setSetting(true); setMsg(''); }}
+              className="block w-full border-b border-[var(--line)] px-4 py-3 text-left text-[15px] text-[var(--ink)] transition-colors hover:bg-[var(--paper)]"
+            >
+              Set / change password
+            </button>
+          )}
+
+          {msg && <div className="px-4 py-2 text-[13px] text-[var(--ink-muted)]">{msg}</div>}
+
           <button
             onClick={onSignOut}
             className="block w-full px-4 py-3 text-left text-[15px] text-[var(--danger)] transition-colors hover:bg-[var(--paper)]"

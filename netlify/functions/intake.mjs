@@ -39,30 +39,70 @@ function parseBudget(msg = '') {
   return undefined;
 }
 
-function buildExtraction(data) {
-  const get = (k) => data[k] ?? data[k.toLowerCase()] ?? data[k.replace(/\s/g, '_').toLowerCase()] ?? '';
-  const first = get('First Name');
-  const last = get('Last Name');
-  const message = get('Message');
-  const full_name = `${first} ${last}`.trim();
+// Netlify form webhooks expose fields in several shapes:
+//   body.human_fields = { "First Name": "ali", ... }   (pretty labels)
+//   body.data         = { "first-name": "ali", ... }   (raw input names)
+//   body.payload.{data,human_fields} on some events
+// We flatten every candidate map into one normalised lookup, then fuzzy-match.
+function resolveFields(body) {
+  const sources = [
+    body?.human_fields, body?.payload?.human_fields,
+    body?.data, body?.payload?.data,
+    body?.payload, body,
+  ];
+  const flat = {};
+  for (const src of sources) {
+    if (src && typeof src === 'object' && !Array.isArray(src)) {
+      for (const [k, v] of Object.entries(src)) {
+        if (v == null || typeof v === 'object') continue;
+        const nk = String(k).toLowerCase().replace(/[\s_-]+/g, '');
+        if (!(nk in flat)) flat[nk] = String(v).trim();
+      }
+    }
+  }
+
+  // exact-key match first, then substring
+  const pick = (exacts, subs = []) => {
+    for (const e of exacts) if (flat[e]) return flat[e];
+    for (const s of subs) {
+      const hit = Object.keys(flat).find((k) => k.includes(s));
+      if (hit && flat[hit]) return flat[hit];
+    }
+    return '';
+  };
+
+  const firstName = pick(['firstname', 'fname', 'givenname'], ['first']);
+  const lastName = pick(['lastname', 'surname', 'lname'], ['last', 'surname']);
+  const fullNameDirect = pick(['fullname', 'name']); // exact only — avoids matching first/last
+  const full_name = (`${firstName} ${lastName}`.trim()) || fullNameDirect;
+  const email = pick(['email', 'emailaddress'], ['email', 'mail']);
+  const phone = pick(['phone', 'mobile', 'tel', 'telephone', 'contactnumber'], ['phone', 'mobile', 'tel']);
+  const enquiryType = pick(['enquirytype', 'type', 'subject'], ['enquirytype']);
+  const message = pick(['message', 'enquiry', 'comments', 'comment', 'details'], ['message', 'enquiry', 'comment']);
+
+  return { keys: Object.keys(flat), full_name, email, phone, enquiryType, message };
+}
+
+function buildExtraction(f) {
+  const message = f.message;
   const { adults, children } = parseHousehold(message);
   const budget = parseBudget(message);
 
   return {
     doc_type: 'applicant_referral',
     transcription: [
-      first && `First Name: ${first}`,
-      last && `Last Name: ${last}`,
-      get('Email') && `Email: ${get('Email')}`,
-      get('Phone') && `Phone: ${get('Phone')}`,
-      get('Enquiry Type') && `Enquiry Type: ${get('Enquiry Type')}`,
+      f.full_name && `Name: ${f.full_name}`,
+      f.email && `Email: ${f.email}`,
+      f.phone && `Phone: ${f.phone}`,
+      f.enquiryType && `Enquiry Type: ${f.enquiryType}`,
       message && `Message:\n${message}`,
     ].filter(Boolean).join('\n'),
-    summary: `Website enquiry from ${full_name || 'an applicant'}${budget ? `, budget up to £${budget}` : ''}.`,
+    summary: `Website enquiry from ${f.full_name || f.email || 'an applicant'}${budget ? `, budget up to £${budget}` : ''}.`,
     confidence: 0.95,
     applicant: {
-      full_name: full_name || undefined,
-      phone: get('Phone') ? toE164(get('Phone')) : undefined,
+      full_name: f.full_name || undefined,
+      email: f.email || undefined,
+      phone: f.phone ? toE164(f.phone) : undefined,
       adults,
       children,
       budget_pcm: budget,
@@ -85,13 +125,26 @@ export default async (req) => {
   let body;
   try { body = await req.json(); } catch { return new Response('Bad JSON', { status: 400 }); }
 
-  // Netlify wraps form data under `.data`; accept a bare map too.
-  const data = body?.data ?? body?.payload?.data ?? body;
-  if (!data || (!data['First Name'] && !data['Email'])) {
-    return new Response('No enquiry fields found', { status: 422 });
+  const f = resolveFields(body);
+  console.log('intake fields:', JSON.stringify({ keys: f.keys, name: f.full_name, email: f.email, phone: f.phone }));
+
+  // Need at least one identifier. If truly nothing, keep the raw body so the
+  // submission is never silently lost.
+  if (!f.full_name && !f.email && !f.phone) {
+    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
+    await supabase.from('inbox_items').insert({
+      image_path: null,
+      source_hint: 'Website enquiry (unparsed)',
+      status: 'review',
+      detected_type: 'unknown',
+      raw_text: JSON.stringify(body, null, 2).slice(0, 4000),
+      extraction: { doc_type: 'unknown', transcription: JSON.stringify(body).slice(0, 4000), summary: 'Website enquiry — could not read fields, please review the raw text.', confidence: 0.3, suggested_actions: ['log_note_only'] },
+      matches: null,
+    });
+    return new Response(JSON.stringify({ ok: true, parsed: false, keys: f.keys }), { status: 200, headers: { 'content-type': 'application/json' } });
   }
 
-  const extraction = buildExtraction(data);
+  const extraction = buildExtraction(f);
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
 
   const { error } = await supabase.from('inbox_items').insert({
@@ -105,5 +158,5 @@ export default async (req) => {
   });
 
   if (error) return new Response(`DB error: ${error.message}`, { status: 500 });
-  return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } });
+  return new Response(JSON.stringify({ ok: true, parsed: true }), { status: 200, headers: { 'content-type': 'application/json' } });
 };
