@@ -39,6 +39,46 @@ function parseBudget(msg = '') {
   return undefined;
 }
 
+function toBool(v) {
+  if (v == null || v === '') return undefined;
+  if (/^(yes|y|true|on|1|checked)$/i.test(String(v).trim())) return true;
+  if (/^(no|n|false|off|0|unchecked)$/i.test(String(v).trim())) return false;
+  return undefined;
+}
+
+function normWork(v = '') {
+  const s = v.toLowerCase();
+  if (s.includes('full')) return 'full_time';
+  if (s.includes('part')) return 'part_time';
+  if (s.includes('not') || s.includes('unemployed') || s.includes('no')) return 'not_working';
+  return undefined;
+}
+
+function normHousehold(v = '') {
+  const s = v.toLowerCase();
+  if (s.includes('family') || s.includes('child')) return 'family';
+  if (s.includes('couple')) return 'couple';
+  if (s.includes('single')) return 'single';
+  return v ? 'other' : undefined;
+}
+
+function normUrgency(v = '') {
+  const s = v.toLowerCase();
+  if (s.includes('tonight') || s.includes('homeless now')) return 'homeless_tonight';
+  if (s.includes('56') || s.includes('risk')) return 'at_risk_56';
+  if (s.includes('temp')) return 'temp_accommodation';
+  if (s.includes('overcrowd') || s.includes('unsafe')) return 'overcrowding';
+  if (s) return 'none';
+  return undefined;
+}
+
+// Agreed tier rules (mirror of src/lib/tiering.ts).
+function computeTier({ household_type, on_uc, pip, lcwra, council_registered, work_status }) {
+  if (household_type === 'single' && on_uc && pip && lcwra && council_registered) return 1;
+  if (council_registered && (on_uc || work_status === 'full_time')) return 2;
+  return 3;
+}
+
 // Netlify form webhooks expose fields in several shapes:
 //   body.human_fields = { "First Name": "ali", ... }   (pretty labels)
 //   body.data         = { "first-name": "ali", ... }   (raw input names)
@@ -80,7 +120,30 @@ function resolveFields(body) {
   const enquiryType = pick(['enquirytype', 'type', 'subject'], ['enquirytype']);
   const message = pick(['message', 'enquiry', 'comments', 'comment', 'details'], ['message', 'enquiry', 'comment']);
 
-  return { keys: Object.keys(flat), full_name, email, phone, enquiryType, message };
+  // Referral triage fields
+  const household_type = normHousehold(pick(['householdtype', 'household'], ['household']));
+  const on_uc = toBool(pick(['universalcredit', 'onuc', 'uc', 'receivesuniversalcredit']));
+  const pip = toBool(pick(['pip', 'receivespip', 'personalindependencepayment']));
+  const lcwra = toBool(pick(['lcwra', 'haslcwra', 'limitedcapability']));
+  const council_registered = toBool(pick(['councilregistered', 'registeredwithcouncil', 'councilreg']));
+  const work_status = normWork(pick(['workstatus', 'working', 'employment'], ['work', 'employ']));
+  // council: exact 'council' first, else a key mentioning council/borough/authority
+  // but NOT 'council-registered' or officer fields.
+  const councilKey = Object.keys(flat).find((k) => /council|borough|authority/.test(k) && !/registered|officer/.test(k));
+  const council = flat['council'] || (councilKey ? flat[councilKey] : '') || '';
+  const officer_name = pick(['officername', 'housingofficer', 'housingofficername'], ['officer']);
+  const officer_email = pick(['officeremail', 'housingofficeremail']);
+  const officer_phone = pick(['officerphone', 'housingofficerphone']);
+  const housing_situation = pick(['currenthousingsituation', 'housingsituation', 'currentsituation'], ['situation']);
+  const urgency = normUrgency(pick(['urgency', 'housingneed', 'risk'], ['urgen', 'risk']) || housing_situation);
+  const consent = toBool(pick(['consent', 'consenttocontact', 'agree', 'datasharing']));
+
+  return {
+    keys: Object.keys(flat),
+    full_name, email, phone, enquiryType, message,
+    household_type, on_uc, pip, lcwra, council_registered, work_status,
+    council, officer_name, officer_email, officer_phone, housing_situation, urgency, consent,
+  };
 }
 
 function buildExtraction(f) {
@@ -88,16 +151,37 @@ function buildExtraction(f) {
   const { adults, children } = parseHousehold(message);
   const budget = parseBudget(message);
 
+  const tier = computeTier({
+    household_type: f.household_type,
+    on_uc: f.on_uc,
+    pip: f.pip,
+    lcwra: f.lcwra,
+    council_registered: f.council_registered,
+    work_status: f.work_status,
+  });
+
+  const yn = (b) => (b === true ? 'Yes' : b === false ? 'No' : '—');
+
   return {
     doc_type: 'applicant_referral',
     transcription: [
       f.full_name && `Name: ${f.full_name}`,
       f.email && `Email: ${f.email}`,
       f.phone && `Phone: ${f.phone}`,
-      f.enquiryType && `Enquiry Type: ${f.enquiryType}`,
+      f.household_type && `Household: ${f.household_type}`,
+      f.on_uc != null && `On UC: ${yn(f.on_uc)}`,
+      f.pip != null && `PIP: ${yn(f.pip)}`,
+      f.lcwra != null && `LCWRA: ${yn(f.lcwra)}`,
+      f.council_registered != null && `Council-registered: ${yn(f.council_registered)}`,
+      f.work_status && `Work: ${f.work_status}`,
+      f.council && `Council: ${f.council}`,
+      f.officer_name && `Officer: ${f.officer_name}`,
+      (f.officer_email || f.officer_phone) && `Officer contact: ${[f.officer_email, f.officer_phone].filter(Boolean).join(' / ')}`,
+      f.urgency && `Urgency: ${f.urgency}`,
+      f.housing_situation && `Situation: ${f.housing_situation}`,
       message && `Message:\n${message}`,
     ].filter(Boolean).join('\n'),
-    summary: `Website enquiry from ${f.full_name || f.email || 'an applicant'}${budget ? `, budget up to £${budget}` : ''}.`,
+    summary: `Tier ${tier} referral from ${f.full_name || f.email || 'an applicant'}${f.council ? ` (${f.council})` : ''}.`,
     confidence: 0.95,
     applicant: {
       full_name: f.full_name || undefined,
@@ -106,6 +190,20 @@ function buildExtraction(f) {
       adults,
       children,
       budget_pcm: budget,
+      household_type: f.household_type,
+      on_uc: f.on_uc,
+      pip: f.pip,
+      lcwra: f.lcwra,
+      council_registered: f.council_registered,
+      work_status: f.work_status,
+      council: f.council || undefined,
+      officer_name: f.officer_name || undefined,
+      officer_email: f.officer_email || undefined,
+      officer_phone: f.officer_phone || undefined,
+      urgency: f.urgency,
+      housing_situation: f.housing_situation || undefined,
+      consent: f.consent,
+      tier,
     },
     suggested_actions: ['create_applicant'],
   };

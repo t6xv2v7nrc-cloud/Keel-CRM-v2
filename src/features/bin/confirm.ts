@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase';
+import { computeTier } from '../../lib/tiering';
 import type { Extraction, ApplicantStage } from '../../types/extraction';
 
 /** The user's decision on the review card, per entity. */
@@ -72,20 +73,37 @@ export async function confirmInboxItem({
   if (choice.applicantTarget === 'create' && extraction.applicant?.full_name) {
     const a = extraction.applicant;
     const stage: ApplicantStage = choice.advanceStage ?? 'referred';
+    const tier = a.tier ?? computeTier(a);
     const { data, error } = await supabase
       .from('applicants')
       .insert({
         full_name: a.full_name,
         phone: a.phone ?? null,
+        email: a.email ?? null,
         adults: a.adults ?? 1,
         children: a.children ?? 0,
         benefit_type: a.benefit_type ?? null,
-        referring_borough: a.referring_borough ?? null,
-        budget_pcm: a.budget_pcm ?? null,
+        referring_borough: a.referring_borough ?? a.council ?? null,
+        budget_pcm: a.budget_pcm != null && String(a.budget_pcm) !== '' ? Number(a.budget_pcm) || null : null,
         requirements: a.requirements ?? null,
-        source: 'officer',
+        source: a.officer_name ? 'officer' : 'website',
         referred_by: contactId ?? null,
         stage,
+        // Referral triage fields
+        household_type: a.household_type ?? null,
+        on_uc: a.on_uc ?? null,
+        pip: a.pip ?? null,
+        lcwra: a.lcwra ?? null,
+        council_registered: a.council_registered ?? null,
+        work_status: a.work_status ?? null,
+        council: a.council ?? null,
+        officer_name: a.officer_name ?? null,
+        officer_email: a.officer_email ?? null,
+        officer_phone: a.officer_phone ?? null,
+        urgency: a.urgency ?? null,
+        housing_situation: a.housing_situation ?? null,
+        consent: a.consent ?? null,
+        tier,
       })
       .select('id, full_name')
       .single();

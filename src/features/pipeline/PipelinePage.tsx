@@ -1,18 +1,21 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApplicants, useMoveStage } from '../../lib/hooks';
-import { Card, useToast } from '../../components/ui';
+import { Card, TierBadge, useToast } from '../../components/ui';
 import { APPLICANT_STAGES } from '../../types/extraction';
 import type { ApplicantStage } from '../../types/extraction';
 import type { Applicant } from '../../lib/types';
 import { money, timeAgo } from '../../lib/format';
+import { computeTier, URGENCY_RANK } from '../../lib/tiering';
 
 const STAGE_LABEL: Record<ApplicantStage, string> = {
   lead: 'Lead', referred: 'Referred', viewing: 'Viewing', offer: 'Offer',
   placed: 'Placed', fee_invoiced: 'Fee invoiced', fee_paid: 'Fee paid', lost: 'Lost',
 };
 
-type SortKey = 'name' | 'borough' | 'budget' | 'stage' | 'updated';
+const effTier = (a: Applicant): number => (a.tier as number) || computeTier(a);
+
+type SortKey = 'name' | 'borough' | 'budget' | 'stage' | 'updated' | 'tier';
 
 /** Pipeline as a sortable, filterable table (§8.2, tabular variant).
  *  Change a row's stage from the inline dropdown; each change logs activity. */
@@ -23,7 +26,8 @@ export function PipelinePage() {
   const navigate = useNavigate();
 
   const [filter, setFilter] = useState<ApplicantStage | 'all' | 'active'>('active');
-  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'updated', dir: -1 });
+  const [tierFilter, setTierFilter] = useState<number | 'all'>('all');
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'tier', dir: 1 });
 
   const counts = useMemo(() => {
     const m = new Map<string, number>();
@@ -35,6 +39,7 @@ export function PipelinePage() {
     let r = applicants;
     if (filter === 'active') r = r.filter((a) => a.stage !== 'lost' && a.stage !== 'fee_paid');
     else if (filter !== 'all') r = r.filter((a) => a.stage === filter);
+    if (tierFilter !== 'all') r = r.filter((a) => effTier(a) === tierFilter);
 
     const stageIdx = (s: ApplicantStage) => APPLICANT_STAGES.indexOf(s);
     const cmp = (a: Applicant, b: Applicant): number => {
@@ -44,10 +49,18 @@ export function PipelinePage() {
         case 'budget': return (a.budget_pcm ?? 0) - (b.budget_pcm ?? 0);
         case 'stage': return stageIdx(a.stage) - stageIdx(b.stage);
         case 'updated': return new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
+        // tier asc = most urgent first; break ties by urgency then recency
+        case 'tier': {
+          const t = effTier(a) - effTier(b);
+          if (t !== 0) return t;
+          const u = (URGENCY_RANK[b.urgency ?? 'none'] ?? 0) - (URGENCY_RANK[a.urgency ?? 'none'] ?? 0);
+          if (u !== 0) return u * sort.dir; // keep urgency consistent regardless of dir
+          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+        }
       }
     };
     return [...r].sort((a, b) => cmp(a, b) * sort.dir);
-  }, [applicants, filter, sort]);
+  }, [applicants, filter, tierFilter, sort]);
 
   const toggleSort = (key: SortKey) =>
     setSort((s) => (s.key === key ? { key, dir: (s.dir * -1) as 1 | -1 } : { key, dir: 1 }));
@@ -84,10 +97,22 @@ export function PipelinePage() {
         ))}
       </div>
 
+      {/* Tier filter */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[13px] text-[var(--ink-muted)]">Tier</span>
+        <FilterChip active={tierFilter === 'all'} onClick={() => setTierFilter('all')}>All</FilterChip>
+        {[1, 2, 3].map((t) => (
+          <FilterChip key={t} active={tierFilter === t} onClick={() => setTierFilter(t)}>
+            Tier {t} <Count n={applicants.filter((a) => effTier(a) === t).length} />
+          </FilterChip>
+        ))}
+      </div>
+
       <Card className="overflow-x-auto">
         <table className="w-full min-w-[720px] border-collapse text-[15px]">
           <thead>
             <tr className="text-left text-[13px] text-[var(--ink-muted)]">
+              <Th onClick={() => toggleSort('tier')} active={sort.key === 'tier'} dir={sort.dir}>Tier</Th>
               <Th onClick={() => toggleSort('name')} active={sort.key === 'name'} dir={sort.dir}>Name</Th>
               <Th onClick={() => toggleSort('borough')} active={sort.key === 'borough'} dir={sort.dir}>Borough</Th>
               <th className="px-3 py-2 font-medium">Benefit</th>
@@ -99,7 +124,8 @@ export function PipelinePage() {
           <tbody>
             {rows.map((a) => (
               <tr key={a.id} className="border-t border-[var(--line)] hover:bg-[var(--paper)]">
-                <td className="px-5 py-3">
+                <td className="px-5 py-3"><TierBadge tier={effTier(a)} /></td>
+                <td className="px-3 py-3">
                   <button onClick={() => navigate(`/applicants/${a.id}`)} className="text-left text-[var(--ink)] hover:underline">
                     {a.full_name}
                   </button>
@@ -125,7 +151,7 @@ export function PipelinePage() {
               </tr>
             ))}
             {rows.length === 0 && (
-              <tr><td colSpan={6} className="px-5 py-10 text-center text-[var(--ink-muted)]">No applicants in this view.</td></tr>
+              <tr><td colSpan={7} className="px-5 py-10 text-center text-[var(--ink-muted)]">No applicants in this view.</td></tr>
             )}
           </tbody>
         </table>

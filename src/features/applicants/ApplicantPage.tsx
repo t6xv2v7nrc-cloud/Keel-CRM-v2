@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Button, Card, CardHeader, Field, KeelLine, StageBadge, useToast } from '../../components/ui';
+import { Button, Card, CardHeader, Field, KeelLine, StageBadge, TierBadge, useToast } from '../../components/ui';
 import {
   useActivities,
   useApplicant,
@@ -8,6 +8,9 @@ import {
   useUpdateApplicant,
 } from '../../lib/hooks';
 import { money, shortDate, timeAgo } from '../../lib/format';
+import {
+  computeTier, tierReason, HOUSEHOLD_LABEL, WORK_STATUS_LABEL, URGENCY_LABEL,
+} from '../../lib/tiering';
 import type { Activity, Applicant } from '../../lib/types';
 
 export function ApplicantPage() {
@@ -48,8 +51,10 @@ export function ApplicantPage() {
           </div>
         </Card>
 
-        {/* Right column: stage progress + placement */}
+        {/* Right column: triage + stage progress + placement */}
         <div className="flex flex-col gap-6">
+          <ReferralCard applicant={applicant} />
+
           <Card>
             <CardHeader title="Progress" />
             <div className="p-5">
@@ -104,6 +109,90 @@ function TimelineRow({ act }: { act: Activity }) {
         </div>
       </div>
     </li>
+  );
+}
+
+/** Referral triage card: tier (auto + manual override) and the answers. */
+function ReferralCard({ applicant }: { applicant: Applicant }) {
+  const update = useUpdateApplicant();
+  const { toast } = useToast();
+
+  const auto = computeTier(applicant);
+  const effective = (applicant.tier as 1 | 2 | 3) || auto;
+  const overridden = applicant.tier != null && applicant.tier !== auto;
+
+  const setTier = (t: number) => {
+    update.mutate(
+      { id: applicant.id, tier: t },
+      { onSuccess: () => toast(`Set to Tier ${t}`, 'success') },
+    );
+  };
+
+  const yn = (b: boolean | null) => (b === true ? 'Yes' : b === false ? 'No' : '—');
+  const rows: Array<[string, string]> = [
+    ['Household', applicant.household_type ? HOUSEHOLD_LABEL[applicant.household_type] ?? applicant.household_type : '—'],
+    ['On UC', yn(applicant.on_uc)],
+    ['PIP', yn(applicant.pip)],
+    ['LCWRA', yn(applicant.lcwra)],
+    ['Council-registered', yn(applicant.council_registered)],
+    ['Work', applicant.work_status ? WORK_STATUS_LABEL[applicant.work_status] ?? applicant.work_status : '—'],
+    ['Urgency', applicant.urgency ? URGENCY_LABEL[applicant.urgency] ?? applicant.urgency : '—'],
+    ['Council', applicant.council || '—'],
+  ];
+
+  return (
+    <Card>
+      <CardHeader title="Referral triage">
+        <TierBadge tier={effective} />
+      </CardHeader>
+      <div className="flex flex-col gap-3 p-5">
+        <div className="flex items-center gap-2">
+          <span className="text-[13px] text-[var(--ink-muted)]">Tier</span>
+          <select
+            value={effective}
+            onChange={(e) => setTier(Number(e.target.value))}
+            className="min-h-[36px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]"
+          >
+            <option value={1}>Tier 1</option>
+            <option value={2}>Tier 2</option>
+            <option value={3}>Tier 3</option>
+          </select>
+          {overridden && (
+            <button onClick={() => setTier(auto)} className="text-[13px] text-[var(--link)] hover:underline">
+              reset to auto (Tier {auto})
+            </button>
+          )}
+        </div>
+        <p className="m-0 text-[13px] text-[var(--ink-muted)]">
+          {overridden ? `Manually set. Auto-suggestion: Tier ${auto} — ${tierReason(applicant)}` : `Auto: ${tierReason(applicant)}`}
+        </p>
+
+        <dl className="m-0 mt-1 grid grid-cols-2 gap-x-4 gap-y-2">
+          {rows.map(([k, v]) => (
+            <div key={k} className="flex items-baseline justify-between gap-2 border-b border-[var(--line)] pb-1">
+              <dt className="text-[13px] text-[var(--ink-muted)]">{k}</dt>
+              <dd className="m-0 text-[15px] text-[var(--ink)]">{v}</dd>
+            </div>
+          ))}
+        </dl>
+
+        {(applicant.officer_name || applicant.officer_email || applicant.officer_phone) && (
+          <div className="mt-1 rounded-md border border-[var(--line)] bg-[var(--paper)] p-3">
+            <div className="text-[13px] text-[var(--ink-muted)]">Housing officer</div>
+            <div className="text-[15px] text-[var(--ink)]">{applicant.officer_name || '—'}</div>
+            <div className="font-mono text-[13px] text-[var(--ink-muted)]">
+              {[applicant.officer_email, applicant.officer_phone].filter(Boolean).join(' · ') || '—'}
+            </div>
+          </div>
+        )}
+
+        {applicant.consent != null && (
+          <div className="text-[13px] text-[var(--ink-muted)]">
+            Consent to contact / data sharing: <strong className="text-[var(--ink)]">{yn(applicant.consent)}</strong>
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }
 

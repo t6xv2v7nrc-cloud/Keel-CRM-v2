@@ -33,3 +33,7 @@ Design system reference renders at `/dev/tokens`.
 - **Website enquiry sync** — paste the enquiry email into the Bin, or wire the
   Netlify Forms webhook for fully automatic intake. See [docs/website-sync.md](docs/website-sync.md).
 - **Editable applicant pages**
+- **Referral triage** — structured website form ([docs/referral-form.html](docs/referral-form.html))
+  feeds auto Tier 1/2/3 scoring (single+UC+PIP+LCWRA+council → T1; council+UC/full-time → T2;
+  else T3), with manual override on the applicant page. Pipeline gains a Tier column, tier
+  filter, and tier+urgency sort. Run [supabase/migrations/0002_tiering.sql](supabase/migrations/0002_tiering.sql).

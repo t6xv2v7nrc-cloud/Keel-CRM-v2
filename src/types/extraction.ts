@@ -43,6 +43,7 @@ export type ApplicantStage = (typeof APPLICANT_STAGES)[number];
 export interface ExtractedApplicant {
   full_name?: string;
   phone?: string;
+  email?: string;
   date_of_birth?: string;
   adults?: number;
   children?: number;
@@ -50,6 +51,21 @@ export interface ExtractedApplicant {
   referring_borough?: string;
   budget_pcm?: number;
   requirements?: string;
+  // Referral triage fields
+  household_type?: string;       // 'single'|'couple'|'family'|'other'
+  on_uc?: boolean;
+  pip?: boolean;
+  lcwra?: boolean;
+  council_registered?: boolean;
+  work_status?: string;          // 'not_working'|'part_time'|'full_time'
+  urgency?: string;
+  council?: string;
+  officer_name?: string;
+  officer_email?: string;
+  officer_phone?: string;
+  housing_situation?: string;
+  consent?: boolean;
+  tier?: number;                 // computed at intake; recomputed on edit
 }
 
 export interface ExtractedProperty {

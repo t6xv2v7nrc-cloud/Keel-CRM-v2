@@ -17,6 +17,21 @@ export interface Applicant {
   lha_band: string | null;
   requirements: string | null;
   notes: string | null;
+  // Referral triage fields (0002_tiering.sql)
+  on_uc: boolean | null;
+  pip: boolean | null;
+  lcwra: boolean | null;
+  council_registered: boolean | null;
+  work_status: string | null;
+  household_type: string | null;
+  urgency: string | null;
+  council: string | null;
+  officer_name: string | null;
+  officer_email: string | null;
+  officer_phone: string | null;
+  housing_situation: string | null;
+  consent: boolean | null;
+  tier: number | null;
   created_at: string;
   updated_at: string;
 }

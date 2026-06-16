@@ -21,6 +21,13 @@ Two SQL files, run once each in the Supabase dashboard.
 
 It is safe to re-run — every statement is idempotent.
 
+### Step 2b — run the tiering migration
+
+Open [`migrations/0002_tiering.sql`](migrations/0002_tiering.sql), paste into a new
+query, **Run**. This adds the referral-triage columns (UC / PIP / LCWRA /
+council-registered / work status / household type / urgency / officer details /
+consent / **tier**) to `applicants`. Also idempotent.
+
 ## Step 3 — seed sample data (optional but recommended)
 
 1. New query → paste [`seed.sql`](seed.sql) → **Run**.

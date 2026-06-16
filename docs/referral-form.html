@@ -1,0 +1,106 @@
+<!--
+  Keel Lettings — referral form for keellettings.com
+  ──────────────────────────────────────────────────
+  Drop this <form> into your website. The field `name` attributes are what
+  matter — they map straight into the CRM's tiering engine, so keep them as-is.
+  Restyle freely (classes are plain; swap for your design system).
+
+  Netlify Forms setup:
+    • The form has data-netlify="true" and a hidden form-name input.
+    • Keep the honeypot (bot-field) to cut spam.
+    • Your existing outgoing webhook already posts to the CRM, so no extra wiring.
+    • If your site is JS-rendered (React/Vue), Netlify also needs a static copy
+      of this form at build time for detection — see Netlify "Forms" docs.
+
+  Tiering (computed automatically in the CRM):
+    Tier 1 = single + UC + PIP + LCWRA + council-registered
+    Tier 2 = council-registered + (UC or full-time worker)
+    Tier 3 = everyone else
+-->
+<form name="referral" method="POST" data-netlify="true" netlify-honeypot="bot-field" class="keel-referral">
+  <input type="hidden" name="form-name" value="referral" />
+  <p hidden><label>Don't fill this in: <input name="bot-field" /></label></p>
+
+  <fieldset>
+    <legend>Your details</legend>
+    <label>First name <input type="text" name="first-name" required /></label>
+    <label>Last name <input type="text" name="last-name" required /></label>
+    <label>Email <input type="email" name="email" /></label>
+    <label>Phone <input type="tel" name="phone" required /></label>
+    <label>Who needs housing?
+      <select name="household-type" required>
+        <option value="">Please choose…</option>
+        <option value="single">Just me (single)</option>
+        <option value="couple">Me and a partner (couple)</option>
+        <option value="family">Family with children</option>
+        <option value="other">Other</option>
+      </select>
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Benefits and work</legend>
+
+    <p>Do you receive Universal Credit?</p>
+    <label><input type="radio" name="universal-credit" value="yes" /> Yes</label>
+    <label><input type="radio" name="universal-credit" value="no" /> No</label>
+
+    <p>Do you receive PIP (Personal Independence Payment)?</p>
+    <label><input type="radio" name="pip" value="yes" /> Yes</label>
+    <label><input type="radio" name="pip" value="no" /> No</label>
+
+    <p>Has Universal Credit said you have Limited Capability for Work and Work-Related Activity (LCWRA)?</p>
+    <label><input type="radio" name="lcwra" value="yes" /> Yes</label>
+    <label><input type="radio" name="lcwra" value="no" /> No</label>
+    <label><input type="radio" name="lcwra" value="" /> Not sure</label>
+
+    <label>Work status
+      <select name="work-status">
+        <option value="">Please choose…</option>
+        <option value="not_working">Not working</option>
+        <option value="part_time">Working part time</option>
+        <option value="full_time">Working full time</option>
+      </select>
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Council and housing officer</legend>
+
+    <p>Are you registered with a council housing team or housing officer?</p>
+    <label><input type="radio" name="council-registered" value="yes" /> Yes</label>
+    <label><input type="radio" name="council-registered" value="no" /> No</label>
+
+    <label>Which council / borough? <input type="text" name="council" /></label>
+    <label>Housing officer name <input type="text" name="officer-name" /></label>
+    <label>Housing officer email <input type="email" name="officer-email" /></label>
+    <label>Housing officer phone <input type="tel" name="officer-phone" /></label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Your housing need</legend>
+    <label>What is your situation right now?
+      <select name="urgency">
+        <option value="">Please choose…</option>
+        <option value="homeless_tonight">Homeless tonight</option>
+        <option value="at_risk_56">At risk of homelessness within 56 days</option>
+        <option value="temp_accommodation">In temporary accommodation</option>
+        <option value="overcrowding">Overcrowded or unsafe accommodation</option>
+        <option value="none">None of these right now</option>
+      </select>
+    </label>
+    <label>Anything else we should know?
+      <textarea name="message" rows="4" placeholder="Budget, area preferences, bedrooms needed, etc."></textarea>
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Consent</legend>
+    <label>
+      <input type="checkbox" name="consent" value="yes" required />
+      I agree to be contacted about my enquiry and for my details to be shared with relevant housing partners.
+    </label>
+  </fieldset>
+
+  <button type="submit">Submit referral</button>
+</form>

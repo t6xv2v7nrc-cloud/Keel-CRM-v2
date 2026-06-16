@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Card, Field } from '../../components/ui';
+import { Button, Card, Field, TierBadge } from '../../components/ui';
 import { useToast } from '../../components/ui';
 import { APPLICANT_STAGES } from '../../types/extraction';
 import type { ApplicantStage, Extraction } from '../../types/extraction';
@@ -8,6 +8,15 @@ import { signedBinUrl } from './capture';
 import { confirmInboxItem } from './confirm';
 import type { ConfirmChoice } from './confirm';
 import { money } from '../../lib/format';
+import { HOUSEHOLD_LABEL, WORK_STATUS_LABEL, URGENCY_LABEL } from '../../lib/tiering';
+
+function Chip({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="rounded border border-[var(--line)] bg-[var(--surface)] px-2 py-0.5 text-[13px] text-[var(--ink-muted)]">
+      {children}
+    </span>
+  );
+}
 
 interface ReviewCardProps {
   itemId: string;
@@ -123,9 +132,34 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
           <div className="grid grid-cols-2 gap-3">
             <Field label="Name" value={a.full_name ?? ''} onChange={(e) => setA('full_name', e.target.value)} />
             <Field label="Phone" mono value={a.phone ?? ''} onChange={(e) => setA('phone', e.target.value)} />
-            <Field label="Borough" value={a.referring_borough ?? ''} onChange={(e) => setA('referring_borough', e.target.value)} />
-            <Field label="Benefit" value={a.benefit_type ?? ''} onChange={(e) => setA('benefit_type', e.target.value)} placeholder="UC / HB" />
+            <Field label="Borough / council" value={a.referring_borough ?? a.council ?? ''} onChange={(e) => setA('referring_borough', e.target.value)} />
+            <Field label="Budget pcm" mono value={a.budget_pcm != null ? String(a.budget_pcm) : ''} onChange={(e) => setA('budget_pcm', e.target.value)} />
           </div>
+
+          {/* Referral triage summary (read-only — full edit on the applicant page) */}
+          {(a.tier != null || a.household_type || a.on_uc != null || a.officer_name) && (
+            <div className="rounded-md border border-[var(--line)] bg-[var(--paper)] p-3">
+              <div className="mb-2 flex items-center gap-2">
+                {a.tier != null && <TierBadge tier={a.tier} />}
+                <span className="text-[13px] text-[var(--ink-muted)]">Referral triage</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {a.household_type && <Chip>{HOUSEHOLD_LABEL[a.household_type] ?? a.household_type}</Chip>}
+                {a.on_uc != null && <Chip>UC: {a.on_uc ? 'Yes' : 'No'}</Chip>}
+                {a.pip != null && <Chip>PIP: {a.pip ? 'Yes' : 'No'}</Chip>}
+                {a.lcwra != null && <Chip>LCWRA: {a.lcwra ? 'Yes' : 'No'}</Chip>}
+                {a.council_registered != null && <Chip>Council-reg: {a.council_registered ? 'Yes' : 'No'}</Chip>}
+                {a.work_status && <Chip>{WORK_STATUS_LABEL[a.work_status] ?? a.work_status}</Chip>}
+                {a.urgency && a.urgency !== 'none' && <Chip>{URGENCY_LABEL[a.urgency] ?? a.urgency}</Chip>}
+              </div>
+              {a.officer_name && (
+                <div className="mt-2 text-[13px] text-[var(--ink-muted)]">
+                  Officer: <span className="text-[var(--ink)]">{a.officer_name}</span>
+                  {(a.officer_email || a.officer_phone) && ` · ${[a.officer_email, a.officer_phone].filter(Boolean).join(' / ')}`}
+                </div>
+              )}
+            </div>
+          )}
 
           {draft.money?.fee_amount != null && (
             <div className="rounded-md border border-[var(--line)] bg-[var(--paper)] px-3 py-2 text-[15px]">
