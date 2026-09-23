@@ -90,9 +90,9 @@ export function DashboardPage() {
       <Card>
         <CardHeader title="Referral triage" sub={`${tiers.total} active`}>
           {tiers.urgent > 0 && (
-            <span className="rounded px-2 py-0.5 text-[13px] font-semibold" style={{ background: 'var(--stage-lost-bg)', color: 'var(--stage-lost-fg)' }}>
+            <Link to="/pipeline?urgency=urgent" className="rounded px-2 py-0.5 text-[13px] font-semibold hover:underline" style={{ background: 'var(--stage-lost-bg)', color: 'var(--stage-lost-fg)' }}>
               {tiers.urgent} urgent
-            </span>
+            </Link>
           )}
           <Link to="/pipeline" className="text-[13px] text-[var(--link)] hover:underline">Open</Link>
         </CardHeader>
@@ -103,7 +103,7 @@ export function DashboardPage() {
             return (
               <button
                 key={t}
-                onClick={() => navigate('/pipeline')}
+                onClick={() => navigate(`/pipeline?tier=${t}`)}
                 className="flex flex-col items-center gap-2 p-5 text-center transition-colors hover:bg-[var(--paper)]"
               >
                 <TierBadge tier={t} />

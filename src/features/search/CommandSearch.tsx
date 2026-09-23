@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApplicants, useContacts, useProperties } from '../../lib/hooks';
+import { areaOf, matchesTerms, parseQuery, searchText } from '../../lib/search';
 
 interface Hit {
   id: string;
@@ -47,9 +48,11 @@ export function CommandSearch() {
     const s = q.trim().toLowerCase();
     if (!s) return [];
     const out: Hit[] = [];
+    // Clients: same matching as the Pipeline search (name, phone, area, notes, benefits...)
+    const terms = parseQuery(q);
     for (const a of applicants) {
-      if (a.full_name.toLowerCase().includes(s) || a.phone?.includes(s) || a.referring_borough?.toLowerCase().includes(s)) {
-        out.push({ id: a.id, label: a.full_name, sub: [a.referring_borough, a.stage].filter(Boolean).join(' · '), group: 'Applicants', to: `/applicants/${a.id}` });
+      if (matchesTerms(searchText(a), terms)) {
+        out.push({ id: a.id, label: a.full_name, sub: [areaOf(a), a.stage].filter(Boolean).join(' · '), group: 'Applicants', to: `/applicants/${a.id}` });
       }
     }
     for (const p of properties) {

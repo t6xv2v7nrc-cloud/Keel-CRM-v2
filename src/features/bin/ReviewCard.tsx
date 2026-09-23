@@ -10,6 +10,14 @@ import type { ConfirmChoice } from './confirm';
 import { money } from '../../lib/format';
 import { HOUSEHOLD_LABEL, WORK_STATUS_LABEL, URGENCY_LABEL } from '../../lib/tiering';
 
+/** Items filed before notes were captured still carry the client's message in
+ *  their source text; lift it into the notes box so it is not lost. */
+function withMessageNotes(ex: Extraction): Extraction {
+  if (!ex.applicant || ex.applicant.notes) return ex;
+  const m = ex.transcription.match(/Message:\s*([\s\S]+)$/i);
+  return m && m[1].trim() ? { ...ex, applicant: { ...ex.applicant, notes: m[1].trim() } } : ex;
+}
+
 function Chip({ children }: { children: React.ReactNode }) {
   return (
     <span className="rounded border border-[var(--line)] bg-[var(--surface)] px-2 py-0.5 text-[13px] text-[var(--ink-muted)]">
@@ -35,7 +43,7 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
   const [busy, setBusy] = useState(false);
 
   // Editable copy of the extraction
-  const [draft, setDraft] = useState<Extraction>(extraction);
+  const [draft, setDraft] = useState<Extraction>(() => withMessageNotes(extraction));
 
   // Match choices — default to the strongest match, else "create"
   const bestApplicant = matches?.applicant[0];
@@ -135,6 +143,18 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
             <Field label="Borough / council" value={a.referring_borough ?? a.council ?? ''} onChange={(e) => setA('referring_borough', e.target.value)} />
             <Field label="Budget pcm" mono value={a.budget_pcm != null ? String(a.budget_pcm) : ''} onChange={(e) => setA('budget_pcm', e.target.value)} />
           </div>
+
+          {/* The client's own message, saved to their notes so it can be searched */}
+          <label className="flex flex-col gap-1">
+            <span className="text-[13px] font-medium text-[var(--ink-muted)]">Notes: what they are looking for</span>
+            <textarea
+              value={a.notes ?? ''}
+              onChange={(e) => setA('notes', e.target.value)}
+              rows={3}
+              placeholder="Area, bedrooms, move-in date, anything the client mentioned"
+              className="rounded-md border border-[var(--line-strong)] bg-[var(--surface)] p-2 text-[15px] text-[var(--ink)] outline-none focus:border-[var(--hull)]"
+            />
+          </label>
 
           {/* Referral triage summary (read-only — full edit on the applicant page) */}
           {(a.tier != null || a.household_type || a.on_uc != null || a.officer_name) && (

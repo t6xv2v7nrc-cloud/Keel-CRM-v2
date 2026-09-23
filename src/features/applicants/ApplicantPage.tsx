@@ -328,7 +328,12 @@ function HeroCard({ applicant, household }: { applicant: Applicant; household: s
       </dl>
 
       {applicant.requirements && <p className="mt-4 mb-0 text-[15px] text-[var(--ink)]">{applicant.requirements}</p>}
-      {applicant.notes && <p className="mt-2 mb-0 text-[15px] text-[var(--ink-muted)]">{applicant.notes}</p>}
+      {applicant.notes && (
+        <div className="mt-4 rounded-md border border-[var(--line)] bg-[var(--paper)] p-3">
+          <div className="text-[13px] font-medium text-[var(--ink-muted)]">Looking for / notes</div>
+          <p className="m-0 mt-1 whitespace-pre-wrap text-[15px] text-[var(--ink)]">{applicant.notes}</p>
+        </div>
+      )}
     </Card>
   );
 }

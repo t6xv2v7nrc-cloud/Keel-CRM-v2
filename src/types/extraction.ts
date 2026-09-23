@@ -51,6 +51,7 @@ export interface ExtractedApplicant {
   referring_borough?: string;
   budget_pcm?: number;
   requirements?: string;
+  notes?: string;                // the client's own message: what they are looking for
   // Referral triage fields
   household_type?: string;       // 'single'|'couple'|'family'|'other'
   on_uc?: boolean;
@@ -84,6 +85,7 @@ export interface ExtractedContact {
   role?: string;
   phone?: string;
   email?: string;
+  notes?: string;
 }
 
 export interface ExtractedMoney {

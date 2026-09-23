@@ -93,14 +93,13 @@ export function enquiryToExtraction(fields: EnquiryFields): Extraction {
     applicant: {
       full_name: full_name || undefined,
       phone: phone || undefined,
+      email: fields['Email'] || undefined, // the applicant's own email, not a referring contact
       adults,
       children,
       budget_pcm: budget,
       requirements,
+      notes: message || undefined, // kept on the client so you can see and search what they want
     },
-    contact: fields['Email']
-      ? undefined // the email belongs to the applicant, not a referring contact
-      : undefined,
     suggested_actions: ['create_applicant'],
   };
 }

@@ -203,6 +203,7 @@ function buildExtraction(f) {
       urgency: f.urgency,
       housing_situation: f.housing_situation || undefined,
       consent: f.consent,
+      notes: message || undefined, // the client's own words: area, bedrooms, budget...
       tier,
     },
     suggested_actions: ['create_applicant'],
@@ -230,6 +231,7 @@ function buildEnquiryExtraction(f) {
       email: f.email || undefined,
       phone: f.phone ? toE164(f.phone) : undefined,
       borough: f.council || undefined,
+      notes: f.message || undefined,
     },
     suggested_actions: ['create_contact', 'log_note_only'],
   };

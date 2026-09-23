@@ -59,6 +59,7 @@ export async function confirmInboxItem({
         borough: c.borough ?? null,
         email: c.email ?? null,
         phone: c.phone ?? null,
+        notes: c.notes?.trim() || null,
       })
       .select('id')
       .single();
@@ -86,6 +87,7 @@ export async function confirmInboxItem({
         referring_borough: a.referring_borough ?? a.council ?? null,
         budget_pcm: a.budget_pcm != null && String(a.budget_pcm) !== '' ? Number(a.budget_pcm) || null : null,
         requirements: a.requirements ?? null,
+        notes: a.notes?.trim() || null,
         source: a.officer_name ? 'officer' : 'website',
         referred_by: contactId ?? null,
         stage,
@@ -119,10 +121,10 @@ export async function confirmInboxItem({
     const id = choice.applicantTarget;
     const a = extraction.applicant ?? {};
 
-    // Fetch current stage to enforce monotonic advance
+    // Fetch current stage (to enforce monotonic advance) and notes (to append to)
     const { data: current } = await supabase
       .from('applicants')
-      .select('full_name, stage')
+      .select('full_name, stage, notes')
       .eq('id', id)
       .single();
 
@@ -131,6 +133,15 @@ export async function confirmInboxItem({
     if (a.benefit_type) patch.benefit_type = a.benefit_type;
     if (a.referring_borough) patch.referring_borough = a.referring_borough;
     if (contactId) patch.referred_by = contactId;
+
+    // A new message from an existing client is added to their notes with the
+    // date, never replacing what is already there.
+    const newNote = a.notes?.trim();
+    const oldNotes = (current?.notes as string | null) ?? '';
+    if (newNote && !oldNotes.includes(newNote)) {
+      const stamp = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      patch.notes = oldNotes ? `${oldNotes}\n\n[${stamp}] ${newNote}` : newNote;
+    }
 
     let stageChanged = false;
     if (choice.advanceStage && current) {
