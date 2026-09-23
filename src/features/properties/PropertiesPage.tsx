@@ -1,83 +1,441 @@
-import { useProperties } from '../../lib/hooks';
-import { Card } from '../../components/ui';
-import { money } from '../../lib/format';
-import type { Property } from '../../lib/types';
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Button, Card, TierBadge, useToast } from '../../components/ui';
+import {
+  PROPERTY_STATUS_LABEL, useAddProperties, useApplicants, useDeleteProperties, useProperties, useSetPropertyStatus,
+} from '../../lib/hooks';
+import type { NewProperty } from '../../lib/hooks';
+import type { Applicant, Property } from '../../lib/types';
+import { parsePropertyList } from '../../lib/parseProperties';
+import type { ParsedProperty } from '../../lib/parseProperties';
+import { matchesForProperty } from '../../lib/propertyMatch';
+import type { Match, Strength } from '../../lib/propertyMatch';
+import { BOROUGHS } from '../../lib/london';
+import { effectiveTier, isUrgent } from '../../lib/search';
+import { money, shortDate } from '../../lib/format';
 
-const STATUS_STYLE: Record<Property['status'], { bg: string; fg: string; label: string }> = {
-  void:        { bg: 'var(--stage-lead-bg)',  fg: 'var(--stage-lead-fg)',  label: 'Void' },
-  under_offer: { bg: 'var(--stage-offer-bg)', fg: 'var(--stage-offer-fg)', label: 'Under offer' },
-  let:         { bg: 'var(--stage-placed-bg)',fg: 'var(--stage-placed-fg)',label: 'Let' },
-  withdrawn:   { bg: 'var(--stage-lost-bg)',  fg: 'var(--stage-lost-fg)',  label: 'Withdrawn' },
+const TYPE_OPTIONS = ['Room', 'En-suite Room', 'Studio', 'En-suite Studio', 'Self-Contained Studio', '1-Bed Flat', '2-Bed Flat', '3-Bed Flat', '3-Bed House', '4-Bed House'];
+const bedsOfType = (t: string) => (/(\d)-Bed/.exec(t) ? Number(/(\d)-Bed/.exec(t)![1]) : 0);
+const normAddr = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const STRENGTH: Record<Strength, { label: string; bg: string; fg: string }> = {
+  strong: { label: 'Strong', bg: 'var(--stage-placed-bg)', fg: 'var(--stage-placed-fg)' },
+  good: { label: 'Good', bg: 'var(--stage-referred-bg)', fg: 'var(--stage-referred-fg)' },
+  possible: { label: 'Possible', bg: 'var(--stage-lead-bg)', fg: 'var(--stage-lead-fg)' },
 };
 
-/** Properties (§8.4): grouped by borough; rent vs LHA delta per row. */
+const isAvailable = (p: Property) => p.status === 'void' || p.status === 'under_offer';
+
+/** Properties (§8.4): paste a stock list, see every property matched to clients. */
 export function PropertiesPage() {
   const { data: properties = [], isLoading } = useProperties();
+  const { data: applicants = [] } = useApplicants();
+  const setStatus = useSetPropertyStatus();
+  const del = useDeleteProperties();
+  const { toast } = useToast();
+
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [justAdded, setJustAdded] = useState<Set<string>>(new Set());
+  const [status, setStatusFilter] = useState<'available' | Property['status'] | 'all'>('available');
+  const [borough, setBorough] = useState('all');
+  const [q, setQ] = useState('');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const matches = useMemo(
+    () => new Map(properties.map((p) => [p.id, isAvailable(p) ? matchesForProperty(p, applicants) : []])),
+    [properties, applicants],
+  );
+
+  const counts = {
+    available: properties.filter((p) => p.status === 'void').length,
+    under_offer: properties.filter((p) => p.status === 'under_offer').length,
+    let: properties.filter((p) => p.status === 'let').length,
+  };
+  const totalMatches = [...matches.values()].reduce((s, m) => s + m.length, 0);
+  const boroughs = [...new Set(properties.map((p) => p.borough).filter((b): b is string => Boolean(b)))].sort();
+
+  const rows = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return properties
+      .filter((p) => status === 'all' || (status === 'available' ? isAvailable(p) : p.status === status))
+      .filter((p) => borough === 'all' || p.borough === borough)
+      .filter((p) => !needle || [p.address_line, p.area, p.borough, p.postcode, p.property_type, p.source_tag]
+        .some((x) => x?.toLowerCase().includes(needle)))
+      .sort((a, b) => Number(justAdded.has(b.id)) - Number(justAdded.has(a.id))
+        || (matches.get(b.id)?.length ?? 0) - (matches.get(a.id)?.length ?? 0)
+        || b.created_at.localeCompare(a.created_at));
+  }, [properties, status, borough, q, justAdded, matches]);
+
+  const toggle = (id: string) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const selectedRows = rows.filter((p) => selected.has(p.id));
+
+  const bulkDelete = () => {
+    if (!window.confirm(`Delete ${selectedRows.length} ${selectedRows.length === 1 ? 'property' : 'properties'}? This cannot be undone.`)) return;
+    del.mutate(selectedRows.map((p) => p.id), {
+      onSuccess: () => { toast(`Deleted ${selectedRows.length}`, 'success'); setSelected(new Set()); },
+      onError: (e) => toast(`Delete failed: ${(e as Error).message}`, 'danger'),
+    });
+  };
+  const bulkLet = async () => {
+    for (const p of selectedRows) if (p.status !== 'let') await setStatus.mutateAsync({ p, status: 'let' });
+    toast(`Marked ${selectedRows.length} as let`, 'success');
+    setSelected(new Set());
+  };
 
   if (isLoading) return <div className="grid min-h-[50vh] place-items-center text-[var(--ink-muted)]">Loading…</div>;
 
-  const boroughs = [...new Set(properties.map((p) => p.borough ?? 'Unknown'))].sort();
-  const voids = properties.filter((p) => p.status === 'void').length;
+  const showPaste = pasteOpen || properties.length === 0;
 
   return (
-    <div className="mx-auto flex max-w-[960px] flex-col gap-6 p-6 pb-24">
-      <header>
-        <h1 className="m-0 text-[28px] font-bold text-[var(--ink)]">Properties</h1>
-        <p className="m-0 mt-1 text-[15px] text-[var(--ink-muted)]">
-          {properties.length} properties · {voids} void
-        </p>
+    <div className="mx-auto flex max-w-[1100px] flex-col gap-5 p-6 pb-24">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="m-0 text-[28px] font-bold text-[var(--ink)]">Properties</h1>
+          <p className="m-0 mt-1 text-[15px] text-[var(--ink-muted)]">
+            {counts.available} available · {counts.under_offer} under offer · {counts.let} let
+            {totalMatches > 0 && <> · <strong className="text-[var(--ink)]">{totalMatches}</strong> client matches</>}
+          </p>
+        </div>
+        {!showPaste && <Button variant="brass" onClick={() => setPasteOpen(true)}>Paste properties</Button>}
       </header>
 
-      {properties.length === 0 && (
-        <p className="text-[15px] text-[var(--ink-muted)]">No properties yet. File a property screenshot in the Bin.</p>
+      {showPaste && (
+        <PasteImport
+          existing={properties}
+          applicants={applicants}
+          canClose={properties.length > 0}
+          onClose={() => setPasteOpen(false)}
+          onAdded={(added) => {
+            setJustAdded(new Set(added.map((p) => p.id)));
+            setPasteOpen(false);
+            setStatusFilter('available');
+            const found = added.reduce((s, p) => s + matchesForProperty(p, applicants).length, 0);
+            toast(`Added ${added.length} ${added.length === 1 ? 'property' : 'properties'} · ${found} client ${found === 1 ? 'match' : 'matches'}`, 'success');
+          }}
+        />
       )}
 
-      {boroughs.map((borough) => {
-        const rows = properties.filter((p) => (p.borough ?? 'Unknown') === borough);
-        return (
-          <Card key={borough}>
-            <div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-3">
-              <h3 className="m-0 text-[18px] font-semibold text-[var(--ink)]">{borough}</h3>
-              <span className="font-mono text-[13px] text-[var(--ink-muted)]">{rows.length}</span>
+      {properties.length > 0 && (
+        <>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1">
+              <span className="text-[13px] font-medium text-[var(--ink-muted)]">Show</span>
+              <select value={status} onChange={(e) => setStatusFilter(e.target.value as typeof status)}
+                className="min-h-[40px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]">
+                <option value="available">Available and under offer ({counts.available + counts.under_offer})</option>
+                <option value="void">Available ({counts.available})</option>
+                <option value="under_offer">Under offer ({counts.under_offer})</option>
+                <option value="let">Let ({counts.let})</option>
+                <option value="all">All ({properties.length})</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[13px] font-medium text-[var(--ink-muted)]">Borough</span>
+              <select value={borough} onChange={(e) => setBorough(e.target.value)}
+                className="min-h-[40px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]">
+                <option value="all">All boroughs</option>
+                {boroughs.map((b) => <option key={b} value={b}>{b}</option>)}
+              </select>
+            </label>
+            <label className="flex min-w-[220px] flex-1 flex-col gap-1">
+              <span className="text-[13px] font-medium text-[var(--ink-muted)]">Search</span>
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Address, area, postcode, source"
+                className="min-h-[40px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-3 text-[15px] text-[var(--ink)] outline-none focus:border-[var(--hull)]" />
+            </label>
+          </div>
+
+          {selectedRows.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-4 py-2">
+              <span className="text-[15px] text-[var(--ink)]">{selectedRows.length} selected</span>
+              <Button className="min-h-0 px-3 py-1.5 text-[13px]" onClick={bulkLet}>Mark as let</Button>
+              <Button variant="danger" className="min-h-0 px-3 py-1.5 text-[13px]" onClick={bulkDelete}>Delete</Button>
+              <button onClick={() => setSelected(new Set())} className="ml-auto text-[13px] text-[var(--link)] hover:underline">Clear selection</button>
             </div>
-            <table className="w-full border-collapse text-[15px]">
-              <thead>
-                <tr className="text-left text-[13px] text-[var(--ink-muted)]">
-                  <th className="px-5 py-2 font-medium">Address</th>
-                  <th className="px-3 py-2 font-medium">Type</th>
-                  <th className="px-3 py-2 text-right font-medium">Rent</th>
-                  <th className="px-3 py-2 text-right font-medium">LHA</th>
-                  <th className="px-3 py-2 text-right font-medium">Δ</th>
-                  <th className="px-5 py-2 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((p) => {
-                  const delta = p.rent_pcm != null && p.lha_rate_pcm != null ? p.rent_pcm - p.lha_rate_pcm : null;
-                  const s = STATUS_STYLE[p.status];
-                  return (
-                    <tr key={p.id} className="border-t border-[var(--line)]">
-                      <td className="px-5 py-3 text-[var(--ink)]">
-                        {p.address_line}
-                        {p.postcode && <span className="ml-2 font-mono text-[13px] text-[var(--ink-muted)]">{p.postcode}</span>}
-                      </td>
-                      <td className="px-3 py-3 text-[var(--ink-muted)]">{p.property_type ?? '—'}</td>
-                      <td className="px-3 py-3 text-right font-mono text-[var(--ink)]">{p.rent_pcm ? money(p.rent_pcm) : '—'}</td>
-                      <td className="px-3 py-3 text-right font-mono text-[var(--ink-muted)]">{p.lha_rate_pcm ? money(p.lha_rate_pcm) : '—'}</td>
-                      <td className="px-3 py-3 text-right font-mono" style={{ color: delta == null ? 'var(--ink-muted)' : delta > 0 ? 'var(--danger)' : 'var(--success)' }}>
-                        {delta == null ? '—' : `${delta > 0 ? '+' : ''}${money(delta)}`}
-                      </td>
-                      <td className="px-5 py-3">
-                        <span className="rounded px-2 py-0.5 text-[13px]" style={{ background: s.bg, color: s.fg }}>{s.label}</span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </Card>
-        );
-      })}
+          )}
+
+          <div className="flex flex-col gap-4">
+            {rows.map((p) => (
+              <PropertyCard
+                key={p.id}
+                p={p}
+                matches={matches.get(p.id) ?? []}
+                isNew={justAdded.has(p.id)}
+                selected={selected.has(p.id)}
+                onToggle={() => toggle(p.id)}
+                onStatus={(s) => setStatus.mutate({ p, status: s }, { onSuccess: () => toast(`${PROPERTY_STATUS_LABEL[s]}: ${p.address_line}`, 'success') })}
+                onDelete={() => {
+                  if (!window.confirm(`Delete ${p.address_line}? This cannot be undone.`)) return;
+                  del.mutate([p.id], { onSuccess: () => toast('Property deleted', 'success') });
+                }}
+              />
+            ))}
+            {rows.length === 0 && <p className="m-0 text-[15px] text-[var(--ink-muted)]">No properties in this view.</p>}
+          </div>
+        </>
+      )}
     </div>
   );
 }
+
+// ── Paste + preview ────────────────────────────────────────────────
+
+type Draft = ParsedProperty & { key: string; include: boolean; duplicate: boolean };
+
+function PasteImport({ existing, applicants, canClose, onClose, onAdded }: {
+  existing: Property[];
+  applicants: Applicant[];
+  canClose: boolean;
+  onClose: () => void;
+  onAdded: (added: Property[]) => void;
+}) {
+  const add = useAddProperties();
+  const { toast } = useToast();
+  const [text, setText] = useState('');
+  const [source, setSource] = useState('');
+  const [drafts, setDrafts] = useState<Draft[] | null>(null);
+  const [shared, setShared] = useState<string[]>([]);
+  const [skipped, setSkipped] = useState<string[]>([]);
+
+  const read = () => {
+    const r = parsePropertyList(text);
+    const have = new Set(existing.map((p) => normAddr(p.address_line)));
+    setDrafts(r.properties.map((p, i) => {
+      const duplicate = have.has(normAddr(p.address_line));
+      return { ...p, key: `${i}-${p.address_line}`, include: !duplicate, duplicate };
+    }));
+    setShared(r.sharedNotes);
+    setSkipped(r.skipped);
+  };
+
+  const edit = (key: string, patch: Partial<Draft>) =>
+    setDrafts((ds) => ds && ds.map((d) => (d.key === key ? { ...d, ...patch } : d)));
+
+  const chosen = (drafts ?? []).filter((d) => d.include);
+
+  const save = () => {
+    const rows: NewProperty[] = chosen.map((d) => ({
+      address_line: d.address_line, postcode: d.postcode, area: d.area, borough: d.borough,
+      property_type: d.property_type, bedrooms: d.bedrooms, rent_pcm: d.rent_pcm, rent_text: d.rent_text,
+      bills: d.bills, furnished: d.furnished, available_from: d.available_from, notes: d.notes,
+      source_tag: source.trim() || null,
+    }));
+    add.mutate({ rows, source: source.trim() }, {
+      onSuccess: (added) => { setText(''); setDrafts(null); onAdded(added); },
+      onError: (e) => toast((e as Error).message, 'danger'),
+    });
+  };
+
+  return (
+    <Card className="flex flex-col gap-4 p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="m-0 text-[18px] font-semibold text-[var(--ink)]">Paste your available properties</h2>
+          <p className="m-0 mt-1 max-w-[720px] text-[15px] text-[var(--ink-muted)]">
+            One property per line or per block, or rows copied from a spreadsheet. Notes that apply to every property,
+            like "They are all en-suite rooms" or "Rent is 1-bed LHA", are applied to each one. Lines marked let,
+            taken or under offer are skipped.
+          </p>
+        </div>
+        {canClose && <button onClick={onClose} className="text-[15px] text-[var(--link)] hover:underline">Close</button>}
+      </div>
+
+      {!drafts && (
+        <>
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={10}
+            placeholder={'Flat 2, 14 Bruce Grove, Tottenham, N17 6RA - Studio - £950 pcm bills inc\n45 Ballards Lane, North Finchley, N12 0DA - 1 bed flat - £1,300 pcm - available now\nUnits 1 & 2, 10 Kings Road, Edmonton N18 2AB - en-suite rooms - 1-bed LHA'}
+            className="w-full rounded-md border border-[var(--line-strong)] bg-[var(--surface)] p-3 font-mono text-[13px] text-[var(--ink)] outline-none focus:border-[var(--hull)]"
+          />
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <label className="flex flex-col gap-1">
+              <span className="text-[13px] font-medium text-[var(--ink-muted)]">Where is this list from? (optional)</span>
+              <input value={source} onChange={(e) => setSource(e.target.value)} placeholder="e.g. BP, SR, landlord name"
+                className="min-h-[40px] w-[260px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-3 text-[15px] text-[var(--ink)] outline-none focus:border-[var(--hull)]" />
+            </label>
+            <Button variant="primary" onClick={read} disabled={!text.trim()}>Read list and find matches</Button>
+          </div>
+        </>
+      )}
+
+      {drafts && (
+        <>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[15px]">
+            <span className="text-[var(--ink)]">Found <strong>{drafts.length}</strong> {drafts.length === 1 ? 'property' : 'properties'}</span>
+            {drafts.some((d) => d.duplicate) && <span className="text-[var(--ink-muted)]">{drafts.filter((d) => d.duplicate).length} already on your list (unticked)</span>}
+            {skipped.length > 0 && <span className="text-[var(--ink-muted)]" title={skipped.join('\n')}>{skipped.length} skipped as let or taken</span>}
+            <button onClick={() => setDrafts(null)} className="ml-auto text-[15px] text-[var(--link)] hover:underline">Back to edit the text</button>
+          </div>
+
+          {shared.length > 0 && (
+            <div className="rounded-md border border-[var(--line)] bg-[var(--paper)] p-3 text-[13px] text-[var(--ink-muted)]">
+              <strong className="text-[var(--ink)]">Applied to every property: </strong>{shared.join(' · ')}
+            </div>
+          )}
+
+          {drafts.length === 0 && (
+            <p className="m-0 text-[15px] text-[var(--ink-muted)]">
+              No properties found. Each property needs an address with a postcode or street, or a type and rent with an area.
+            </p>
+          )}
+
+          <div className="flex flex-col divide-y divide-[var(--line)] rounded-md border border-[var(--line)]">
+            {drafts.map((d) => {
+              const top = matchesForProperty(d, applicants);
+              return (
+                <div key={d.key} className={`flex flex-col gap-2 p-3 ${d.include ? '' : 'opacity-60'}`}>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <input type="checkbox" checked={d.include} onChange={(e) => edit(d.key, { include: e.target.checked })}
+                      aria-label={`Include ${d.address_line}`} className="h-5 w-5 accent-[var(--hull)]" />
+                    <input value={d.address_line} onChange={(e) => edit(d.key, { address_line: e.target.value })}
+                      aria-label="Address"
+                      className="min-h-[36px] min-w-[260px] flex-1 rounded-md border border-[var(--line)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]" />
+                    {d.duplicate && <span className="rounded bg-[var(--stage-offer-bg)] px-2 py-0.5 text-[13px] text-[var(--stage-offer-fg)]">Already on your list</span>}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 pl-8 text-[13px]">
+                    <select value={d.property_type ?? ''} aria-label="Type"
+                      onChange={(e) => edit(d.key, { property_type: e.target.value || null, bedrooms: e.target.value ? bedsOfType(e.target.value) : null })}
+                      className="min-h-[32px] rounded-md border border-[var(--line)] bg-[var(--surface)] px-1.5 text-[13px] text-[var(--ink)]">
+                      <option value="">Type not found</option>
+                      {[...new Set([...(d.property_type ? [d.property_type] : []), ...TYPE_OPTIONS])].map((t) => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <input
+                      value={d.rent_text ?? ''}
+                      aria-label="Rent"
+                      placeholder="Rent, e.g. £950 pcm or 1-Bed LHA"
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        const pounds = /£?\s?([\d,]+)/.exec(v);
+                        const weekly = /\bp\/?w\b|week/i.test(v);
+                        const pcm = /lha/i.test(v) || !pounds ? null : Math.round(Number(pounds[1].replace(/,/g, '')) * (weekly ? 52 / 12 : 1));
+                        edit(d.key, { rent_text: v || null, rent_pcm: pcm });
+                      }}
+                      className="min-h-[32px] w-[190px] rounded-md border border-[var(--line)] bg-[var(--surface)] px-2 font-mono text-[13px] text-[var(--ink)]"
+                    />
+                    <select value={d.borough ?? ''} aria-label="Borough" onChange={(e) => edit(d.key, { borough: e.target.value || null })}
+                      className="min-h-[32px] rounded-md border border-[var(--line)] bg-[var(--surface)] px-1.5 text-[13px] text-[var(--ink)]">
+                      <option value="">Borough not found</option>
+                      {BOROUGHS.map((b) => <option key={b} value={b}>{b}</option>)}
+                    </select>
+                    {d.area && <span className="text-[var(--ink-muted)]">{d.area}</span>}
+                    {d.bills && <span className="text-[var(--ink-muted)]">Bills: {d.bills}</span>}
+                    {d.furnished && <span className="text-[var(--ink-muted)]">{d.furnished}</span>}
+                    {d.available_from && <span className="text-[var(--ink-muted)]">From {shortDate(d.available_from)}</span>}
+                    {d.warnings.map((w) => (
+                      <span key={w} className="rounded bg-[var(--stage-offer-bg)] px-1.5 py-0.5 text-[var(--stage-offer-fg)]">{w}</span>
+                    ))}
+                  </div>
+                  <div className="pl-8 text-[13px]">
+                    {top.length === 0 ? (
+                      <span className="text-[var(--ink-muted)]">No matching clients yet</span>
+                    ) : (
+                      <span className="text-[var(--ink)]">
+                        <StrengthBadge s={top[0].strength} /> {top[0].applicant.full_name}
+                        <span className="text-[var(--ink-muted)]"> · {top[0].reasons.slice(0, 2).join(' · ')}</span>
+                        {top.length > 1 && <span className="text-[var(--ink-muted)]"> · and {top.length - 1} more</span>}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button onClick={() => setDrafts(null)}>Back</Button>
+            <Button variant="primary" onClick={save} disabled={chosen.length === 0 || add.isPending}>
+              {add.isPending ? 'Adding…' : `Add ${chosen.length} ${chosen.length === 1 ? 'property' : 'properties'}`}
+            </Button>
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
+// ── Property card with its matches ────────────────────────────────
+
+function PropertyCard({ p, matches, isNew, selected, onToggle, onStatus, onDelete }: {
+  p: Property; matches: Match[]; isNew: boolean; selected: boolean;
+  onToggle: () => void; onStatus: (s: Property['status']) => void; onDelete: () => void;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const shown = showAll ? matches : matches.slice(0, 3);
+  const facts = [
+    p.area, p.borough && p.borough.toLowerCase() !== p.area?.toLowerCase() ? p.borough : null, p.property_type,
+    p.rent_text ?? (p.rent_pcm ? `${money(p.rent_pcm)} pcm` : null),
+    p.bills ? `Bills: ${p.bills}` : null, p.furnished,
+    p.available_from ? `From ${shortDate(p.available_from)}` : null,
+    p.source_tag ? `Source: ${p.source_tag}` : null,
+  ].filter(Boolean);
+
+  return (
+    <Card className={`overflow-hidden ${isNew ? 'ring-2 ring-[var(--brass)]' : ''}`}>
+      <div className="flex flex-wrap items-start gap-3 border-b border-[var(--line)] px-5 py-4">
+        <input type="checkbox" checked={selected} onChange={onToggle} aria-label={`Select ${p.address_line}`}
+          className="mt-1 h-5 w-5 accent-[var(--hull)]" />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="m-0 text-[18px] font-semibold text-[var(--ink)]">{p.address_line}</h3>
+            {isNew && <span className="rounded bg-[var(--brass)] px-2 py-0.5 text-[13px] font-semibold text-[var(--brass-text)]">New</span>}
+          </div>
+          <div className="mt-1 text-[15px] text-[var(--ink-muted)]">{facts.join(' · ') || 'No details'}</div>
+        </div>
+        <select value={p.status} onChange={(e) => onStatus(e.target.value as Property['status'])} aria-label={`Status of ${p.address_line}`}
+          className="min-h-[36px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[13px] text-[var(--ink)]">
+          {(Object.keys(PROPERTY_STATUS_LABEL) as Property['status'][]).map((s) => <option key={s} value={s}>{PROPERTY_STATUS_LABEL[s]}</option>)}
+        </select>
+        <button onClick={onDelete} aria-label={`Delete ${p.address_line}`} title="Delete property"
+          className="rounded px-2 py-1 text-[15px] text-[var(--ink-muted)] hover:bg-[var(--stage-lost-bg)] hover:text-[var(--danger)]">✕</button>
+      </div>
+
+      {isAvailable(p) && (
+        <div className="px-5 py-3">
+          {matches.length === 0 ? (
+            <p className="m-0 text-[15px] text-[var(--ink-muted)]">No matching clients yet.</p>
+          ) : (
+            <>
+              <div className="mb-2 text-[13px] font-medium text-[var(--ink-muted)]">
+                {matches.length} matching {matches.length === 1 ? 'client' : 'clients'}
+              </div>
+              <ul className="m-0 flex list-none flex-col gap-3 p-0">
+                {shown.map((m) => <MatchRow key={m.applicant.id} m={m} />)}
+              </ul>
+              {matches.length > 3 && (
+                <button onClick={() => setShowAll((v) => !v)} className="mt-2 text-[13px] text-[var(--link)] hover:underline">
+                  {showAll ? 'Show fewer' : `Show ${matches.length - 3} more`}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function MatchRow({ m }: { m: Match }) {
+  const a = m.applicant;
+  return (
+    <li className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <StrengthBadge s={m.strength} />
+        <Link to={`/applicants/${a.id}`} className="text-[15px] font-medium text-[var(--ink)] hover:underline">{a.full_name}</Link>
+        <TierBadge tier={effectiveTier(a)} />
+        {isUrgent(a) && <span className="text-[13px] font-semibold text-[var(--danger)]">Urgent</span>}
+        {a.phone && <a href={`tel:${a.phone}`} className="font-mono text-[13px] text-[var(--link)] hover:underline">{a.phone}</a>}
+      </div>
+      <div className="text-[13px] text-[var(--ink)]">{m.reasons.join(' · ')}</div>
+      {m.cautions.length > 0 && (
+        <div className="text-[13px] text-[var(--stage-offer-fg)]">! {m.cautions.join(' · ')}</div>
+      )}
+    </li>
+  );
+}
+
+function StrengthBadge({ s }: { s: Strength }) {
+  const x = STRENGTH[s];
+  return <span className="rounded px-2 py-0.5 text-[13px] font-semibold" style={{ background: x.bg, color: x.fg }}>{x.label}</span>;
+}
+

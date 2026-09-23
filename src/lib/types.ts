@@ -60,6 +60,13 @@ export interface Property {
   status: 'void' | 'under_offer' | 'let' | 'withdrawn';
   available_from: string | null;
   notes: string | null;
+  // Stock list import (0004_properties_import.sql)
+  bedrooms: number | null;
+  bills: string | null;
+  furnished: string | null;
+  rent_text: string | null;
+  area: string | null;
+  source_tag: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -7,16 +7,10 @@ import type { MatchResult } from '../../lib/matching';
 import { signedBinUrl } from './capture';
 import { confirmInboxItem } from './confirm';
 import type { ConfirmChoice } from './confirm';
+import { defaultChoice, withMessageNotes } from './defaults';
+import type { CardState } from './defaults';
 import { money } from '../../lib/format';
 import { HOUSEHOLD_LABEL, WORK_STATUS_LABEL, URGENCY_LABEL } from '../../lib/tiering';
-
-/** Items filed before notes were captured still carry the client's message in
- *  their source text; lift it into the notes box so it is not lost. */
-function withMessageNotes(ex: Extraction): Extraction {
-  if (!ex.applicant || ex.applicant.notes) return ex;
-  const m = ex.transcription.match(/Message:\s*([\s\S]+)$/i);
-  return m && m[1].trim() ? { ...ex, applicant: { ...ex.applicant, notes: m[1].trim() } } : ex;
-}
 
 function Chip({ children }: { children: React.ReactNode }) {
   return (
@@ -33,11 +27,13 @@ interface ReviewCardProps {
   matches: MatchResult | null;
   onDone: () => void;
   onDiscard: () => void;
+  /** Reports the card's current draft and choice, so "Confirm all" saves exactly what the card shows. */
+  onStateChange?: (itemId: string, state: CardState | null) => void;
 }
 
 /** The heart of the app (§5.3): screenshot left, editable fields right,
  *  matching proposal with radio choices, Confirm / Discard. */
-export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onDiscard }: ReviewCardProps) {
+export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onDiscard, onStateChange }: ReviewCardProps) {
   const { toast } = useToast();
   const [imgUrl, setImgUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -45,16 +41,15 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
   // Editable copy of the extraction
   const [draft, setDraft] = useState<Extraction>(() => withMessageNotes(extraction));
 
-  // Match choices — default to the strongest match, else "create"
-  const bestApplicant = matches?.applicant[0];
-  const bestContact = matches?.contact[0];
-  const [applicantTarget, setApplicantTarget] = useState<string>(
-    bestApplicant ? bestApplicant.id : draft.applicant?.full_name ? 'create' : 'note_only',
-  );
-  const [contactTarget, setContactTarget] = useState<string>(
-    bestContact ? bestContact.id : draft.contact?.full_name ? 'create' : 'none',
-  );
+  // Match choices: start from the shared default (best match, else create)
+  const [applicantTarget, setApplicantTarget] = useState<string>(() => defaultChoice(draft, matches).applicantTarget);
+  const [contactTarget, setContactTarget] = useState<string>(() => defaultChoice(draft, matches).contactTarget);
   const [advanceStage, setAdvanceStage] = useState<ApplicantStage | ''>('');
+
+  useEffect(() => {
+    onStateChange?.(itemId, { extraction: draft, choice: { applicantTarget, contactTarget, advanceStage: advanceStage || null } });
+    return () => onStateChange?.(itemId, null);
+  }, [itemId, draft, applicantTarget, contactTarget, advanceStage, onStateChange]);
 
   useEffect(() => {
     if (imagePath) signedBinUrl(imagePath).then(setImgUrl);
@@ -82,7 +77,7 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
       };
       const out = await confirmInboxItem({ inboxItemId: itemId, extraction: draft, choice });
       toast(
-        out.applicantName ? `Saved — ${out.applicantName} (${out.activityCount} activity)` : 'Saved',
+        out.applicantName ? `Saved: ${out.applicantName}` : 'Saved',
         'success',
       );
       onDone();
@@ -193,16 +188,16 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
 
             <fieldset className="flex flex-col gap-1.5">
               {matches?.applicant.map((m) => (
-                <Radio key={m.id} name="app" checked={applicantTarget === m.id} onChange={() => setApplicantTarget(m.id)}>
+                <Radio key={m.id} name={`app-${itemId}`} checked={applicantTarget === m.id} onChange={() => setApplicantTarget(m.id)}>
                   Update <strong>{m.label}</strong> <span className="text-[var(--ink-muted)]">({m.reason}, {Math.round(m.score * 100)}%)</span>
                 </Radio>
               ))}
               {a.full_name && (
-                <Radio name="app" checked={applicantTarget === 'create'} onChange={() => setApplicantTarget('create')}>
+                <Radio name={`app-${itemId}`} checked={applicantTarget === 'create'} onChange={() => setApplicantTarget('create')}>
                   Create new applicant <strong>{a.full_name}</strong>
                 </Radio>
               )}
-              <Radio name="app" checked={applicantTarget === 'note_only'} onChange={() => setApplicantTarget('note_only')}>
+              <Radio name={`app-${itemId}`} checked={applicantTarget === 'note_only'} onChange={() => setApplicantTarget('note_only')}>
                 Just log a note
               </Radio>
             </fieldset>
@@ -229,16 +224,16 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
               <fieldset className="mt-3 flex flex-col gap-1.5 border-t border-[var(--line)] pt-3">
                 <div className="text-[13px] text-[var(--ink-muted)]">Referring contact</div>
                 {matches?.contact.map((m) => (
-                  <Radio key={m.id} name="con" checked={contactTarget === m.id} onChange={() => setContactTarget(m.id)}>
+                  <Radio key={m.id} name={`con-${itemId}`} checked={contactTarget === m.id} onChange={() => setContactTarget(m.id)}>
                     Link <strong>{m.label}</strong> <span className="text-[var(--ink-muted)]">({m.reason})</span>
                   </Radio>
                 ))}
                 {draft.contact?.full_name && (
-                  <Radio name="con" checked={contactTarget === 'create'} onChange={() => setContactTarget('create')}>
+                  <Radio name={`con-${itemId}`} checked={contactTarget === 'create'} onChange={() => setContactTarget('create')}>
                     Create contact <strong>{draft.contact.full_name}</strong>
                   </Radio>
                 )}
-                <Radio name="con" checked={contactTarget === 'none'} onChange={() => setContactTarget('none')}>
+                <Radio name={`con-${itemId}`} checked={contactTarget === 'none'} onChange={() => setContactTarget('none')}>
                   No contact
                 </Radio>
               </fieldset>

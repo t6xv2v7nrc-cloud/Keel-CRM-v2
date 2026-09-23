@@ -7,7 +7,9 @@ import {
   useDeleteApplicant,
   usePlacementForApplicant,
   useUpdateApplicant,
+  useProperties,
 } from '../../lib/hooks';
+import { matchesForApplicant } from '../../lib/propertyMatch';
 import { money, shortDate, timeAgo } from '../../lib/format';
 import {
   computeTier, tierReason, HOUSEHOLD_LABEL, WORK_STATUS_LABEL, URGENCY_LABEL,
@@ -71,6 +73,8 @@ export function ApplicantPage() {
         <div className="flex flex-col gap-6">
           <ReferralCard applicant={applicant} />
 
+          <MatchingPropertiesCard applicant={applicant} />
+
           <Card>
             <CardHeader title="Progress" />
             <div className="p-5">
@@ -125,6 +129,50 @@ function TimelineRow({ act }: { act: Activity }) {
         </div>
       </div>
     </li>
+  );
+}
+
+/** The best available properties for this client, from the matching engine. */
+function MatchingPropertiesCard({ applicant }: { applicant: Applicant }) {
+  const { data: properties = [] } = useProperties();
+  const available = properties.filter((p) => p.status === 'void' || p.status === 'under_offer');
+  const all = matchesForApplicant(applicant, available);
+  const matches = all.slice(0, 5);
+  const label = { strong: 'Strong', good: 'Good', possible: 'Possible' } as const;
+  const tone = {
+    strong: ['var(--stage-placed-bg)', 'var(--stage-placed-fg)'],
+    good: ['var(--stage-referred-bg)', 'var(--stage-referred-fg)'],
+    possible: ['var(--stage-lead-bg)', 'var(--stage-lead-fg)'],
+  } as const;
+  return (
+    <Card>
+      <CardHeader title="Matching properties" sub={available.length ? `${all.length} of ${available.length} available` : undefined} />
+      <div className="p-5">
+        {available.length === 0 ? (
+          <p className="m-0 text-[15px] text-[var(--ink-muted)]">No properties yet. Paste your list on the Properties tab.</p>
+        ) : matches.length === 0 ? (
+          <p className="m-0 text-[15px] text-[var(--ink-muted)]">None of your available properties fit yet.</p>
+        ) : (
+          <ul className="m-0 flex list-none flex-col gap-3 p-0">
+            {matches.map(({ property: p, match: m }) => (
+              <li key={p.id} className="flex flex-col gap-1 border-b border-[var(--line)] pb-3 last:border-b-0 last:pb-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded px-2 py-0.5 text-[13px] font-semibold" style={{ background: tone[m.strength][0], color: tone[m.strength][1] }}>
+                    {label[m.strength]}
+                  </span>
+                  <span className="text-[15px] font-medium text-[var(--ink)]">{p.address_line}</span>
+                </div>
+                <div className="text-[13px] text-[var(--ink-muted)]">
+                  {[p.property_type, p.rent_text ?? (p.rent_pcm ? `${money(p.rent_pcm)} pcm` : null), p.borough].filter(Boolean).join(' · ')}
+                </div>
+                <div className="text-[13px] text-[var(--ink)]">{m.reasons.join(' · ')}</div>
+                {m.cautions.length > 0 && <div className="text-[13px] text-[var(--stage-offer-fg)]">! {m.cautions.join(' · ')}</div>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Card>
   );
 }
 

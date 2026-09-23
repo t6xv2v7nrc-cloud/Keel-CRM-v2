@@ -8,6 +8,9 @@ import { compressImage, uploadToBin } from './capture';
 import { useInbox, useCreateInboxItem, useUpdateInboxItem } from './useInbox';
 import type { InboxItem } from './useInbox';
 import { ReviewCard } from './ReviewCard';
+import { confirmInboxItem } from './confirm';
+import { defaultChoice, withMessageNotes } from './defaults';
+import type { CardState } from './defaults';
 import { supabase } from '../../lib/supabase';
 import { timeAgo } from '../../lib/format';
 
@@ -25,6 +28,47 @@ export function BinPage() {
     qc.invalidateQueries({ queryKey: ['inbox'] });
     qc.invalidateQueries({ queryKey: ['applicants'] });
     qc.invalidateQueries({ queryKey: ['contacts'] });
+  };
+
+  // ── Confirm all ──
+  // Each card reports its current draft + choice; untouched items use the same
+  // default a card starts with. So "Confirm all" saves exactly what the cards show.
+  const cardStates = useRef(new Map<string, CardState>());
+  const onCardState = useCallback((id: string, state: CardState | null) => {
+    if (state) cardStates.current.set(id, state); else cardStates.current.delete(id);
+  }, []);
+  const [bulk, setBulk] = useState<{ done: number; total: number } | null>(null);
+
+  const confirmAll = async (items: InboxItem[]) => {
+    const plan = items
+      .filter((i) => i.extraction)
+      .map((i) => ({ item: i, state: cardStates.current.get(i.id) ?? { extraction: withMessageNotes(i.extraction!), choice: defaultChoice(i.extraction!, i.matches) } }));
+    const creates = plan.filter((x) => x.state.choice.applicantTarget === 'create').length;
+    const notes = plan.filter((x) => x.state.choice.applicantTarget === 'note_only').length;
+    const updates = plan.length - creates - notes;
+    const summary = [
+      creates && `${creates} new ${creates === 1 ? 'client' : 'clients'}`,
+      updates && `${updates} ${updates === 1 ? 'update' : 'updates'} to existing clients`,
+      notes && `${notes} ${notes === 1 ? 'note' : 'notes'}`,
+    ].filter(Boolean).join(', ');
+    if (!window.confirm(`Confirm all ${plan.length} items?\n\nThis saves ${summary}, each using the choice shown on its card (including any edits you have made).`)) return;
+
+    let ok = 0;
+    const failed: string[] = [];
+    setBulk({ done: 0, total: plan.length });
+    for (const { item, state } of plan) {
+      try {
+        await confirmInboxItem({ inboxItemId: item.id, extraction: state.extraction, choice: state.choice });
+        ok += 1;
+      } catch (e) {
+        failed.push(`${state.extraction.applicant?.full_name ?? state.extraction.summary}: ${(e as Error).message}`);
+      }
+      setBulk({ done: ok + failed.length, total: plan.length });
+    }
+    setBulk(null);
+    refreshAfterConfirm();
+    if (failed.length) toast(`Saved ${ok}. ${failed.length} could not be saved and are still in the Bin: ${failed[0]}`, 'danger');
+    else toast(`Saved all ${ok} items`, 'success');
   };
 
   const [stage, setStage] = useState<Stage>('idle');
@@ -85,7 +129,7 @@ export function BinPage() {
         matches,
       });
 
-      toast('Screenshot read — review below', 'success');
+      toast('Screenshot read. Review it below', 'success');
       reset();
     } catch (e) {
       toast(`Failed: ${(e as Error).message}`, 'danger');
@@ -122,7 +166,7 @@ export function BinPage() {
         matches,
       });
       setEnquiryText('');
-      toast('Enquiry parsed — review below', 'success');
+      toast('Enquiry parsed. Review it below', 'success');
     } catch (e) {
       toast(`Failed: ${(e as Error).message}`, 'danger');
     }
@@ -136,7 +180,7 @@ export function BinPage() {
       <header>
         <h1 className="m-0 text-[28px] font-bold text-[var(--ink)]">The Bin</h1>
         <p className="m-0 mt-1 text-[15px] text-[var(--ink-muted)]">
-          Paste a screenshot anywhere — Ctrl/Cmd+V. It gets read, classified and matched to your records.
+          Paste a screenshot anywhere with Ctrl/Cmd+V. It gets read, classified and matched to your records.
         </p>
       </header>
 
@@ -228,7 +272,14 @@ export function BinPage() {
       {/* Review queue */}
       {reviewItems.length > 0 && (
         <section className="flex flex-col gap-4">
-          <h2 className="m-0 text-[22px] font-semibold text-[var(--ink)]">To review ({reviewItems.length})</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="m-0 text-[22px] font-semibold text-[var(--ink)]">To review ({reviewItems.length})</h2>
+            {reviewItems.length > 1 && (
+              <Button variant="primary" onClick={() => confirmAll(reviewItems)} disabled={bulk !== null}>
+                {bulk ? `Saving ${bulk.done} of ${bulk.total}…` : `Confirm all ${reviewItems.length}`}
+              </Button>
+            )}
+          </div>
           {reviewItems.map((item) => (
             <ReviewCard
               key={item.id}
@@ -238,6 +289,7 @@ export function BinPage() {
               matches={item.matches}
               onDone={refreshAfterConfirm}
               onDiscard={() => updateItem.mutate({ id: item.id, status: 'discarded' })}
+              onStateChange={onCardState}
             />
           ))}
         </section>

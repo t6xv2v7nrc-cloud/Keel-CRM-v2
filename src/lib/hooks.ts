@@ -154,6 +154,76 @@ export function useProperties() {
   });
 }
 
+/** Supabase says "Could not find the 'bedrooms' column" until 0004 has been run. */
+const needsMigration = (e: { message?: string }) =>
+  /column|schema cache/i.test(e.message ?? '')
+    ? new Error('The database needs a one-off update first: run supabase/migrations/0004_properties_import.sql in the Supabase SQL Editor, then try again.')
+    : e;
+
+export type NewProperty = Pick<Property,
+  'address_line' | 'postcode' | 'area' | 'borough' | 'property_type' | 'bedrooms' | 'rent_pcm' | 'rent_text'
+  | 'bills' | 'furnished' | 'available_from' | 'notes' | 'source_tag'>;
+
+/** Add a batch of properties (from a pasted list) and log each one. */
+export function useAddProperties() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ rows, source }: { rows: NewProperty[]; source: string }): Promise<Property[]> => {
+      const { data, error } = await supabase
+        .from('properties')
+        .insert(rows.map((r) => ({ ...r, status: 'void' })))
+        .select();
+      if (error) throw needsMigration(error);
+      const added = data as Property[];
+      await supabase.from('activities').insert(added.map((p) => ({
+        entity_type: 'property',
+        entity_id: p.id,
+        kind: 'created',
+        body: `Added ${p.address_line} from a pasted list${source ? ` (${source})` : ''}`,
+      })));
+      return added;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['properties'] }),
+  });
+}
+
+export const PROPERTY_STATUS_LABEL: Record<Property['status'], string> = {
+  void: 'Available', under_offer: 'Under offer', let: 'Let', withdrawn: 'Withdrawn',
+};
+
+export function useSetPropertyStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ p, status }: { p: Property; status: Property['status'] }) => {
+      const { error } = await supabase.from('properties').update({ status }).eq('id', p.id);
+      if (error) throw error;
+      await supabase.from('activities').insert({
+        entity_type: 'property',
+        entity_id: p.id,
+        kind: 'updated',
+        body: `${p.address_line}: ${PROPERTY_STATUS_LABEL[p.status]} → ${PROPERTY_STATUS_LABEL[status]}`,
+      });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['properties'] }),
+  });
+}
+
+/** Delete properties and their activity. A linked placement keeps its record. */
+export function useDeleteProperties() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      await supabase.from('activities').delete().eq('entity_type', 'property').in('entity_id', ids);
+      const { error } = await supabase.from('properties').delete().in('id', ids);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['properties'] });
+      qc.invalidateQueries({ queryKey: ['placements'] });
+    },
+  });
+}
+
 // ── Placements ──────────────────────────────────────────────────────
 export function usePlacements() {
   return useQuery({
