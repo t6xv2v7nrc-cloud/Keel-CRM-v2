@@ -1,107 +1,93 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Button, Card, CardHeader, Field, KeelLine, StageBadge, TierBadge, useToast } from '../../components/ui';
 import {
-  useActivities,
-  useApplicant,
-  useDeleteApplicant,
-  usePlacementForApplicant,
-  useUpdateApplicant,
-  useProperties,
+  Avatar, Button, Card, CardHeader, Empty, Field, Icon, KeelLine, StageBadge, TierBadge, UrgentChip, useToast,
+} from '../../components/ui';
+import {
+  useActivities, useApplicant, useCalls, useDeleteApplicant, useProperties, useSetNextCall, useUpdateApplicant, useUpdateTriage,
 } from '../../lib/hooks';
 import { matchesForApplicant } from '../../lib/propertyMatch';
-import { money, shortDate, timeAgo } from '../../lib/format';
-import {
-  computeTier, tierReason, HOUSEHOLD_LABEL, WORK_STATUS_LABEL, URGENCY_LABEL,
-} from '../../lib/tiering';
-import type { Activity, Applicant } from '../../lib/types';
+import { money, timeAgo } from '../../lib/format';
+import { computeTier, tierReason, HOUSEHOLD_LABEL, WORK_STATUS_LABEL, URGENCY_LABEL } from '../../lib/tiering';
+import type { Tier } from '../../lib/tiering';
+import { effectiveTier, isUrgent } from '../../lib/search';
+import { addDays, dayLabel, OUTCOME_LABEL, todayIso } from '../../lib/calls';
+import type { Activity, Applicant, Call } from '../../lib/types';
+import { CallHistory, CallLogger } from '../calls/CallLogger';
+import { CallsNeedUpdate } from '../calls/CallsPage';
 
 export function ApplicantPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: applicant, isLoading } = useApplicant(id);
   const { data: activities = [] } = useActivities('applicant', id);
-  const { data: placement } = usePlacementForApplicant(id);
+  const { calls, ready: callsReady } = useCalls();
   const deleteApplicant = useDeleteApplicant();
   const { toast } = useToast();
+  const [logging, setLogging] = useState(false);
+  const callsRef = useRef<HTMLDivElement>(null);
 
   if (isLoading) return <div className="grid min-h-[50vh] place-items-center text-[var(--ink-muted)]">Loading…</div>;
-  if (!applicant) return <div className="grid min-h-[50vh] place-items-center text-[var(--ink-muted)]">Applicant not found.</div>;
+  if (!applicant) return <div className="grid min-h-[50vh] place-items-center text-[var(--ink-muted)]">Client not found.</div>;
+
+  const mine = calls.filter((c) => c.applicant_id === applicant.id);
 
   const handleDelete = () => {
-    if (!window.confirm(`Delete ${applicant.full_name}? This removes their record, activity and any placement. This cannot be undone.`)) return;
+    if (!window.confirm(`Delete ${applicant.full_name}? This removes their record, calls and activity. This cannot be undone.`)) return;
     deleteApplicant.mutate(applicant.id, {
       onSuccess: () => { toast(`Deleted ${applicant.full_name}`, 'success'); navigate('/pipeline'); },
       onError: (e) => toast(`Delete failed: ${(e as Error).message}`, 'danger'),
     });
   };
 
-  const household = [
-    applicant.adults ? `${applicant.adults} adult${applicant.adults > 1 ? 's' : ''}` : null,
-    applicant.children ? `${applicant.children} child${applicant.children > 1 ? 'ren' : ''}` : null,
-  ].filter(Boolean).join(', ');
+  const startCall = () => {
+    setLogging(true);
+    setTimeout(() => callsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+  };
 
   return (
-    <div className="mx-auto flex max-w-[960px] flex-col gap-6 p-6 pb-24">
+    <div className="mx-auto flex max-w-[1060px] flex-col gap-6 p-6 pb-24">
       <div className="flex items-center justify-between gap-4">
-        <button onClick={() => navigate('/pipeline')} className="text-[15px] text-[var(--link)] hover:underline">
-          ← Pipeline
+        <button onClick={() => navigate('/pipeline')} className="inline-flex items-center gap-1.5 text-[15px] text-[var(--link)] hover:underline">
+          <Icon name="arrowRight" size={16} className="rotate-180" /> Pipeline
         </button>
         <Button variant="danger" className="min-h-0 px-3 py-1.5 text-[13px]" onClick={handleDelete} disabled={deleteApplicant.isPending}>
-          {deleteApplicant.isPending ? 'Deleting…' : 'Delete'}
+          <Icon name="trash" size={14} />{deleteApplicant.isPending ? 'Deleting…' : 'Delete'}
         </Button>
       </div>
 
-      <HeroCard applicant={applicant} household={household} />
+      <HeroCard applicant={applicant} lastCall={mine[0]} onLogCall={startCall} />
 
       <SuitablePropertiesCard applicant={applicant} />
 
-      <div className="grid gap-6 md:grid-cols-[1fr_320px]">
-        {/* Timeline with screenshot provenance */}
-        <Card>
-          <CardHeader title="Timeline" sub={`${activities.length} events`} />
-          <div className="p-5">
-            {activities.length === 0 ? (
-              <p className="m-0 text-[15px] text-[var(--ink-muted)]">No activity yet.</p>
-            ) : (
-              <ul className="m-0 flex list-none flex-col gap-4 p-0">
-                {activities.map((act) => <TimelineRow key={act.id} act={act} />)}
-              </ul>
-            )}
+      <div className="grid gap-6 md:grid-cols-[1fr_360px]">
+        <div className="flex min-w-0 flex-col gap-6">
+          <div ref={callsRef} className="scroll-mt-20">
+            <CallsCard applicant={applicant} calls={mine} ready={callsReady} open={logging} setOpen={setLogging} />
           </div>
-        </Card>
-
-        {/* Right column: triage + stage progress + placement */}
-        <div className="flex flex-col gap-6">
-          <ReferralCard applicant={applicant} />
 
           <Card>
-            <CardHeader title="Progress" />
+            <CardHeader icon="clock" title="Timeline" sub={`${activities.length} events`} />
             <div className="p-5">
-              <KeelLine current={applicant.stage} />
+              {activities.length === 0 ? (
+                <p className="m-0 text-[15px] text-[var(--ink-muted)]">No activity yet.</p>
+              ) : (
+                <ul className="relative m-0 flex list-none flex-col gap-4 p-0">
+                  <span aria-hidden className="absolute bottom-1 left-[4px] top-1 w-px bg-[var(--line-strong)]" />
+                  {activities.map((act) => <TimelineRow key={act.id} act={act} />)}
+                </ul>
+              )}
             </div>
           </Card>
+        </div>
 
-          {placement && (
-            <Card>
-              <CardHeader title="Placement" />
-              <div className="flex flex-col gap-2 p-5 text-[15px]">
-                <Row label="Move-in" value={shortDate(placement.move_in_date)} />
-                <Row label="Rent" value={placement.rent_pcm ? money(placement.rent_pcm) : '—'} />
-                <Row label="Incentive" value={placement.incentive_amount ? money(placement.incentive_amount) : '—'} />
-                <Row label="Fee" value={placement.fee_amount ? money(placement.fee_amount) : '—'} />
-                <Row
-                  label="Fee status"
-                  value={placement.fee_status}
-                />
-                {placement.fee_splits?.length > 0 && (
-                  <div className="mt-1 text-[13px] text-[var(--ink-muted)]">
-                    Split: {placement.fee_splits.map((s) => `${s.partner} ${s.pct}%`).join(', ')}
-                  </div>
-                )}
-              </div>
-            </Card>
-          )}
+        <div className="flex flex-col gap-6">
+          <ReferralCard applicant={applicant} />
+          <Card>
+            <CardHeader icon="flag" title="Progress" />
+            <div className="p-5"><KeelLine current={applicant.stage} /></div>
+          </Card>
         </div>
       </div>
     </div>
@@ -110,29 +96,100 @@ export function ApplicantPage() {
 
 function TimelineRow({ act }: { act: Activity }) {
   const fromScreenshot = act.body.includes('screenshot') || act.inbox_item_id != null;
+  const isCall = act.kind === 'call';
   return (
     <li className="relative flex gap-3 pl-5">
-      <span
-        aria-hidden
-        className="absolute left-0 top-1.5 h-2.5 w-2.5 rounded-full"
-        style={{ background: fromScreenshot ? 'var(--brass)' : 'var(--line-strong)' }}
-      />
+      <span aria-hidden className="absolute left-0 top-1.5 h-[9px] w-[9px] rounded-full ring-2 ring-[var(--surface)]"
+        style={{ background: isCall ? 'var(--accent)' : fromScreenshot ? 'var(--ink-muted)' : 'var(--line-strong)' }} />
       <div className="flex-1">
         <div className="text-[15px] text-[var(--ink)]">{act.body}</div>
-        <div className="mt-0.5 flex items-center gap-2 font-mono text-[13px] text-[var(--ink-muted)]">
-          <span>{act.kind.replace('_', ' ')}</span>
+        <div className="mt-0.5 flex items-center gap-2 text-[13px] text-[var(--ink-muted)]">
+          <span>{isCall ? 'Call' : act.kind.replace('_', ' ')}</span>
           <span>·</span>
           <span>{timeAgo(act.created_at)}</span>
-          {fromScreenshot && (
-            <span className="rounded bg-[var(--stage-offer-bg)] px-1.5 py-0.5 text-[var(--stage-offer-fg)]">from screenshot</span>
-          )}
+          {fromScreenshot && <span className="rounded bg-[var(--chip-bg)] px-1.5 py-0.5 text-[12px] text-[var(--chip-fg)]">from the Bin</span>}
         </div>
       </div>
     </li>
   );
 }
 
+// ── Calls ──────────────────────────────────────────────────────────
+
+function CallsCard({ applicant, calls, ready, open, setOpen }: {
+  applicant: Applicant; calls: Call[]; ready: boolean; open: boolean; setOpen: (v: boolean) => void;
+}) {
+  const setNext = useSetNextCall();
+  const { toast } = useToast();
+  const next = applicant.next_call_at ?? null;
+  const overdue = next !== null && next < todayIso();
+  const changeNext = (date: string | null) => setNext.mutate({ applicant, date }, {
+    onSuccess: () => toast(date ? `Next call ${dayLabel(date).toLowerCase()}` : 'Next call cleared', 'success'),
+    onError: (e) => toast((e as Error).message, 'danger'),
+  });
+
+  return (
+    <Card>
+      <CardHeader icon="phone" title="Calls" sub={`${calls.length} logged`}>
+        {!open && ready && (
+          <Button variant="primary" className="min-h-0 px-3 py-1.5 text-[13px]" onClick={() => setOpen(true)}>
+            <Icon name="phoneOut" size={14} /> Log a call
+          </Button>
+        )}
+      </CardHeader>
+      <div className="flex flex-col gap-4 p-5">
+        {!ready && <CallsNeedUpdate />}
+
+        {ready && (
+          <div className={`flex flex-wrap items-center gap-3 rounded-lg px-4 py-3 ${overdue ? 'bg-[var(--note-bg)]' : 'bg-[var(--surface-2)]'}`}>
+            <Icon name="calendar" size={18} className={overdue ? 'text-[var(--note-fg)]' : 'text-[var(--accent)]'} />
+            <div className="min-w-0 flex-1 text-[15px] text-[var(--ink)]">
+              {next ? <>Next call <strong>{dayLabel(next)}</strong>{overdue && <span className="text-[var(--note-fg)]">, overdue</span>}</>
+                : calls.length ? 'No follow-up set' : 'Not called yet'}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {[1, 3, 7].map((d) => (
+                <button key={d} onClick={() => changeNext(addDays(d))} disabled={setNext.isPending}
+                  className="rounded-full border border-[var(--line-strong)] px-2.5 py-0.5 text-[13px] text-[var(--ink-muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]">
+                  {d === 1 ? 'Tomorrow' : d === 7 ? 'Next week' : `In ${d} days`}
+                </button>
+              ))}
+              <input type="date" value={next ?? ''} min={todayIso()} aria-label="Next call date" onChange={(e) => changeNext(e.target.value || null)}
+                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 py-0.5 text-[13px] text-[var(--ink)]" />
+              {next && (
+                <button onClick={() => changeNext(null)} title="Clear next call" aria-label="Clear next call"
+                  className="grid h-6 w-6 place-items-center rounded text-[var(--ink-muted)] hover:bg-[var(--paper-2)] hover:text-[var(--ink)]">
+                  <Icon name="x" size={14} />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {open && ready && (
+          <div className="rounded-lg border border-[var(--accent)] bg-[var(--surface)] p-4 shadow-[0_0_0_4px_var(--accent-soft)]">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="text-[15px] font-semibold text-[var(--ink)]">Log a call</span>
+              <button onClick={() => setOpen(false)} className="text-[13px] text-[var(--link)] hover:underline">Cancel</button>
+            </div>
+            <CallLogger applicant={applicant} onDone={() => setOpen(false)} autoFocus />
+          </div>
+        )}
+
+        {ready && <CallHistory calls={calls} />}
+      </div>
+    </Card>
+  );
+}
+
+// ── Suitable properties ────────────────────────────────────────────
+
 const SHOW_PROPERTIES = 6;
+const STRENGTH = {
+  strong: { label: 'Strong', bg: 'var(--strong-bg)', fg: 'var(--strong-fg)' },
+  good: { label: 'Good', bg: 'var(--good-bg)', fg: 'var(--good-fg)' },
+  possible: { label: 'Possible', bg: 'var(--possible-bg)', fg: 'var(--possible-fg)' },
+} as const;
 
 /** Every available property this client could suit, best first, from the matching engine. */
 function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
@@ -141,144 +198,226 @@ function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
   const available = properties.filter((p) => p.status === 'void' || p.status === 'under_offer');
   const all = matchesForApplicant(applicant, available);
   const matches = showAll ? all : all.slice(0, SHOW_PROPERTIES);
-  const label = { strong: 'Strong', good: 'Good', possible: 'Possible' } as const;
-  const tone = {
-    strong: ['var(--stage-placed-bg)', 'var(--stage-placed-fg)'],
-    good: ['var(--stage-referred-bg)', 'var(--stage-referred-fg)'],
-    possible: ['var(--stage-lead-bg)', 'var(--stage-lead-fg)'],
-  } as const;
   return (
     <Card>
-      <CardHeader title="Suitable properties" sub={available.length ? `${all.length} of ${available.length} available` : undefined} />
-      <div className="p-5">
-        {available.length === 0 ? (
-          <p className="m-0 text-[15px] text-[var(--ink-muted)]">
-            No properties saved yet. <Link to="/properties" className="text-[var(--link)] hover:underline">Paste your list on the Properties tab</Link> to see what suits this client.
-          </p>
-        ) : matches.length === 0 ? (
-          <p className="m-0 text-[15px] text-[var(--ink-muted)]">
-            None of the {available.length} available {available.length === 1 ? 'property fits' : 'properties fit'} yet. Check their area, household and budget are filled in.
-          </p>
-        ) : (
-          <ul className="m-0 grid list-none gap-x-6 gap-y-4 p-0 md:grid-cols-2">
+      <CardHeader icon="building" title="Suitable properties" sub={available.length ? `${all.length} of ${available.length} available` : undefined} />
+      {available.length === 0 ? (
+        <Empty icon="building" title="No properties saved yet">
+          <Link to="/properties" className="text-[var(--link)] hover:underline">Paste your list on the Properties tab</Link> to see what suits this client.
+        </Empty>
+      ) : matches.length === 0 ? (
+        <Empty icon="search" title="Nothing fits yet">
+          None of the {available.length} available {available.length === 1 ? 'property fits' : 'properties fit'}. Check their area, household and budget are filled in.
+        </Empty>
+      ) : (
+        <div className="p-5">
+          <ul className="m-0 grid list-none gap-3 p-0 md:grid-cols-2">
             {matches.map(({ property: p, match: m }) => (
-              <li key={p.id} className="flex flex-col gap-1 border-b border-[var(--line)] pb-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded px-2 py-0.5 text-[13px] font-semibold" style={{ background: tone[m.strength][0], color: tone[m.strength][1] }}>
-                    {label[m.strength]}
-                  </span>
-                  <span className="text-[15px] font-medium text-[var(--ink)]">{p.address_line}</span>
+              <li key={p.id} className="flex gap-3 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-[var(--ink-muted)]" style={{ background: STRENGTH[m.strength].bg, color: STRENGTH[m.strength].fg }}>
+                  <Icon name="building" size={18} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded px-1.5 py-0.5 text-[12px] font-semibold" style={{ background: STRENGTH[m.strength].bg, color: STRENGTH[m.strength].fg }}>
+                      {STRENGTH[m.strength].label}
+                    </span>
+                    <span className="truncate text-[15px] font-medium text-[var(--ink)]">{p.address_line}</span>
+                  </div>
+                  <div className="mt-0.5 text-[13px] text-[var(--ink-muted)]">
+                    {[p.property_type, p.rent_text ?? (p.rent_pcm ? `${money(p.rent_pcm)} pcm` : null), p.area, p.borough !== p.area ? p.borough : null,
+                      p.source_tag ? `Source: ${p.source_tag}` : null].filter(Boolean).join(' · ')}
+                  </div>
+                  <div className="mt-1 text-[13px] text-[var(--ink)]">{m.reasons.join(' · ')}</div>
+                  {m.cautions.length > 0 && <div className="mt-0.5 text-[13px] text-[var(--note-fg)]">! {m.cautions.join(' · ')}</div>}
                 </div>
-                <div className="text-[13px] text-[var(--ink-muted)]">
-                  {[p.property_type, p.rent_text ?? (p.rent_pcm ? `${money(p.rent_pcm)} pcm` : null), p.area, p.borough !== p.area ? p.borough : null,
-                    p.source_tag ? `Source: ${p.source_tag}` : null].filter(Boolean).join(' · ')}
-                </div>
-                <div className="text-[13px] text-[var(--ink)]">{m.reasons.join(' · ')}</div>
-                {m.cautions.length > 0 && <div className="text-[13px] text-[var(--stage-offer-fg)]">! {m.cautions.join(' · ')}</div>}
               </li>
             ))}
           </ul>
-        )}
-        {all.length > SHOW_PROPERTIES && (
-          <button onClick={() => setShowAll((v) => !v)} className="mt-3 text-[13px] text-[var(--link)] hover:underline">
-            {showAll ? 'Show fewer' : `Show all ${all.length} properties`}
-          </button>
-        )}
-      </div>
-    </Card>
-  );
-}
-
-/** Referral triage card: tier (auto + manual override) and the answers. */
-function ReferralCard({ applicant }: { applicant: Applicant }) {
-  const update = useUpdateApplicant();
-  const { toast } = useToast();
-
-  const auto = computeTier(applicant);
-  const effective = (applicant.tier as 1 | 2 | 3) || auto;
-  const overridden = applicant.tier != null && applicant.tier !== auto;
-
-  const setTier = (t: number) => {
-    update.mutate(
-      { id: applicant.id, tier: t },
-      { onSuccess: () => toast(`Set to Tier ${t}`, 'success') },
-    );
-  };
-
-  const yn = (b: boolean | null) => (b === true ? 'Yes' : b === false ? 'No' : '—');
-  const rows: Array<[string, string]> = [
-    ['Household', applicant.household_type ? HOUSEHOLD_LABEL[applicant.household_type] ?? applicant.household_type : '—'],
-    ['On UC', yn(applicant.on_uc)],
-    ['PIP', yn(applicant.pip)],
-    ['LCWRA', yn(applicant.lcwra)],
-    ['Council-registered', yn(applicant.council_registered)],
-    ['Work', applicant.work_status ? WORK_STATUS_LABEL[applicant.work_status] ?? applicant.work_status : '—'],
-    ['Urgency', applicant.urgency ? URGENCY_LABEL[applicant.urgency] ?? applicant.urgency : '—'],
-    ['Council', applicant.council || '—'],
-  ];
-
-  return (
-    <Card>
-      <CardHeader title="Referral triage">
-        <TierBadge tier={effective} />
-      </CardHeader>
-      <div className="flex flex-col gap-3 p-5">
-        <div className="flex items-center gap-2">
-          <span className="text-[13px] text-[var(--ink-muted)]">Tier</span>
-          <select
-            value={effective}
-            onChange={(e) => setTier(Number(e.target.value))}
-            className="min-h-[36px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]"
-          >
-            <option value={1}>Tier 1</option>
-            <option value={2}>Tier 2</option>
-            <option value={3}>Tier 3</option>
-          </select>
-          {overridden && (
-            <button onClick={() => setTier(auto)} className="text-[13px] text-[var(--link)] hover:underline">
-              reset to auto (Tier {auto})
+          {all.length > SHOW_PROPERTIES && (
+            <button onClick={() => setShowAll((v) => !v)} className="mt-3 text-[13px] text-[var(--link)] hover:underline">
+              {showAll ? 'Show fewer' : `Show all ${all.length} properties`}
             </button>
           )}
         </div>
-        <p className="m-0 text-[13px] text-[var(--ink-muted)]">
-          {overridden ? `Manually set. Auto-suggestion: Tier ${auto} — ${tierReason(applicant)}` : `Auto: ${tierReason(applicant)}`}
-        </p>
+      )}
+    </Card>
+  );
+}
 
-        <dl className="m-0 mt-1 grid grid-cols-2 gap-x-4 gap-y-2">
-          {rows.map(([k, v]) => (
-            <div key={k} className="flex items-baseline justify-between gap-2 border-b border-[var(--line)] pb-1">
-              <dt className="text-[13px] text-[var(--ink-muted)]">{k}</dt>
-              <dd className="m-0 text-[15px] text-[var(--ink)]">{v}</dd>
-            </div>
+// ── Referral triage (editable) ─────────────────────────────────────
+
+const yesNo = (b: boolean | null | undefined) => (b === true ? 'Yes' : b === false ? 'No' : 'Not known');
+
+/** Referral triage: every answer can be changed here, and the tier follows the
+ *  rules in Settings unless you set it by hand. */
+function ReferralCard({ applicant }: { applicant: Applicant }) {
+  const triage = useUpdateTriage();
+  const { toast } = useToast();
+  const effective = effectiveTier(applicant);
+  const auto = computeTier(applicant);
+  const locked = applicant.tier_locked === true || (applicant.tier_locked === undefined && applicant.tier != null && applicant.tier !== auto);
+
+  const change = (patch: Partial<Applicant>, note: string) => {
+    const before = effective;
+    const merged = { ...applicant, ...patch };
+    const after = 'tier' in patch ? (patch.tier as Tier) : locked ? before : computeTier(merged);
+    triage.mutate({ applicant, patch, note }, {
+      onSuccess: () => toast(after !== before ? `${note}. Now Tier ${after}` : note, 'success'),
+      onError: (e) => toast(`Could not save: ${(e as Error).message}`, 'danger'),
+    });
+  };
+
+  const setTierByHand = (t: Tier) => {
+    if (t === effective && locked) return;
+    change({ tier: t, tier_locked: true }, `Tier set to ${t} by hand`);
+  };
+  const useRules = () => change({ tier: auto, tier_locked: false }, `Tier back to the rules (Tier ${auto})`);
+
+  const field = (label: string, key: keyof Applicant) => (v: string) => {
+    const value = v.trim() || null;
+    if ((applicant[key] ?? null) === value) return;
+    change({ [key]: value } as Partial<Applicant>, value ? `${label} set to ${value}` : `${label} cleared`);
+  };
+
+  return (
+    <Card>
+      <CardHeader icon="layers" title="Referral triage">
+        {isUrgent(applicant) && <UrgentChip />}
+        <TierBadge tier={effective} />
+      </CardHeader>
+      <div className="flex flex-col gap-4 p-5">
+        {/* Tier */}
+        <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-3 gap-1 rounded-lg bg-[var(--paper-2)] p-1" role="group" aria-label="Tier">
+            {([1, 2, 3] as Tier[]).map((t) => {
+              const on = t === effective;
+              return (
+                <button key={t} onClick={() => setTierByHand(t)} aria-pressed={on} disabled={triage.isPending}
+                  className={`rounded-md py-1.5 text-[13px] font-semibold transition-colors ${
+                    on ? 'bg-[var(--surface)] text-[var(--ink)] shadow-[var(--shadow-card)]' : 'text-[var(--ink-muted)] hover:text-[var(--ink)]'}`}>
+                  Tier {t}
+                </button>
+              );
+            })}
+          </div>
+          <p className="m-0 text-[13px] text-[var(--ink-muted)]">
+            {locked ? (
+              <>Set by hand. The rules would give Tier {auto}: {tierReason(applicant)}{' '}
+                <button onClick={useRules} className="text-[var(--link)] hover:underline">Use the rules</button></>
+            ) : (
+              <>From the answers below: {tierReason(applicant)} <Link to="/settings" className="text-[var(--link)] hover:underline">Change the rules</Link></>
+            )}
+          </p>
+        </div>
+
+        {/* Answers */}
+        <div className="flex flex-col divide-y divide-[var(--line)] rounded-lg border border-[var(--line)]">
+          <TriageRow label="Household">
+            <Choice value={applicant.household_type ?? ''} onChange={(v) => change({ household_type: v || null }, `Household set to ${v ? HOUSEHOLD_LABEL[v].toLowerCase() : 'not known'}`)}
+              options={[['', 'Not known'], ...Object.entries(HOUSEHOLD_LABEL)]} />
+          </TriageRow>
+          {([['on_uc', 'On UC'], ['pip', 'PIP'], ['lcwra', 'LCWRA'], ['council_registered', 'Council-registered']] as const).map(([key, label]) => (
+            <TriageRow key={key} label={label}>
+              <YesNo value={applicant[key]} onChange={(v) => change({ [key]: v } as Partial<Applicant>, `${label} set to ${yesNo(v).toLowerCase()}`)} />
+            </TriageRow>
           ))}
-        </dl>
+          <TriageRow label="Work">
+            <Choice value={applicant.work_status ?? ''} onChange={(v) => change({ work_status: v || null }, `Work set to ${v ? WORK_STATUS_LABEL[v].toLowerCase() : 'not known'}`)}
+              options={[['', 'Not known'], ...Object.entries(WORK_STATUS_LABEL)]} />
+          </TriageRow>
+          <TriageRow label="Urgency">
+            <Choice value={applicant.urgency ?? ''} onChange={(v) => change({ urgency: v || null }, `Urgency set to ${v ? URGENCY_LABEL[v].toLowerCase() : 'not known'}`)}
+              options={[['', 'Not known'], ...Object.entries(URGENCY_LABEL)]} />
+          </TriageRow>
+          <TriageRow label="Council">
+            <InlineText value={applicant.council ?? ''} placeholder="e.g. Barnet" onSave={field('Council', 'council')} />
+          </TriageRow>
+          <TriageRow label="Situation">
+            <InlineText value={applicant.housing_situation ?? ''} placeholder="e.g. sofa surfing" onSave={field('Housing situation', 'housing_situation')} />
+          </TriageRow>
+          <TriageRow label="Consent">
+            <YesNo value={applicant.consent} onChange={(v) => change({ consent: v }, `Consent set to ${yesNo(v).toLowerCase()}`)} />
+          </TriageRow>
+        </div>
 
-        {(applicant.officer_name || applicant.officer_email || applicant.officer_phone) && (
-          <div className="mt-1 rounded-md border border-[var(--line)] bg-[var(--paper)] p-3">
-            <div className="text-[13px] text-[var(--ink-muted)]">Housing officer</div>
-            <div className="text-[15px] text-[var(--ink)]">{applicant.officer_name || '—'}</div>
-            <div className="font-mono text-[13px] text-[var(--ink-muted)]">
-              {[applicant.officer_email, applicant.officer_phone].filter(Boolean).join(' · ') || '—'}
-            </div>
+        {/* Housing officer */}
+        <div className="flex flex-col gap-2">
+          <span className="flex items-center gap-1.5 text-[13px] font-medium text-[var(--ink-muted)]"><Icon name="user" size={14} /> Housing officer</span>
+          <div className="flex flex-col divide-y divide-[var(--line)] rounded-lg border border-[var(--line)]">
+            <TriageRow label="Name"><InlineText value={applicant.officer_name ?? ''} placeholder="Not given" onSave={field('Officer name', 'officer_name')} /></TriageRow>
+            <TriageRow label="Email"><InlineText value={applicant.officer_email ?? ''} placeholder="Not given" onSave={field('Officer email', 'officer_email')} /></TriageRow>
+            <TriageRow label="Phone"><InlineText value={applicant.officer_phone ?? ''} placeholder="Not given" mono onSave={field('Officer phone', 'officer_phone')} /></TriageRow>
           </div>
-        )}
-
-        {applicant.consent != null && (
-          <div className="text-[13px] text-[var(--ink-muted)]">
-            Consent to contact / data sharing: <strong className="text-[var(--ink)]">{yn(applicant.consent)}</strong>
-          </div>
-        )}
+        </div>
       </div>
     </Card>
   );
 }
 
-/** Applicant hero with an inline edit mode. */
-function HeroCard({ applicant, household }: { applicant: Applicant; household: string }) {
+function TriageRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex min-h-[44px] items-center justify-between gap-3 px-3 py-1.5">
+      <span className="shrink-0 text-[13px] text-[var(--ink-muted)]">{label}</span>
+      <div className="flex min-w-0 justify-end">{children}</div>
+    </div>
+  );
+}
+
+/** Yes / No / Not known. */
+function YesNo({ value, onChange }: { value: boolean | null | undefined; onChange: (v: boolean | null) => void }) {
+  const opts: Array<[boolean | null, string]> = [[true, 'Yes'], [false, 'No'], [null, '?']];
+  return (
+    <div className="inline-flex rounded-md border border-[var(--line-strong)] p-0.5">
+      {opts.map(([v, label]) => {
+        const on = (value ?? null) === v;
+        return (
+          <button key={label} onClick={() => !on && onChange(v)} aria-pressed={on} title={v === null ? 'Not known' : label}
+            className={`min-w-[38px] rounded px-2 py-0.5 text-[13px] font-medium transition-colors ${
+              on ? (v === true ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'bg-[var(--ink)] text-[var(--surface)]') : 'text-[var(--ink-muted)] hover:text-[var(--ink)]'}`}>
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function Choice({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: Array<[string, string]> }) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)}
+      className="max-w-[190px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 py-1 text-[13px] text-[var(--ink)]">
+      {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+    </select>
+  );
+}
+
+/** Text that saves when you leave the box or press Enter. */
+function InlineText({ value, placeholder, onSave, mono = false }: { value: string; placeholder: string; onSave: (v: string) => void; mono?: boolean }) {
+  const [v, setV] = useState(value);
+  const [was, setWas] = useState(value);
+  if (value !== was) { setWas(value); setV(value); }
+  return (
+    <input value={v} placeholder={placeholder} onChange={(e) => setV(e.target.value)} onBlur={() => onSave(v)}
+      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setV(value); }}
+      className={`w-[190px] rounded-md border border-transparent bg-transparent px-2 py-1 text-right text-[13px] text-[var(--ink)] outline-none hover:border-[var(--line-strong)] focus:border-[var(--accent)] focus:bg-[var(--surface)] focus:text-left ${mono ? 'font-mono' : ''}`} />
+  );
+}
+
+// ── Hero ───────────────────────────────────────────────────────────
+
+/** Client header with an inline edit mode. */
+function HeroCard({ applicant, lastCall, onLogCall }: { applicant: Applicant; lastCall?: Call; onLogCall: () => void }) {
   const update = useUpdateApplicant();
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Partial<Applicant>>({});
+  const tier = effectiveTier(applicant);
+
+  const household = [
+    applicant.adults ? `${applicant.adults} adult${applicant.adults > 1 ? 's' : ''}` : null,
+    applicant.children ? `${applicant.children} child${applicant.children > 1 ? 'ren' : ''}` : null,
+  ].filter(Boolean).join(', ');
 
   const start = () => {
     setDraft({
@@ -316,7 +455,7 @@ function HeroCard({ applicant, household }: { applicant: Applicant; household: s
         requirements: draft.requirements || null,
         notes: draft.notes || null,
       });
-      toast('Applicant updated', 'success');
+      toast('Client updated', 'success');
       setEditing(false);
     } catch (e) {
       toast(`Save failed: ${(e as Error).message}`, 'danger');
@@ -339,80 +478,77 @@ function HeroCard({ applicant, household }: { applicant: Applicant; household: s
         </div>
         <label className="mt-4 flex flex-col gap-1">
           <span className="text-[13px] font-medium text-[var(--ink-muted)]">Requirements</span>
-          <textarea
-            value={draft.requirements ?? ''}
-            onChange={(e) => set('requirements', e.target.value)}
-            rows={2}
-            className="rounded-md border border-[var(--line-strong)] bg-[var(--surface)] p-2 text-[15px] text-[var(--ink)] outline-none focus:border-[var(--hull)]"
-          />
+          <textarea value={draft.requirements ?? ''} onChange={(e) => set('requirements', e.target.value)} rows={2}
+            className="rounded-md border border-[var(--line-strong)] bg-[var(--surface)] p-2 text-[15px] text-[var(--ink)] outline-none focus:border-[var(--accent)]" />
         </label>
         <label className="mt-4 flex flex-col gap-1">
-          <span className="text-[13px] font-medium text-[var(--ink-muted)]">Notes</span>
-          <textarea
-            value={draft.notes ?? ''}
-            onChange={(e) => set('notes', e.target.value)}
-            rows={2}
-            className="rounded-md border border-[var(--line-strong)] bg-[var(--surface)] p-2 text-[15px] text-[var(--ink)] outline-none focus:border-[var(--hull)]"
-          />
+          <span className="text-[13px] font-medium text-[var(--ink-muted)]">Looking for / notes</span>
+          <textarea value={draft.notes ?? ''} onChange={(e) => set('notes', e.target.value)} rows={4}
+            className="rounded-md border border-[var(--line-strong)] bg-[var(--surface)] p-2 text-[15px] text-[var(--ink)] outline-none focus:border-[var(--accent)]" />
         </label>
         <div className="mt-5 flex justify-end gap-2">
           <Button onClick={() => setEditing(false)} disabled={update.isPending}>Cancel</Button>
-          <Button variant="primary" onClick={save} disabled={update.isPending}>{update.isPending ? 'Saving…' : 'Save'}</Button>
+          <Button variant="primary" onClick={save} disabled={update.isPending}>{update.isPending ? 'Saving…' : 'Save changes'}</Button>
         </div>
       </Card>
     );
   }
 
+  const next = applicant.next_call_at;
   return (
-    <Card className="p-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="m-0 text-[28px] font-bold text-[var(--ink)]">{applicant.full_name}</h1>
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[15px] text-[var(--ink-muted)]">
-            {applicant.phone && <span>{applicant.phone}</span>}
-            {applicant.email && <span>{applicant.email}</span>}
-            {applicant.referring_borough && <span>{applicant.referring_borough}</span>}
-            {applicant.benefit_type && <span>{applicant.benefit_type}</span>}
+    <Card className="overflow-hidden">
+      <div className="h-1.5 w-full" style={{ background: tier === 1 ? 'var(--accent)' : tier === 2 ? 'var(--accent-soft)' : 'var(--paper-2)' }} />
+      <div className="p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-4">
+            <Avatar name={applicant.full_name} size={60} accent={tier === 1} />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="m-0 text-[28px] font-bold leading-tight text-[var(--ink)]">{applicant.full_name}</h1>
+                <TierBadge tier={tier} />
+                {isUrgent(applicant) && <UrgentChip />}
+                <StageBadge stage={applicant.stage} />
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[15px] text-[var(--ink-muted)]">
+                {applicant.phone && <a href={`tel:${applicant.phone}`} className="inline-flex items-center gap-1.5 font-mono hover:text-[var(--link)]"><Icon name="phone" size={15} />{applicant.phone}</a>}
+                {applicant.email && <a href={`mailto:${applicant.email}`} className="inline-flex items-center gap-1.5 hover:text-[var(--link)]"><Icon name="inbox" size={15} />{applicant.email}</a>}
+                {(applicant.council || applicant.referring_borough) && <span className="inline-flex items-center gap-1.5"><Icon name="pin" size={15} />{applicant.council || applicant.referring_borough}</span>}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button onClick={start} className="min-h-0 px-3 py-2 text-[13px]"><Icon name="pencil" size={14} />Edit</Button>
+            <Button variant="primary" onClick={onLogCall} className="min-h-0 px-3 py-2 text-[13px]"><Icon name="phoneOut" size={14} />Log call</Button>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <StageBadge stage={applicant.stage} />
-          <Button onClick={start} className="min-h-0 px-3 py-1.5 text-[13px]">Edit</Button>
-        </div>
+
+        <dl className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Meta icon="users" label="Household" value={household || 'Not known'} />
+          <Meta icon="flag" label="Budget" value={applicant.budget_pcm ? money(applicant.budget_pcm) : 'Not given'} mono />
+          <Meta icon="phone" label="Last call" value={lastCall ? `${OUTCOME_LABEL[lastCall.outcome]}, ${timeAgo(lastCall.created_at)}` : 'Not called yet'} />
+          <Meta icon="calendar" label="Next call" value={next ? dayLabel(next) : 'Not set'} strong={!!next && next <= todayIso()} />
+        </dl>
+
+        {applicant.requirements && <p className="mt-4 mb-0 text-[15px] text-[var(--ink)]">{applicant.requirements}</p>}
+        {applicant.notes && (
+          <div className="mt-4 rounded-lg border-l-4 border-[var(--accent)] bg-[var(--surface-2)] p-3.5">
+            <div className="text-[13px] font-medium text-[var(--ink-muted)]">Looking for / notes</div>
+            <p className="m-0 mt-1 whitespace-pre-wrap text-[15px] text-[var(--ink)]">{applicant.notes}</p>
+          </div>
+        )}
       </div>
-
-      <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-[var(--line)] pt-5 sm:grid-cols-4">
-        <Meta label="Household" value={household || '—'} />
-        <Meta label="Budget" value={applicant.budget_pcm ? money(applicant.budget_pcm) : '—'} mono />
-        <Meta label="LHA band" value={applicant.lha_band || '—'} />
-        <Meta label="Source" value={applicant.source || '—'} />
-      </dl>
-
-      {applicant.requirements && <p className="mt-4 mb-0 text-[15px] text-[var(--ink)]">{applicant.requirements}</p>}
-      {applicant.notes && (
-        <div className="mt-4 rounded-md border border-[var(--line)] bg-[var(--paper)] p-3">
-          <div className="text-[13px] font-medium text-[var(--ink-muted)]">Looking for / notes</div>
-          <p className="m-0 mt-1 whitespace-pre-wrap text-[15px] text-[var(--ink)]">{applicant.notes}</p>
-        </div>
-      )}
     </Card>
   );
 }
 
-function Meta({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Meta({ icon, label, value, mono, strong }: { icon: Parameters<typeof Icon>[0]['name']; label: string; value: string; mono?: boolean; strong?: boolean }) {
   return (
-    <div>
-      <dt className="text-[13px] text-[var(--ink-muted)]">{label}</dt>
-      <dd className={`m-0 mt-1 text-[15px] text-[var(--ink)] ${mono ? 'font-mono' : ''}`}>{value}</dd>
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-[var(--ink-muted)]">{label}</span>
-      <span className="font-mono text-[var(--ink)]">{value}</span>
+    <div className="flex items-start gap-2.5 rounded-lg bg-[var(--surface-2)] px-3 py-2.5">
+      <Icon name={icon} size={16} className="mt-0.5 text-[var(--ink-muted)]" />
+      <div className="min-w-0">
+        <dt className="text-[12px] text-[var(--ink-muted)]">{label}</dt>
+        <dd className={`m-0 truncate text-[15px] ${strong ? 'font-semibold text-[var(--accent-ink)]' : 'text-[var(--ink)]'} ${mono ? 'font-mono' : ''}`}>{value}</dd>
+      </div>
     </div>
   );
 }

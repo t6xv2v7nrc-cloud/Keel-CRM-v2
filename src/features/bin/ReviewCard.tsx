@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Card, Field, TierBadge } from '../../components/ui';
 import { useToast } from '../../components/ui';
-import { APPLICANT_STAGES } from '../../types/extraction';
 import type { ApplicantStage, Extraction } from '../../types/extraction';
 import type { MatchResult } from '../../lib/matching';
 import { signedBinUrl } from './capture';
@@ -9,12 +8,11 @@ import { confirmInboxItem } from './confirm';
 import type { ConfirmChoice } from './confirm';
 import { defaultChoice, withMessageNotes } from './defaults';
 import type { CardState } from './defaults';
-import { money } from '../../lib/format';
 import { HOUSEHOLD_LABEL, WORK_STATUS_LABEL, URGENCY_LABEL } from '../../lib/tiering';
 
 function Chip({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded border border-[var(--line)] bg-[var(--surface)] px-2 py-0.5 text-[13px] text-[var(--ink-muted)]">
+    <span className="rounded bg-[var(--chip-bg)] px-2 py-0.5 text-[13px] text-[var(--chip-fg)]">
       {children}
     </span>
   );
@@ -43,7 +41,7 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
 
   // Match choices: start from the shared default (best match, else create)
   const [applicantTarget, setApplicantTarget] = useState<string>(() => defaultChoice(draft, matches).applicantTarget);
-  const [contactTarget, setContactTarget] = useState<string>(() => defaultChoice(draft, matches).contactTarget);
+  const contactTarget = 'none'; // contacts are no longer kept; officer details stay on the client
   const [advanceStage, setAdvanceStage] = useState<ApplicantStage | ''>('');
 
   useEffect(() => {
@@ -92,7 +90,7 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
     <Card className="overflow-hidden">
       <div className="grid gap-0 md:grid-cols-2">
         {/* Source: screenshot, or text for email/webhook enquiries */}
-        <div className="border-b border-[var(--line)] bg-[var(--paper)] p-4 md:border-b-0 md:border-r">
+        <div className="border-b border-[var(--line)] bg-[var(--surface-2)] p-4 md:border-b-0 md:border-r">
           <div className="mb-2 text-[13px] font-medium text-[var(--ink-muted)]">
             {imagePath ? 'Screenshot' : 'Source text'}
           </div>
@@ -121,7 +119,7 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
         <div className="flex flex-col gap-4 p-4">
           <div>
             <div className="flex items-center gap-2">
-              <span className="rounded bg-[var(--stage-referred-bg)] px-2 py-0.5 text-[13px] font-medium text-[var(--stage-referred-fg)]">
+              <span className="rounded bg-[var(--chip-bg)] px-2 py-0.5 text-[13px] font-medium text-[var(--chip-fg)]">
                 {draft.doc_type.replace(/_/g, ' ')}
               </span>
               <span className="font-mono text-[13px] text-[var(--ink-muted)]">
@@ -147,13 +145,13 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
               onChange={(e) => setA('notes', e.target.value)}
               rows={3}
               placeholder="Area, bedrooms, move-in date, anything the client mentioned"
-              className="rounded-md border border-[var(--line-strong)] bg-[var(--surface)] p-2 text-[15px] text-[var(--ink)] outline-none focus:border-[var(--hull)]"
+              className="rounded-md border border-[var(--line-strong)] bg-[var(--surface)] p-2 text-[15px] text-[var(--ink)] outline-none focus:border-[var(--accent)]"
             />
           </label>
 
-          {/* Referral triage summary (read-only — full edit on the applicant page) */}
+          {/* Referral triage summary (read-only; every answer can be edited on the client page) */}
           {(a.tier != null || a.household_type || a.on_uc != null || a.officer_name) && (
-            <div className="rounded-md border border-[var(--line)] bg-[var(--paper)] p-3">
+            <div className="rounded-md border border-[var(--line)] bg-[var(--surface-2)] p-3">
               <div className="mb-2 flex items-center gap-2">
                 {a.tier != null && <TierBadge tier={a.tier} />}
                 <span className="text-[13px] text-[var(--ink-muted)]">Referral triage</span>
@@ -176,12 +174,6 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
             </div>
           )}
 
-          {draft.money?.fee_amount != null && (
-            <div className="rounded-md border border-[var(--line)] bg-[var(--paper)] px-3 py-2 text-[15px]">
-              Fee detected: <strong className="font-mono">{money(draft.money.fee_amount)}</strong>
-            </div>
-          )}
-
           {/* Matching proposal */}
           <div className="rounded-md border border-[var(--line)] p-3">
             <div className="mb-2 text-[13px] font-medium text-[var(--ink-muted)]">What should happen?</div>
@@ -194,7 +186,7 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
               ))}
               {a.full_name && (
                 <Radio name={`app-${itemId}`} checked={applicantTarget === 'create'} onChange={() => setApplicantTarget('create')}>
-                  Create new applicant <strong>{a.full_name}</strong>
+                  Create new client <strong>{a.full_name}</strong>
                 </Radio>
               )}
               <Radio name={`app-${itemId}`} checked={applicantTarget === 'note_only'} onChange={() => setApplicantTarget('note_only')}>
@@ -212,31 +204,11 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
                   className="min-h-[40px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px]"
                 >
                   <option value="">(no change)</option>
-                  {APPLICANT_STAGES.filter((s) => s !== 'lost').map((s) => (
-                    <option key={s} value={s}>{s.replace('_', ' ')}</option>
+                  {(['lead', 'referred', 'viewing', 'offer', 'placed'] as const).map((s) => (
+                    <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
                   ))}
                 </select>
               </label>
-            )}
-
-            {/* Contact proposal */}
-            {(draft.contact?.full_name || (matches?.contact.length ?? 0) > 0) && (
-              <fieldset className="mt-3 flex flex-col gap-1.5 border-t border-[var(--line)] pt-3">
-                <div className="text-[13px] text-[var(--ink-muted)]">Referring contact</div>
-                {matches?.contact.map((m) => (
-                  <Radio key={m.id} name={`con-${itemId}`} checked={contactTarget === m.id} onChange={() => setContactTarget(m.id)}>
-                    Link <strong>{m.label}</strong> <span className="text-[var(--ink-muted)]">({m.reason})</span>
-                  </Radio>
-                ))}
-                {draft.contact?.full_name && (
-                  <Radio name={`con-${itemId}`} checked={contactTarget === 'create'} onChange={() => setContactTarget('create')}>
-                    Create contact <strong>{draft.contact.full_name}</strong>
-                  </Radio>
-                )}
-                <Radio name={`con-${itemId}`} checked={contactTarget === 'none'} onChange={() => setContactTarget('none')}>
-                  No contact
-                </Radio>
-              </fieldset>
             )}
           </div>
 
@@ -257,7 +229,7 @@ function Radio({
 }: { name: string; checked: boolean; onChange: () => void; children: React.ReactNode }) {
   return (
     <label className="flex cursor-pointer items-center gap-2 text-[15px]">
-      <input type="radio" name={name} checked={checked} onChange={onChange} className="accent-[var(--hull)]" />
+      <input type="radio" name={name} checked={checked} onChange={onChange} className="accent-[var(--accent)]" />
       <span>{children}</span>
     </label>
   );

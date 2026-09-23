@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Icon } from './ui/Icon';
 
 type Theme = 'light' | 'dark';
 
@@ -24,7 +25,7 @@ export function ThemeToggle() {
       aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
       title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
     >
-      {theme === 'dark' ? '☀' : '☾'}
+      <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={17} />
     </button>
   );
 }

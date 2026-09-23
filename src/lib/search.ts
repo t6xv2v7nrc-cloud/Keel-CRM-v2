@@ -13,6 +13,7 @@ import {
   computeTier, HOUSEHOLD_LABEL, WORK_STATUS_LABEL, URGENCY_LABEL, URGENCY_RANK,
 } from './tiering';
 import type { Tier } from './tiering';
+import { activeSettings } from './settings';
 
 // ── Derived fields ──────────────────────────────────────────────────
 
@@ -29,12 +30,18 @@ export const BENEFITS: ReadonlyArray<{ key: BenefitKey; label: string; words: st
 
 export const benefitsOf = (a: Applicant) => BENEFITS.filter((b) => b.has(a));
 
-export const effectiveTier = (a: Applicant): Tier =>
-  a.tier === 1 || a.tier === 2 || a.tier === 3 ? a.tier : computeTier(a);
+/** The tier in force: a tier set by hand (locked) wins; otherwise the current
+ *  rules decide, so a change in Settings reaches every unlocked client. */
+export const effectiveTier = (a: Applicant): Tier => {
+  const stored = a.tier === 1 || a.tier === 2 || a.tier === 3 ? a.tier : null;
+  if (a.tier_locked === undefined) return stored ?? computeTier(a); // before the 0005 update
+  return a.tier_locked && stored ? stored : computeTier(a);
+};
 
-export const isUrgent = (a: Applicant) => (URGENCY_RANK[a.urgency ?? 'none'] ?? 0) >= 3;
+/** Urgent per Settings (by default: homeless tonight, or at risk within 56 days). */
+export const isUrgent = (a: Applicant) => activeSettings().urgentLevels.includes(a.urgency ?? '');
 
-export const isActive = (a: Applicant) => a.stage !== 'lost' && a.stage !== 'fee_paid';
+export const isActive = (a: Applicant) => a.stage !== 'lost' && a.stage !== 'fee_paid' && a.stage !== 'fee_invoiced';
 
 export const areaOf = (a: Applicant) => a.council || a.referring_borough || '';
 
@@ -109,10 +116,11 @@ export interface PipelineFilters {
   councilReg: YesNoAny;
   urgency: 'any' | 'urgent' | 'homeless_tonight' | 'at_risk_56' | 'temp_accommodation' | 'overcrowding';
   benefits: BenefitKey[]; // must have all of these
+  calls: 'any' | 'due' | 'never' | 'scheduled'; // applied by the Pipeline, which has the call log
 }
 
 export const DEFAULT_FILTERS: PipelineFilters = {
-  q: '', stage: 'active', tier: 'any', household: 'any', work: 'any', councilReg: 'any', urgency: 'any', benefits: [],
+  q: '', stage: 'active', tier: 'any', household: 'any', work: 'any', councilReg: 'any', urgency: 'any', benefits: [], calls: 'any',
 };
 
 export function applyFilters(
@@ -151,6 +159,7 @@ export function filtersFromParams(p: URLSearchParams): PipelineFilters {
     councilReg: oneOf(p.get('reg'), ['any', 'yes', 'no'] as const, 'any'),
     urgency: oneOf(p.get('urgency'), ['any', 'urgent', 'homeless_tonight', 'at_risk_56', 'temp_accommodation', 'overcrowding'] as const, 'any'),
     benefits: (p.get('benefits') ?? '').split(',').filter((b): b is BenefitKey => BENEFITS.some((x) => x.key === b)),
+    calls: oneOf(p.get('calls'), ['any', 'due', 'never', 'scheduled'] as const, 'any'),
   };
 }
 
@@ -165,6 +174,7 @@ export function filtersToParams(f: PipelineFilters, base = new URLSearchParams()
   set('reg', f.councilReg, 'any');
   set('urgency', f.urgency, 'any');
   set('benefits', f.benefits.join(','), '');
+  set('calls', f.calls, 'any');
   return p;
 }
 

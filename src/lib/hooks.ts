@@ -2,7 +2,12 @@ import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from './supabase';
 import { isLocalProperty, localProperties, useLocalProperties } from './localProperties';
-import type { Activity, Applicant, Contact, Placement, Property } from './types';
+import { DEFAULT_SETTINGS, setActiveSettings, withDefaults } from './settings';
+import type { AppSettings } from './settings';
+import { OUTCOME_LABEL } from './calls';
+import { computeTier } from './tiering';
+import { shortDate } from './format';
+import type { Activity, Applicant, Call, CallOutcome, Property } from './types';
 import type { ApplicantStage } from '../types/extraction';
 
 // ── Applicants ──────────────────────────────────────────────────────
@@ -52,7 +57,34 @@ export function useUpdateApplicant() {
   });
 }
 
-/** Delete an applicant and its activities. Placements cascade via the FK. */
+/** Change triage answers or the tier, keep the stored tier in step with the
+ *  rules (unless it was set by hand), and note the change on the timeline. */
+export function useUpdateTriage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ applicant, patch, note }: { applicant: Applicant; patch: Partial<Applicant>; note: string }) => {
+      const merged = { ...applicant, ...patch };
+      const full: Partial<Applicant> = { ...patch };
+      if (!('tier' in patch) && !merged.tier_locked) full.tier = computeTier(merged);
+      let { error } = await supabase.from('applicants').update(full).eq('id', applicant.id);
+      if (error && /tier_locked/.test(error.message)) {
+        // before the 0005 update there is no lock flag: a stored tier simply stands
+        const rest = { ...full };
+        delete rest.tier_locked;
+        ({ error } = await supabase.from('applicants').update(rest).eq('id', applicant.id));
+      }
+      if (error) throw error;
+      await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: applicant.id, kind: 'updated', body: note });
+    },
+    onSuccess: (_d, { applicant }) => {
+      qc.invalidateQueries({ queryKey: ['applicants'] });
+      qc.invalidateQueries({ queryKey: ['applicants', applicant.id] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+/** Delete an applicant and its activities. Calls and placements cascade via their FKs. */
 export function useDeleteApplicant() {
   const qc = useQueryClient();
   return useMutation({
@@ -122,21 +154,6 @@ export function useRecentActivity(limit = 12) {
         .limit(limit);
       if (error) throw error;
       return data as Activity[];
-    },
-  });
-}
-
-// ── Contacts ────────────────────────────────────────────────────────
-export function useContacts() {
-  return useQuery({
-    queryKey: ['contacts'],
-    queryFn: async (): Promise<Contact[]> => {
-      const { data, error } = await supabase
-        .from('contacts')
-        .select('*')
-        .order('full_name', { ascending: true });
-      if (error) throw error;
-      return data as Contact[];
     },
   });
 }
@@ -245,66 +262,109 @@ export function useDeleteProperties() {
   });
 }
 
-// ── Placements ──────────────────────────────────────────────────────
-export function usePlacements() {
-  return useQuery({
-    queryKey: ['placements'],
-    queryFn: async (): Promise<Placement[]> => {
-      const { data, error } = await supabase
-        .from('placements')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return data as Placement[];
+// ── Settings (one shared row; see settings.ts) ──────────────────────
+const missingTable = (e: { message?: string; code?: string }) =>
+  e.code === '42P01' || e.code === 'PGRST205' || /could not find the table|does not exist|schema cache/i.test(e.message ?? '');
+
+/** The saved settings. `ready` is false until the 0005 update has been run. */
+export function useSettings() {
+  const q = useQuery({
+    queryKey: ['settings'],
+    staleTime: 5 * 60_000,
+    queryFn: async (): Promise<{ settings: AppSettings; ready: boolean }> => {
+      const { data, error } = await supabase.from('settings').select('value').eq('key', 'app').maybeSingle();
+      if (error) {
+        if (missingTable(error)) return { settings: DEFAULT_SETTINGS, ready: false };
+        throw error;
+      }
+      return { settings: withDefaults(DEFAULT_SETTINGS, data?.value), ready: true };
     },
   });
+  return { settings: q.data?.settings ?? DEFAULT_SETTINGS, ready: q.data?.ready ?? true, isLoading: q.isLoading };
 }
 
-export function useUpdatePlacement() {
+export function useSaveSettings() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...patch }: Partial<Placement> & { id: string }) => {
-      const { data, error } = await supabase
-        .from('placements')
-        .update(patch)
-        .eq('id', id)
-        .select()
-        .single();
+    mutationFn: async (value: AppSettings) => {
+      const { error } = await supabase.from('settings').upsert({ key: 'app', value, updated_at: new Date().toISOString() });
       if (error) throw error;
-      // Mirror fee status onto the applicant stage where it makes sense.
-      if (patch.fee_status && data) {
-        const stage = patch.fee_status === 'paid' ? 'fee_paid' : patch.fee_status === 'invoiced' ? 'fee_invoiced' : null;
-        if (stage) {
-          await supabase.from('applicants').update({ stage }).eq('id', (data as Placement).applicant_id);
-          await supabase.from('activities').insert({
-            entity_type: 'applicant',
-            entity_id: (data as Placement).applicant_id,
-            kind: 'stage_change',
-            body: `Fee ${patch.fee_status} — stage → ${stage}`,
-          });
-        }
-      }
-      return data as Placement;
+      return value;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['placements'] });
+    onSuccess: (value) => {
+      setActiveSettings(value);
+      qc.setQueryData(['settings'], { settings: value, ready: true });
+      // new copies so memoised tiers and matches are worked out again
       qc.invalidateQueries({ queryKey: ['applicants'] });
+      qc.invalidateQueries({ queryKey: ['properties'] });
     },
   });
 }
 
-export function usePlacementForApplicant(applicantId: string | undefined) {
-  return useQuery({
-    queryKey: ['placements', 'applicant', applicantId],
-    enabled: !!applicantId,
-    queryFn: async (): Promise<Placement | null> => {
-      const { data, error } = await supabase
-        .from('placements')
-        .select('*')
-        .eq('applicant_id', applicantId)
-        .maybeSingle();
-      if (error) throw error;
-      return data as Placement | null;
+// ── Calls ───────────────────────────────────────────────────────────
+const CALLS_UPDATE =
+  'Call logging needs a one-off database update: run supabase/migrations/0005_calls_settings.sql in the Supabase SQL Editor.';
+
+/** Every call, newest first. `ready` is false until the 0005 update has been run. */
+export function useCalls() {
+  const q = useQuery({
+    queryKey: ['calls'],
+    queryFn: async (): Promise<{ calls: Call[]; ready: boolean }> => {
+      const { data, error } = await supabase.from('calls').select('*').order('created_at', { ascending: false }).limit(5000);
+      if (error) {
+        if (missingTable(error)) return { calls: [], ready: false };
+        throw error;
+      }
+      return { calls: data as Call[], ready: true };
+    },
+  });
+  return { calls: q.data?.calls ?? [], ready: q.data?.ready ?? true, isLoading: q.isLoading };
+}
+
+const callBody = (direction: Call['direction'], outcome: CallOutcome, notes: string, next: string | null) =>
+  [`${direction === 'incoming' ? 'Incoming' : 'Outgoing'} call: ${OUTCOME_LABEL[outcome]}`, notes.trim(),
+    next ? `Next call ${shortDate(next)}` : ''].filter(Boolean).join('. ');
+
+/** Log a call, set (or clear) when to call next, and record it on the timeline. */
+export function useLogCall() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ applicant, outcome, direction, notes, nextCallAt }: {
+      applicant: Applicant; outcome: CallOutcome; direction: Call['direction']; notes: string; nextCallAt: string | null;
+    }) => {
+      const { error } = await supabase.from('calls').insert({ applicant_id: applicant.id, outcome, direction, notes: notes.trim() || null });
+      if (error) throw missingTable(error) ? new Error(CALLS_UPDATE) : error;
+      const { error: nextError } = await supabase.from('applicants').update({ next_call_at: nextCallAt }).eq('id', applicant.id);
+      if (nextError) throw nextError;
+      await supabase.from('activities').insert({
+        entity_type: 'applicant', entity_id: applicant.id, kind: 'call', body: callBody(direction, outcome, notes, nextCallAt),
+      });
+    },
+    onSuccess: (_d, { applicant }) => {
+      qc.invalidateQueries({ queryKey: ['calls'] });
+      qc.invalidateQueries({ queryKey: ['applicants'] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+      qc.invalidateQueries({ queryKey: ['applicants', applicant.id] });
+    },
+  });
+}
+
+/** Set or clear when to call a client next, without logging a call. */
+export function useSetNextCall() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ applicant, date }: { applicant: Applicant; date: string | null }) => {
+      const { error } = await supabase.from('applicants').update({ next_call_at: date }).eq('id', applicant.id);
+      if (error) throw /next_call_at|schema cache/i.test(error.message) ? new Error(CALLS_UPDATE) : error;
+      await supabase.from('activities').insert({
+        entity_type: 'applicant', entity_id: applicant.id, kind: 'updated',
+        body: date ? `Next call set for ${shortDate(date)}` : 'Next call cleared',
+      });
+    },
+    onSuccess: (_d, { applicant }) => {
+      qc.invalidateQueries({ queryKey: ['applicants'] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+      qc.invalidateQueries({ queryKey: ['applicants', applicant.id] });
     },
   });
 }

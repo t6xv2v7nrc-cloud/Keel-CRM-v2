@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Button, Card, TierBadge, useToast } from '../../components/ui';
+import { Avatar, Button, Card, Icon, PageHeader, TierBadge, UrgentChip, useToast } from '../../components/ui';
 import {
   NeedsDatabaseUpdate, PROPERTY_STATUS_LABEL, useAddProperties, useApplicants, useDeleteProperties, useProperties, useSetPropertyStatus,
 } from '../../lib/hooks';
@@ -12,6 +12,7 @@ import type { ParsedProperty } from '../../lib/parseProperties';
 import { matchesForProperty } from '../../lib/propertyMatch';
 import type { Match, Strength } from '../../lib/propertyMatch';
 import { BOROUGHS } from '../../lib/london';
+import { activeSettings } from '../../lib/settings';
 import { effectiveTier, isUrgent } from '../../lib/search';
 import { money, shortDate } from '../../lib/format';
 
@@ -20,9 +21,9 @@ const bedsOfType = (t: string) => (/(\d)-Bed/.exec(t) ? Number(/(\d)-Bed/.exec(t
 const normAddr = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 const STRENGTH: Record<Strength, { label: string; bg: string; fg: string }> = {
-  strong: { label: 'Strong', bg: 'var(--stage-placed-bg)', fg: 'var(--stage-placed-fg)' },
-  good: { label: 'Good', bg: 'var(--stage-referred-bg)', fg: 'var(--stage-referred-fg)' },
-  possible: { label: 'Possible', bg: 'var(--stage-lead-bg)', fg: 'var(--stage-lead-fg)' },
+  strong: { label: 'Strong', bg: 'var(--strong-bg)', fg: 'var(--strong-fg)' },
+  good: { label: 'Good', bg: 'var(--good-bg)', fg: 'var(--good-fg)' },
+  possible: { label: 'Possible', bg: 'var(--possible-bg)', fg: 'var(--possible-fg)' },
 };
 
 const isAvailable = (p: Property) => p.status === 'void' || p.status === 'under_offer';
@@ -120,24 +121,18 @@ export function PropertiesPage() {
 
   return (
     <div className="mx-auto flex max-w-[1100px] flex-col gap-5 p-6 pb-24">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="m-0 text-[28px] font-bold text-[var(--ink)]">Properties</h1>
-          <p className="m-0 mt-1 text-[15px] text-[var(--ink-muted)]">
-            {counts.available} available · {counts.under_offer} under offer · {counts.let} let
-            {totalMatches > 0 && <> · <strong className="text-[var(--ink)]">{totalMatches}</strong> client matches</>}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+      <PageHeader icon="building" title="Properties" sub={<>
+        {counts.available} available · {counts.under_offer} under offer · {counts.let} let
+        {totalMatches > 0 && <> · <strong className="text-[var(--ink)]">{totalMatches}</strong> client matches</>}
+      </>}>
           {properties.length > 0 && (
             <Button onClick={() => setListsOpen((v) => !v)}>{listsOpen ? 'Hide saved lists' : 'Saved lists'}</Button>
           )}
-          {!showPaste && <Button variant="brass" onClick={() => setPasteOpen(true)}>Paste properties</Button>}
-        </div>
-      </header>
+          {!showPaste && <Button variant="primary" onClick={() => setPasteOpen(true)}><Icon name="plus" size={16} />Paste properties</Button>}
+      </PageHeader>
 
       {needsUpdate && (
-        <div role="alert" className="rounded-md border border-[var(--stage-offer-fg)] bg-[var(--stage-offer-bg)] p-4 text-[15px] text-[var(--ink)]">
+        <div role="alert" className="rounded-md border border-[var(--line-strong)] bg-[var(--note-bg)] p-4 text-[15px] text-[var(--note-fg)]">
           <strong>Lists cannot sync to your phone yet.</strong> The database needs a one-off update: in Supabase, open the SQL Editor,
           paste in <code className="font-mono text-[13px]">supabase/migrations/0004_properties_import.sql</code> and click Run. Then reload this page.
           {deviceOnly.length > 0 && <> Your {plural(deviceOnly.length, 'property', 'properties')} saved on this device will move across then.</>}
@@ -230,7 +225,6 @@ export function PropertiesPage() {
 
 // ── Saved lists and purging ────────────────────────────────────────
 
-const PURGE_AFTER_DAYS = 14;
 
 function SavedLists({ properties, onClose, onMove, moving }: {
   properties: Property[]; onClose: () => void; onMove: (ps: Property[]) => void; moving: boolean;
@@ -246,7 +240,8 @@ function SavedLists({ properties, onClose, onMove, moving }: {
     }
     return [...by.values()].sort((a, b) => b[0].created_at.localeCompare(a[0].created_at));
   }, [properties]);
-  const cutoff = new Date(Date.now() - PURGE_AFTER_DAYS * 86_400_000).toISOString();
+  const purgeDays = activeSettings().purgeAfterDays;
+  const cutoff = new Date(Date.now() - purgeDays * 86_400_000).toISOString();
   const old = properties.filter((p) => p.created_at < cutoff);
   const done = properties.filter((p) => p.status === 'let' || p.status === 'withdrawn');
 
@@ -304,8 +299,8 @@ function SavedLists({ properties, onClose, onMove, moving }: {
         <Button className="min-h-0 px-3 py-1.5 text-[13px]" disabled={done.length === 0} onClick={() => purge(done, 'let and withdrawn properties')}>
           Purge let and withdrawn ({done.length})
         </Button>
-        <Button className="min-h-0 px-3 py-1.5 text-[13px]" disabled={old.length === 0} onClick={() => purge(old, `properties saved over ${PURGE_AFTER_DAYS} days ago`)}>
-          Purge saved over {PURGE_AFTER_DAYS} days ago ({old.length})
+        <Button className="min-h-0 px-3 py-1.5 text-[13px]" disabled={old.length === 0} onClick={() => purge(old, `properties saved over ${purgeDays} days ago`)}>
+          Purge saved over {purgeDays} days ago ({old.length})
         </Button>
         <Button variant="danger" className="min-h-0 px-3 py-1.5 text-[13px]" onClick={() => purge(properties, 'every saved property')}>
           Purge everything ({properties.length})
@@ -437,7 +432,7 @@ function PasteImport({ existing, applicants, canClose, onClose, onAdded, onNeeds
                     <input value={d.address_line} onChange={(e) => edit(d.key, { address_line: e.target.value })}
                       aria-label="Address"
                       className="min-h-[36px] min-w-[260px] flex-1 rounded-md border border-[var(--line)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]" />
-                    {d.duplicate && <span className="rounded bg-[var(--stage-offer-bg)] px-2 py-0.5 text-[13px] text-[var(--stage-offer-fg)]">Already on your list</span>}
+                    {d.duplicate && <span className="rounded bg-[var(--note-bg)] px-2 py-0.5 text-[13px] text-[var(--note-fg)]">Already on your list</span>}
                   </div>
                   <div className="flex flex-wrap items-center gap-2 pl-8 text-[13px]">
                     <select value={d.property_type ?? ''} aria-label="Type"
@@ -469,7 +464,7 @@ function PasteImport({ existing, applicants, canClose, onClose, onAdded, onNeeds
                     {d.furnished && <span className="text-[var(--ink-muted)]">{d.furnished}</span>}
                     {d.available_from && <span className="text-[var(--ink-muted)]">From {shortDate(d.available_from)}</span>}
                     {d.warnings.map((w) => (
-                      <span key={w} className="rounded bg-[var(--stage-offer-bg)] px-1.5 py-0.5 text-[var(--stage-offer-fg)]">{w}</span>
+                      <span key={w} className="rounded bg-[var(--note-bg)] px-1.5 py-0.5 text-[var(--note-fg)]">{w}</span>
                     ))}
                   </div>
                   <div className="pl-8 text-[13px]">
@@ -550,7 +545,7 @@ function PropertyCard({ p, matches, isNew, selected, onToggle, onStatus, onDelet
           {(Object.keys(PROPERTY_STATUS_LABEL) as Property['status'][]).map((s) => <option key={s} value={s}>{PROPERTY_STATUS_LABEL[s]}</option>)}
         </select>
         <button onClick={onDelete} aria-label={`Delete ${p.address_line}`} title="Delete property"
-          className="rounded px-2 py-1 text-[15px] text-[var(--ink-muted)] hover:bg-[var(--stage-lost-bg)] hover:text-[var(--danger)]">✕</button>
+          className="rounded px-2 py-1 text-[15px] text-[var(--ink-muted)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]">✕</button>
       </div>
 
       {isAvailable(p) && (
@@ -582,24 +577,27 @@ function PropertyCard({ p, matches, isNew, selected, onToggle, onStatus, onDelet
 function MatchRow({ m }: { m: Match }) {
   const a = m.applicant;
   return (
-    <li className="flex flex-col gap-1">
+    <li className="flex gap-3">
+      <Avatar name={a.full_name} size={32} accent={effectiveTier(a) === 1} />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
       <div className="flex flex-wrap items-center gap-2">
         <StrengthBadge s={m.strength} />
         <Link to={`/applicants/${a.id}`} className="text-[15px] font-medium text-[var(--ink)] hover:underline">{a.full_name}</Link>
         <TierBadge tier={effectiveTier(a)} />
-        {isUrgent(a) && <span className="text-[13px] font-semibold text-[var(--danger)]">Urgent</span>}
+        {isUrgent(a) && <UrgentChip />}
         {a.phone && <a href={`tel:${a.phone}`} className="font-mono text-[13px] text-[var(--link)] hover:underline">{a.phone}</a>}
       </div>
       <div className="text-[13px] text-[var(--ink)]">{m.reasons.join(' · ')}</div>
       {m.cautions.length > 0 && (
-        <div className="text-[13px] text-[var(--stage-offer-fg)]">! {m.cautions.join(' · ')}</div>
+        <div className="text-[13px] text-[var(--note-fg)]">! {m.cautions.join(' · ')}</div>
       )}
+      </div>
     </li>
   );
 }
 
 function DeviceOnlyTag() {
-  return <span className="rounded bg-[var(--stage-offer-bg)] px-2 py-0.5 text-[13px] font-normal text-[var(--stage-offer-fg)]">Only on this device</span>;
+  return <span className="rounded bg-[var(--note-bg)] px-2 py-0.5 text-[13px] font-normal text-[var(--note-fg)]">Only on this device</span>;
 }
 
 function StrengthBadge({ s }: { s: Strength }) {

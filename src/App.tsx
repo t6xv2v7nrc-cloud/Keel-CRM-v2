@@ -4,15 +4,18 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { supabase } from './lib/supabase';
 import { AuthGate } from './features/auth/AuthGate';
 import { useAuth } from './features/auth/useAuth';
-import { ToastProvider } from './components/ui';
+import { Icon, ToastProvider } from './components/ui';
+import type { IconName } from './components/ui';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { BinPage } from './features/bin/BinPage';
 import { PipelinePage } from './features/pipeline/PipelinePage';
 import { ApplicantPage } from './features/applicants/ApplicantPage';
 import { PropertiesPage } from './features/properties/PropertiesPage';
-import { ContactsPage } from './features/contacts/ContactsPage';
-import { FeesPage } from './features/fees/FeesPage';
-import { CommandSearch } from './features/search/CommandSearch';
+import { CallsPage } from './features/calls/CallsPage';
+import { SettingsPage } from './features/settings/SettingsPage';
+import { CommandSearch, openSearch } from './features/search/CommandSearch';
+import { useSettings } from './lib/hooks';
+import { setActiveSettings } from './lib/settings';
 import { ThemeToggle } from './components/ThemeToggle';
 import DevTokens from './routes/DevTokens';
 
@@ -20,13 +23,12 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
 });
 
-const NAV = [
-  { to: '/', label: 'Home' },
-  { to: '/bin', label: 'Bin' },
-  { to: '/pipeline', label: 'Pipeline' },
-  { to: '/properties', label: 'Properties' },
-  { to: '/contacts', label: 'Contacts' },
-  { to: '/fees', label: 'Fees' },
+const NAV: Array<{ to: string; label: string; icon: IconName }> = [
+  { to: '/', label: 'Home', icon: 'home' },
+  { to: '/bin', label: 'Bin', icon: 'inbox' },
+  { to: '/pipeline', label: 'Pipeline', icon: 'list' },
+  { to: '/calls', label: 'Calls', icon: 'phone' },
+  { to: '/properties', label: 'Properties', icon: 'building' },
 ];
 
 export default function App() {
@@ -56,6 +58,10 @@ function Shell() {
   const navigate = useNavigate();
   const { email, signOut } = useAuth();
 
+  // Shared rules (tiers, urgency, matching, calls) before any page works them out
+  const { settings } = useSettings();
+  setActiveSettings(settings);
+
   // Keyboard shortcut: V jumps to the Bin ready to paste (ignored while typing).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -70,37 +76,46 @@ function Shell() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-30 flex items-center gap-1 border-b border-[var(--line)] bg-[var(--surface)] px-4 py-2">
+      <header className="sticky top-0 z-30 flex items-center gap-1 border-b border-[var(--line)] bg-[var(--surface)]/95 px-4 py-2 backdrop-blur">
         {/* Clickable home / brand */}
-        <Link to="/" aria-label="Home" title="Home" className="mr-3 flex items-center gap-2 rounded-md p-1 transition-colors hover:bg-[var(--paper)]">
-          <span aria-hidden className="grid h-7 w-7 rotate-45 place-items-center rounded-sm" style={{ background: 'var(--hull)' }}>
-            <span className="h-2.5 w-2.5 rounded-[2px]" style={{ background: 'var(--brass)' }} />
+        <Link to="/" aria-label="Home" title="Home" className="mr-2 flex items-center gap-2 rounded-md p-1 transition-colors hover:bg-[var(--surface-2)]">
+          <span aria-hidden className="grid h-7 w-7 rotate-45 place-items-center rounded-[6px] bg-[var(--accent)]">
+            <span className="h-2.5 w-2.5 rounded-[2px] bg-[var(--surface)]" />
           </span>
           <span className="hidden font-[var(--font-display)] text-[18px] font-bold text-[var(--ink)] sm:block">Keel</span>
         </Link>
-        <nav className="flex items-center gap-1 overflow-x-auto">
+        <nav className="flex items-center gap-0.5 overflow-x-auto">
           {NAV.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               end={item.to === '/'}
+              title={item.label}
               className={({ isActive }) =>
-                `rounded-md px-3 py-2 text-[15px] transition-colors ${
+                `flex items-center gap-2 rounded-md px-2.5 py-2 text-[15px] transition-colors ${
                   isActive
-                    ? 'bg-[var(--paper)] font-semibold text-[var(--ink)]'
-                    : 'text-[var(--ink-muted)] hover:text-[var(--ink)]'
+                    ? 'bg-[var(--accent-soft)] font-semibold text-[var(--accent-ink)]'
+                    : 'text-[var(--ink-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--ink)]'
                 }`
               }
             >
-              {item.label}
+              <Icon name={item.icon} size={18} />
+              <span className="hidden md:inline">{item.label}</span>
             </NavLink>
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-2">
-          <span className="hidden items-center gap-1 font-mono text-[13px] text-[var(--ink-muted)] lg:flex">
-            <kbd className="rounded border border-[var(--line)] px-1.5 py-0.5">Ctrl K</kbd>
-            <span>search</span>
-          </span>
+          <button onClick={openSearch} title="Search (Ctrl K)"
+            className="flex h-9 items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--surface-2)] px-2.5 text-[13px] text-[var(--ink-muted)] transition-colors hover:text-[var(--ink)]">
+            <Icon name="search" size={16} />
+            <span className="hidden lg:inline">Search</span>
+            <kbd className="hidden rounded border border-[var(--line)] px-1 font-mono text-[11px] lg:inline">Ctrl K</kbd>
+          </button>
+          <NavLink to="/settings" title="Settings" aria-label="Settings"
+            className={({ isActive }) => `grid h-9 w-9 place-items-center rounded-md border transition-colors ${
+              isActive ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-ink)]' : 'border-[var(--line)] text-[var(--ink-muted)] hover:text-[var(--ink)]'}`}>
+            <Icon name="sliders" size={17} />
+          </NavLink>
           <ThemeToggle />
           <UserMenu email={email} onSignOut={signOut} />
         </div>
@@ -113,8 +128,8 @@ function Shell() {
           <Route path="/pipeline" element={<PipelinePage />} />
           <Route path="/applicants/:id" element={<ApplicantPage />} />
           <Route path="/properties" element={<PropertiesPage />} />
-          <Route path="/contacts" element={<ContactsPage />} />
-          <Route path="/fees" element={<FeesPage />} />
+          <Route path="/calls" element={<CallsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>
 
@@ -140,7 +155,7 @@ function UserMenu({ email, onSignOut }: { email: string | null; onSignOut: () =>
   const savePassword = async () => {
     if (pw.length < 6) { setMsg('At least 6 characters.'); return; }
     const { error } = await supabase.auth.updateUser({ password: pw });
-    setMsg(error ? error.message : 'Password set — you can use it to sign in.');
+    setMsg(error ? error.message : 'Password set. You can use it to sign in.');
     if (!error) { setPw(''); setSetting(false); }
   };
 
@@ -148,7 +163,7 @@ function UserMenu({ email, onSignOut }: { email: string | null; onSignOut: () =>
     <div className="relative">
       <button
         onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
-        className="grid h-9 w-9 place-items-center rounded-full bg-[var(--hull)] text-[13px] font-semibold text-white"
+        className="grid h-9 w-9 place-items-center rounded-full bg-[var(--accent)] text-[13px] font-semibold text-[var(--on-accent)]"
         aria-label="Account menu"
         title={email ?? 'Account'}
       >
@@ -176,7 +191,7 @@ function UserMenu({ email, onSignOut }: { email: string | null; onSignOut: () =>
               />
               <div className="mt-2 flex justify-end gap-2">
                 <button onClick={() => { setSetting(false); setMsg(''); }} className="text-[13px] text-[var(--ink-muted)] hover:text-[var(--ink)]">Cancel</button>
-                <button onClick={savePassword} className="rounded-md bg-[var(--hull)] px-3 py-1 text-[13px] text-white">Save</button>
+                <button onClick={savePassword} className="rounded-md bg-[var(--accent)] px-3 py-1 text-[13px] text-[var(--on-accent)]">Save password</button>
               </div>
             </div>
           ) : (

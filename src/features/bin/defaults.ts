@@ -14,13 +14,12 @@ export function withMessageNotes(ex: Extraction): Extraction {
   return m && m[1].trim() ? { ...ex, applicant: { ...ex.applicant, notes: m[1].trim() } } : ex;
 }
 
-/** Best existing match if there is one, otherwise create; note only when there is no name. */
+/** Best existing client match if there is one, otherwise create; note only when there is no name. */
 export function defaultChoice(ex: Extraction, matches: MatchResult | null): ConfirmChoice {
   const bestApplicant = matches?.applicant[0];
-  const bestContact = matches?.contact[0];
   return {
     applicantTarget: bestApplicant ? bestApplicant.id : ex.applicant?.full_name ? 'create' : 'note_only',
-    contactTarget: bestContact ? bestContact.id : ex.contact?.full_name ? 'create' : 'none',
+    contactTarget: 'none', // contacts are no longer kept; officer details stay on the client
     advanceStage: null,
   };
 }

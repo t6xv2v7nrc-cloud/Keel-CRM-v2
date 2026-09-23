@@ -32,6 +32,9 @@ export interface Applicant {
   housing_situation: string | null;
   consent: boolean | null;
   tier: number | null;
+  // 0005_calls_settings.sql (undefined until that update is run)
+  tier_locked?: boolean;      // tier set by hand; rule changes leave it alone
+  next_call_at?: string | null; // YYYY-MM-DD
   created_at: string;
   updated_at: string;
 }
@@ -95,5 +98,16 @@ export interface Activity {
   kind: string;
   body: string;
   inbox_item_id: string | null;
+  created_at: string;
+}
+
+export type CallOutcome = 'answered' | 'no_answer' | 'voicemail' | 'busy' | 'wrong_number';
+
+export interface Call {
+  id: string;
+  applicant_id: string;
+  direction: 'outgoing' | 'incoming';
+  outcome: CallOutcome;
+  notes: string | null;
   created_at: string;
 }

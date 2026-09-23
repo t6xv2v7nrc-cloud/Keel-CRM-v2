@@ -1,4 +1,6 @@
-import type { HTMLAttributes } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
+import { Icon } from './Icon';
+import type { IconName } from './Icon';
 
 export function Card({ className = '', ...rest }: HTMLAttributes<HTMLDivElement>) {
   return (
@@ -12,14 +14,17 @@ export function Card({ className = '', ...rest }: HTMLAttributes<HTMLDivElement>
 export function CardHeader({
   title,
   sub,
+  icon,
   children,
 }: {
   title: string;
   sub?: string;
-  children?: React.ReactNode;
+  icon?: IconName;
+  children?: ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3 border-b border-[var(--line)] px-5 py-3">
+    <div className="flex items-center gap-2.5 border-b border-[var(--line)] px-5 py-3">
+      {icon && <Icon name={icon} size={17} className="text-[var(--accent)]" />}
       <h3 className="m-0 text-[15px] font-semibold text-[var(--ink)]">{title}</h3>
       {sub && <span className="font-mono text-[13px] text-[var(--ink-muted)]">{sub}</span>}
       {children && <div className="ml-auto flex items-center gap-2">{children}</div>}

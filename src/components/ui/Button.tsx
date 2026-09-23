@@ -4,15 +4,16 @@ type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'brass';
 
 const styles: Record<Variant, string> = {
   primary:
-    'bg-[var(--hull)] text-white border border-[var(--hull)] hover:opacity-90',
+    'bg-[var(--accent)] text-[var(--on-accent)] border border-[var(--accent)] hover:bg-[var(--accent-strong)] hover:border-[var(--accent-strong)]',
   secondary:
-    'bg-[var(--surface)] text-[var(--ink)] border border-[var(--line-strong)] hover:border-[var(--hull)]',
+    'bg-[var(--surface)] text-[var(--ink)] border border-[var(--line-strong)] hover:border-[var(--accent)]',
   ghost:
     'bg-transparent text-[var(--ink-muted)] border border-transparent hover:text-[var(--ink)] hover:border-[var(--line)]',
   danger:
-    'bg-transparent text-[var(--danger)] border border-[var(--danger)] hover:bg-[var(--danger)] hover:text-white',
+    'bg-transparent text-[var(--danger)] border border-[var(--danger)] hover:bg-[var(--danger-soft)]',
+  // same as primary now there is one accent; kept so existing call sites work
   brass:
-    'bg-[var(--brass)] text-[var(--brass-text)] border border-[var(--brass)] hover:opacity-90',
+    'bg-[var(--accent)] text-[var(--on-accent)] border border-[var(--accent)] hover:bg-[var(--accent-strong)] hover:border-[var(--accent-strong)]',
 };
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

@@ -1,39 +1,69 @@
-/* Keel CRM v2 — design tokens (§7 of KEEL_CRM_PLAN.md)
-   Paper-and-navy civic software with one brass spine.
-   All colour pairs WCAG-verified per the plan. */
+/* Keel CRM v2 — design tokens
+   Creamy greys with one green accent. Green means "act here" or "this is
+   good": primary buttons, focus, the current nav item, strong matches,
+   Tier 1 and placed clients. Everything else is a shade of warm grey.
+   Brick red is kept only for delete and error. */
 
 :root {
-  /* Surfaces */
-  --paper:     #F6F7F4;
-  --surface:   #FFFFFF;
+  /* Surfaces, darkest to lightest */
+  --paper:     #E9E6E0;   /* page */
+  --paper-2:   #DFDBD3;   /* sunken: tracks, table heads, inputs on paper */
+  --surface-2: #F1EEE8;   /* panels inside cards */
+  --surface:   #F8F6F2;   /* cards */
 
   /* Text */
-  --ink:       #16212E;   /* 15.1:1 on paper, 16.3:1 on white */
-  --ink-muted: #51606F;   /* 6.5:1 on white */
+  --ink:       #2A2824;   /* 12.9:1 on surface */
+  --ink-muted: #666158;   /* 5.6:1 on surface */
+  --ink-faint: #928C82;   /* decoration only, never body text */
 
-  /* Brand */
-  --hull:      #1C3D5A;   /* primary buttons, white text — 11.3:1 */
-  --brass:     #F0B429;   /* signature accent fill, dark text */
-  --brass-text:#10100A;   /* text on brass fill — 10.2:1 */
-  --brass-ink: #8A5A06;   /* brass as text on white — 5.9:1 */
-  --link:      #1C5D8F;   /* 7.0:1 */
-  --danger:    #A8231A;   /* 7.2:1 */
-  --success:   #1D5C38;   /* 8.0:1 */
+  /* The one accent */
+  --accent:        #2E6A4D;   /* fill, white text 6.2:1 */
+  --accent-strong: #235239;
+  --accent-soft:   #DCE6DD;   /* tinted fill */
+  --accent-ink:    #24553D;   /* green as text on cream, 7.4:1 */
+  --on-accent:     #FFFFFF;
+
+  /* Older names, mapped onto the palette */
+  --hull:       var(--accent);
+  --brass:      var(--accent);
+  --brass-text: var(--on-accent);
+  --brass-ink:  var(--accent-ink);
+  --link:       var(--accent-ink);
+  --success:    var(--accent-ink);
+  --danger:      #9A3A2B;  /* delete and errors only, 6.6:1 */
+  --danger-soft: #EFDDD7;
 
   /* Lines & focus */
-  --line:        rgba(22, 33, 46, 0.12);
-  --line-strong: rgba(22, 33, 46, 0.25);
-  --focus-ring:  var(--hull);
+  --line:        rgba(42, 40, 36, 0.10);
+  --line-strong: rgba(42, 40, 36, 0.22);
+  --focus-ring:  var(--accent);
 
-  /* Stage badges: text colour / tinted background */
-  --stage-lead-fg: #3D4B5C;        --stage-lead-bg: #E4E9EE;
-  --stage-referred-fg: #174E78;    --stage-referred-bg: #DCEAF5;
-  --stage-viewing-fg: #5B3E8F;     --stage-viewing-bg: #E9E2F6;
-  --stage-offer-fg: #7A4D04;       --stage-offer-bg: #FBEED3;
-  --stage-placed-fg: #1D5C38;      --stage-placed-bg: #DDF0E4;
-  --stage-fee_invoiced-fg: #7A4D04;--stage-fee_invoiced-bg: #FBEED3;
-  --stage-fee_paid-fg: #FFFFFF;    --stage-fee_paid-bg: #1D5C38;  /* solid — 8.0:1 */
-  --stage-lost-fg: #8C2B23;        --stage-lost-bg: #F9E2DF;
+  /* Stages: grey steps that deepen as a client moves on, green once placed */
+  --stage-lead-fg: #5B564D;        --stage-lead-bg: #E4E0D8;
+  --stage-referred-fg: #45413A;    --stage-referred-bg: #DAD5CB;
+  --stage-viewing-fg: #36332D;     --stage-viewing-bg: #CEC8BC;
+  --stage-offer-fg: var(--accent-ink); --stage-offer-bg: var(--accent-soft);
+  --stage-placed-fg: var(--on-accent); --stage-placed-bg: var(--accent);
+  --stage-fee_invoiced-fg: var(--on-accent); --stage-fee_invoiced-bg: var(--accent);
+  --stage-fee_paid-fg: var(--on-accent);     --stage-fee_paid-bg: var(--accent);
+  --stage-lost-fg: #867F74;        --stage-lost-bg: #E7E3DC;
+
+  /* Tiers: Tier 1 carries the accent */
+  --tier-1-fg: var(--on-accent);   --tier-1-bg: var(--accent);
+  --tier-2-fg: var(--accent-ink);  --tier-2-bg: var(--accent-soft);
+  --tier-3-fg: #5B564D;            --tier-3-bg: #E1DDD5;
+
+  /* Match strength */
+  --strong-fg: var(--on-accent);   --strong-bg: var(--accent);
+  --good-fg: var(--accent-ink);    --good-bg: var(--accent-soft);
+  --possible-fg: #5B564D;          --possible-bg: #E1DDD5;
+
+  /* Neutral chips (benefits, tags) and notes (cautions, warnings) */
+  --chip-fg: #4A463F;   --chip-bg: #E2DED6;
+  --note-fg: #5E5443;   --note-bg: #ECE5D6;
+
+  /* Urgent: inverted ink, no extra hue */
+  --urgent-fg: #F8F6F2; --urgent-bg: #2A2824;
 
   /* Type */
   --font-display: 'Bricolage Grotesque', 'IBM Plex Sans', system-ui, sans-serif;
@@ -47,22 +77,44 @@
   --text-lg: 22px;
   --text-xl: 28px;
 
-  /* Elevation */
-  --shadow-card: 0 1px 2px rgba(22,33,46,0.06), 0 1px 4px rgba(22,33,46,0.04);
-  --shadow-pop:  0 4px 16px rgba(22,33,46,0.12), 0 2px 6px rgba(22,33,46,0.06);
+  /* Elevation: soft and warm */
+  --shadow-card: 0 1px 2px rgba(42, 40, 36, 0.05), 0 2px 8px rgba(42, 40, 36, 0.04);
+  --shadow-pop:  0 8px 24px rgba(42, 40, 36, 0.12), 0 2px 6px rgba(42, 40, 36, 0.06);
 }
 
 [data-theme='dark'] {
-  --paper:     #0C141F;
-  --surface:   #16212E;
-  --ink:       #EDF1F5;   /* 16.3:1 */
-  --ink-muted: #9AAABB;   /* 7.8:1 */
-  --line:        rgba(237, 241, 245, 0.14);
-  --line-strong: rgba(237, 241, 245, 0.28);
-  --link:      #6FB0E0;
-  --danger:    #E8847C;
-  --success:   #7BC89C;
-  --shadow-card: 0 1px 2px rgba(0,0,0,0.30), 0 1px 4px rgba(0,0,0,0.20);
-  --shadow-pop:  0 4px 16px rgba(0,0,0,0.40), 0 2px 6px rgba(0,0,0,0.25);
-  /* brass unchanged as fill */
+  --paper:     #1C1B19;
+  --paper-2:   #242320;
+  --surface-2: #2C2B28;
+  --surface:   #282724;
+
+  --ink:       #EEEAE3;
+  --ink-muted: #ABA59A;
+  --ink-faint: #7C766C;
+
+  --accent:        #5DAA80;
+  --accent-strong: #78C29A;
+  --accent-soft:   rgba(93, 170, 128, 0.18);
+  --accent-ink:    #86CBA4;
+  --on-accent:     #0F221A;
+
+  --danger:      #E08B7D;
+  --danger-soft: rgba(224, 139, 125, 0.16);
+
+  --line:        rgba(238, 234, 227, 0.10);
+  --line-strong: rgba(238, 234, 227, 0.22);
+
+  --stage-lead-fg: #C9C3B8;        --stage-lead-bg: rgba(238, 234, 227, 0.07);
+  --stage-referred-fg: #D8D2C7;    --stage-referred-bg: rgba(238, 234, 227, 0.11);
+  --stage-viewing-fg: #E6E0D6;     --stage-viewing-bg: rgba(238, 234, 227, 0.17);
+  --stage-lost-fg: #8F897E;        --stage-lost-bg: rgba(238, 234, 227, 0.05);
+
+  --tier-3-fg: #C9C3B8;            --tier-3-bg: rgba(238, 234, 227, 0.10);
+  --possible-fg: #C9C3B8;          --possible-bg: rgba(238, 234, 227, 0.10);
+  --chip-fg: #D3CDC2;              --chip-bg: rgba(238, 234, 227, 0.10);
+  --note-fg: #D9CBA9;              --note-bg: rgba(217, 203, 169, 0.12);
+  --urgent-fg: #1C1B19;            --urgent-bg: #EEEAE3;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.30), 0 2px 8px rgba(0, 0, 0, 0.18);
+  --shadow-pop:  0 8px 24px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.25);
 }

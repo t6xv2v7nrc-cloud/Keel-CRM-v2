@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Button, Card, CardHeader, Field, useToast } from '../../components/ui';
+import { Button, Card, CardHeader, Field, Icon, PageHeader, useToast } from '../../components/ui';
 import { extractFromText } from '../../lib/extract';
 import { parseEnquiryEmail } from '../../lib/parseEnquiry';
 import { runMatching } from '../../lib/matching';
@@ -27,7 +27,6 @@ export function BinPage() {
   const refreshAfterConfirm = () => {
     qc.invalidateQueries({ queryKey: ['inbox'] });
     qc.invalidateQueries({ queryKey: ['applicants'] });
-    qc.invalidateQueries({ queryKey: ['contacts'] });
   };
 
   // ── Confirm all ──
@@ -177,12 +176,7 @@ export function BinPage() {
 
   return (
     <div className="mx-auto flex max-w-[1000px] flex-col gap-6 p-6 pb-24">
-      <header>
-        <h1 className="m-0 text-[28px] font-bold text-[var(--ink)]">The Bin</h1>
-        <p className="m-0 mt-1 text-[15px] text-[var(--ink-muted)]">
-          Paste a screenshot anywhere with Ctrl/Cmd+V. It gets read, classified and matched to your records.
-        </p>
-      </header>
+      <PageHeader icon="inbox" title="The Bin" sub="Paste a screenshot anywhere with Ctrl/Cmd+V. It gets read, classified and matched to your records." />
 
       {/* Capture zone */}
       {stage === 'idle' && (
@@ -196,11 +190,12 @@ export function BinPage() {
             if (file?.type.startsWith('image/')) stageImage(file);
           }}
           className="grid place-items-center rounded-lg border-2 border-dashed p-12 text-center transition-colors"
-          style={{ borderColor: dragOver ? 'var(--brass)' : 'var(--line-strong)', background: dragOver ? 'var(--stage-offer-bg)' : 'transparent' }}
+          style={{ borderColor: dragOver ? 'var(--accent)' : 'var(--line-strong)', background: dragOver ? 'var(--accent-soft)' : 'var(--surface-2)' }}
         >
-          <div>
+          <div className="flex flex-col items-center">
+            <span className="mb-3 grid h-14 w-14 place-items-center rounded-full bg-[var(--surface)] text-[var(--accent)] shadow-[var(--shadow-card)]"><Icon name="inbox" size={26} /></span>
             <div className="text-[18px] font-semibold text-[var(--ink)]">Paste, drop, or pick a screenshot</div>
-            <p className="mt-1 text-[15px] text-[var(--ink-muted)]">WhatsApp messages, referral forms, fee letters, property details</p>
+            <p className="mt-1 text-[15px] text-[var(--ink-muted)]">WhatsApp messages, referral forms, officer emails, property details</p>
             <input
               ref={fileRef}
               type="file"
@@ -208,7 +203,7 @@ export function BinPage() {
               className="hidden"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) stageImage(f); }}
             />
-            <Button variant="brass" className="mt-4" onClick={() => fileRef.current?.click()}>Choose image</Button>
+            <Button variant="primary" className="mt-4" onClick={() => fileRef.current?.click()}><Icon name="plus" size={16} />Choose image</Button>
           </div>
         </div>
       )}

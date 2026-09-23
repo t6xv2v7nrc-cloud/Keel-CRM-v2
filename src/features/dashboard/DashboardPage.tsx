@@ -1,36 +1,31 @@
 import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Button, Card, CardHeader, TierBadge } from '../../components/ui';
 import {
-  useApplicants,
-  usePlacements,
-  useProperties,
-  useRecentActivity,
-} from '../../lib/hooks';
+  Avatar, Button, Card, CardHeader, DayBars, Donut, Empty, Icon, Legend, Meter, Sparkline, StatTile, TierBadge, UrgentChip,
+} from '../../components/ui';
+import type { IconName } from '../../components/ui';
+import { useApplicants, useCalls, useProperties, useRecentActivity } from '../../lib/hooks';
 import { useAuth } from '../auth/useAuth';
-import { money, timeAgo } from '../../lib/format';
-import { computeTier, TIER_META, URGENCY_RANK } from '../../lib/tiering';
+import { timeAgo } from '../../lib/format';
+import { effectiveTier, isActive, isUrgent } from '../../lib/search';
+import { matchesForProperty } from '../../lib/propertyMatch';
+import { addDays, callQueue, callsPerDay, isoDay, lastCallMap, OUTCOME_LABEL, queueLabel, todayIso } from '../../lib/calls';
 import type { Tier } from '../../lib/tiering';
-import { APPLICANT_STAGES } from '../../types/extraction';
 import type { ApplicantStage } from '../../types/extraction';
-import type { Applicant } from '../../lib/types';
+import type { Activity } from '../../lib/types';
 
-const effTier = (a: Applicant): Tier => ((a.tier as Tier) || computeTier(a));
-const isActive = (a: Applicant) => a.stage !== 'lost' && a.stage !== 'fee_paid';
-
-const STAGE_LABEL: Record<ApplicantStage, string> = {
-  lead: 'Lead', referred: 'Referred', viewing: 'Viewing', offer: 'Offer',
-  placed: 'Placed', fee_invoiced: 'Fee invoiced', fee_paid: 'Fee paid', lost: 'Lost',
-};
-
-const ACTIVE_STAGES = APPLICANT_STAGES.filter((s) => s !== 'lost' && s !== 'fee_paid');
+const FUNNEL: Array<{ stage: ApplicantStage; label: string }> = [
+  { stage: 'lead', label: 'Lead' }, { stage: 'referred', label: 'Referred' }, { stage: 'viewing', label: 'Viewing' },
+  { stage: 'offer', label: 'Offer' }, { stage: 'placed', label: 'Placed' },
+];
+const TIER_COLOR: Record<Tier, string> = { 1: 'var(--accent)', 2: 'color-mix(in srgb, var(--accent) 45%, var(--paper-2))', 3: 'var(--ink-faint)' };
 
 export function DashboardPage() {
   const { displayName } = useAuth();
   const navigate = useNavigate();
   const { data: applicants = [] } = useApplicants();
-  const { data: placements = [] } = usePlacements();
   const { data: properties = [] } = useProperties();
+  const { calls } = useCalls();
   const { data: recent = [] } = useRecentActivity(10);
 
   const nameOf = useMemo(() => {
@@ -38,154 +33,207 @@ export function DashboardPage() {
     return (id: string) => m.get(id) ?? null;
   }, [applicants]);
 
-  const stats = useMemo(() => {
-    const active = applicants.filter((a) => a.stage !== 'lost' && a.stage !== 'fee_paid').length;
-    const voids = properties.filter((p) => p.status === 'void').length;
-    let feePending = 0, feePaid = 0;
-    for (const p of placements) {
-      const splitPct = (p.fee_splits ?? []).reduce((s, x) => s + (x.pct || 0), 0);
-      const net = Math.round((p.fee_amount ?? 0) * (1 - splitPct / 100));
-      if (p.fee_status === 'paid') feePaid += net;
-      else feePending += net;
-    }
-    return { active, voids, feePending, feePaid };
-  }, [applicants, placements, properties]);
-
-  // Tier triage over the active pipeline only (closed/placed don't need triage).
+  const active = useMemo(() => applicants.filter(isActive), [applicants]);
   const tiers = useMemo(() => {
-    const active = applicants.filter(isActive);
     const counts: Record<Tier, number> = { 1: 0, 2: 0, 3: 0 };
-    let urgent = 0;
-    for (const a of active) {
-      counts[effTier(a)] += 1;
-      if ((URGENCY_RANK[a.urgency ?? 'none'] ?? 0) >= 3) urgent += 1; // homeless / at-risk-56
-    }
-    return { counts, urgent, total: active.length };
-  }, [applicants]);
+    for (const a of active) counts[effectiveTier(a)] += 1;
+    return counts;
+  }, [active]);
+  const urgent = active.filter(isUrgent).length;
 
-  const byStage = (stage: ApplicantStage) => applicants.filter((a) => a.stage === stage).length;
-  const greeting = getGreeting();
+  // New clients per day, last 14 days
+  const newPerDay = useMemo(() => {
+    const days = Array.from({ length: 14 }, (_, i) => addDays(i - 13));
+    const counts = new Map(days.map((d) => [d, 0]));
+    for (const a of applicants) {
+      const d = isoDay(new Date(a.created_at));
+      if (counts.has(d)) counts.set(d, (counts.get(d) ?? 0) + 1);
+    }
+    return days.map((d) => counts.get(d) ?? 0);
+  }, [applicants]);
+  const newThisWeek = newPerDay.slice(-7).reduce((s, n) => s + n, 0);
+
+  const last = useMemo(() => lastCallMap(calls), [calls]);
+  const queue = useMemo(() => callQueue(applicants, last), [applicants, last]);
+  const days = useMemo(() => callsPerDay(calls, 14), [calls]);
+  const weekCalls = days.slice(-7).reduce((s, d) => s + d.total, 0);
+
+  const available = properties.filter((p) => p.status === 'void' || p.status === 'under_offer');
+  const matchCount = useMemo(
+    () => available.reduce((s, p) => s + matchesForProperty(p, applicants).length, 0),
+    [available, applicants],
+  );
+
+  const byStage = (s: ApplicantStage) => applicants.filter((a) => a.stage === s || (s === 'placed' && (a.stage === 'fee_invoiced' || a.stage === 'fee_paid'))).length;
+  const funnelMax = Math.max(1, ...FUNNEL.map((f) => byStage(f.stage)));
+  const today = todayIso();
 
   return (
-    <div className="mx-auto flex max-w-[1000px] flex-col gap-6 p-6 pb-24">
+    <div className="mx-auto flex max-w-[1120px] flex-col gap-6 p-6 pb-24">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="m-0 text-[28px] font-bold text-[var(--ink)]">
-            {greeting}{displayName ? `, ${displayName}` : ''}
+          <p className="m-0 text-[13px] font-medium uppercase tracking-wider text-[var(--ink-muted)]">
+            {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </p>
+          <h1 className="m-0 mt-1 text-[30px] font-bold text-[var(--ink)]">
+            {greeting()}{displayName ? `, ${displayName}` : ''}
           </h1>
-          <p className="m-0 mt-1 text-[15px] text-[var(--ink-muted)]">Here is where things stand today.</p>
+          <p className="m-0 mt-1 text-[15px] text-[var(--ink-muted)]">
+            {queue.length ? `${queue.length} ${queue.length === 1 ? 'call' : 'calls'} to make` : 'No calls due'}
+            {urgent ? ` · ${urgent} urgent ${urgent === 1 ? 'client' : 'clients'}` : ''}
+            {available.length ? ` · ${available.length} properties available` : ''}
+          </p>
         </div>
-        <Button variant="brass" onClick={() => navigate('/bin')}>Paste a screenshot</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => navigate('/bin')}><Icon name="inbox" size={16} />Paste a screenshot</Button>
+          <Button variant="primary" onClick={() => navigate('/calls')}><Icon name="phoneOut" size={16} />Start calling</Button>
+        </div>
       </header>
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label="Active applicants" value={String(stats.active)} to="/pipeline" />
-        <StatCard label="Void properties" value={String(stats.voids)} to="/properties" />
-        <StatCard label="Fees pending" value={money(stats.feePending)} to="/fees" tone="var(--stage-offer-fg)" />
-        <StatCard label="Fees paid" value={money(stats.feePaid)} to="/fees" tone="var(--success)" />
+      {/* Stat tiles */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Link to="/pipeline"><StatTile icon="users" label="Active clients" value={active.length} hint={`${newThisWeek} new this week`}>
+          <Sparkline values={newPerDay} />
+        </StatTile></Link>
+        <Link to="/calls"><StatTile icon="flag" label="To call now" value={queue.length} accent={queue.length > 0}
+          hint={queue.length ? `${queue.filter((q) => 'overdue' in q.state && q.state.overdue).length} overdue` : 'All caught up'} /></Link>
+        <Link to="/properties"><StatTile icon="building" label="Available properties" value={available.length}
+          hint={`${matchCount} client ${matchCount === 1 ? 'match' : 'matches'}`} /></Link>
+        <Link to="/calls"><StatTile icon="phoneOut" label="Calls, last 7 days" value={weekCalls} hint={`${days[days.length - 1]?.total ?? 0} today`}>
+          <Sparkline values={days.map((d) => d.total)} />
+        </StatTile></Link>
       </div>
 
-      {/* Tier triage */}
-      <Card>
-        <CardHeader title="Referral triage" sub={`${tiers.total} active`}>
-          {tiers.urgent > 0 && (
-            <Link to="/pipeline?urgency=urgent" className="rounded px-2 py-0.5 text-[13px] font-semibold hover:underline" style={{ background: 'var(--stage-lost-bg)', color: 'var(--stage-lost-fg)' }}>
-              {tiers.urgent} urgent
-            </Link>
-          )}
-          <Link to="/pipeline" className="text-[13px] text-[var(--link)] hover:underline">Open</Link>
-        </CardHeader>
-        <div className="grid grid-cols-3 divide-x divide-[var(--line)]">
-          {([1, 2, 3] as Tier[]).map((t) => {
-            const count = tiers.counts[t];
-            const pct = tiers.total ? Math.round((count / tiers.total) * 100) : 0;
-            return (
-              <button
-                key={t}
-                onClick={() => navigate(`/pipeline?tier=${t}`)}
-                className="flex flex-col items-center gap-2 p-5 text-center transition-colors hover:bg-[var(--paper)]"
-              >
-                <TierBadge tier={t} />
-                <div className="font-mono text-[28px] font-bold" style={{ color: TIER_META[t].fg }}>{count}</div>
-                <div className="text-[13px] text-[var(--ink-muted)]">{pct}% of active</div>
-              </button>
-            );
-          })}
-        </div>
-      </Card>
-
-      <div className="grid gap-6 md:grid-cols-[1fr_360px]">
-        {/* Pipeline breakdown */}
+      <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+        {/* Triage */}
         <Card>
-          <CardHeader title="Pipeline" sub={`${applicants.length} total`}>
+          <CardHeader icon="layers" title="Referral triage" sub={`${active.length} active`}>
+            {urgent > 0 && <Link to="/pipeline?urgency=urgent" className="hover:opacity-80"><UrgentChip /></Link>}
+            <Link to="/settings" className="text-[13px] text-[var(--link)] hover:underline">Rules</Link>
+          </CardHeader>
+          <div className="flex flex-wrap items-center gap-6 p-5">
+            <Donut size={150} centre={active.length} centreSub="active clients"
+              slices={([1, 2, 3] as Tier[]).map((t) => ({ label: `Tier ${t}`, value: tiers[t], color: TIER_COLOR[t] }))} />
+            <Legend slices={([1, 2, 3] as Tier[]).map((t) => ({ label: `Tier ${t}`, value: tiers[t], color: TIER_COLOR[t] }))}
+              onPick={(label) => navigate(`/pipeline?tier=${label.slice(-1)}`)} />
+          </div>
+        </Card>
+
+        {/* Calls chart */}
+        <Card>
+          <CardHeader icon="trend" title="Calls, last 14 days" sub={`${days.reduce((s, d) => s + d.total, 0)} calls`}>
+            <Link to="/calls" className="text-[13px] text-[var(--link)] hover:underline">Open</Link>
+          </CardHeader>
+          <div className="p-5">
+            <DayBars height={110} bars={days.map((d) => ({
+              label: new Date(`${d.date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'narrow' }),
+              sub: new Date(`${d.date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
+              value: d.total, highlight: d.answered, today: d.date === today,
+            }))} />
+            <div className="mt-2 flex gap-4 text-[13px] text-[var(--ink-muted)]">
+              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[var(--accent)]" />Answered</span>
+              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[var(--ink-faint)] opacity-60" />Not answered</span>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
+        {/* To call */}
+        <Card>
+          <CardHeader icon="flag" title="To call now" sub={String(queue.length)}>
+            <Link to="/calls" className="text-[13px] text-[var(--link)] hover:underline">See all</Link>
+          </CardHeader>
+          {queue.length === 0 ? (
+            <Empty icon="check" title="You are all caught up">New clients and follow-ups you set will appear here.</Empty>
+          ) : (
+            <ul className="m-0 list-none p-2">
+              {queue.slice(0, 6).map(({ a, state, last: lc }) => (
+                <li key={a.id}>
+                  <Link to={`/applicants/${a.id}`} className="flex items-center gap-3 rounded-md px-3 py-2.5 hover:bg-[var(--surface-2)]">
+                    <Avatar name={a.full_name} size={34} accent={effectiveTier(a) === 1} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="truncate text-[15px] font-medium text-[var(--ink)]">{a.full_name}</span>
+                        <TierBadge tier={effectiveTier(a)} />
+                        {isUrgent(a) && <UrgentChip />}
+                      </div>
+                      <div className="text-[13px] text-[var(--ink-muted)]">
+                        {queueLabel(state)}
+                        {lc ? ` · last: ${OUTCOME_LABEL[lc.outcome].toLowerCase()}` : ''}
+                      </div>
+                    </div>
+                    <Icon name="phoneOut" size={18} className="text-[var(--accent)]" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        {/* Pipeline funnel */}
+        <Card>
+          <CardHeader icon="list" title="Pipeline" sub={`${applicants.length} clients`}>
             <Link to="/pipeline" className="text-[13px] text-[var(--link)] hover:underline">Open</Link>
           </CardHeader>
-          <ul className="m-0 list-none p-0">
-            {ACTIVE_STAGES.map((stage) => {
-              const count = byStage(stage);
-              const pct = applicants.length ? (count / applicants.length) * 100 : 0;
-              return (
-                <li key={stage} className="flex items-center gap-3 border-b border-[var(--line)] px-5 py-2.5 last:border-b-0">
-                  <span className="w-28 text-[15px] text-[var(--ink)]">{STAGE_LABEL[stage]}</span>
-                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--paper)]">
-                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: 'var(--hull)' }} />
+          <div className="flex flex-col gap-0.5 p-3">
+            {FUNNEL.map((f) => (
+              <Meter key={f.stage} label={f.label} value={byStage(f.stage)} max={funnelMax} accent={f.stage === 'placed' || f.stage === 'offer'}
+                onClick={() => navigate(`/pipeline?stage=${f.stage}`)} />
+            ))}
+            <div className="mt-1 px-2 text-[13px] text-[var(--ink-muted)]">
+              {applicants.filter((a) => a.stage === 'lost').length} lost
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Recent activity */}
+      <Card>
+        <CardHeader icon="clock" title="Recent activity" />
+        {recent.length === 0 ? (
+          <Empty icon="inbox" title="Nothing yet">Paste a screenshot or a website enquiry into the Bin to begin.</Empty>
+        ) : (
+          <ul className="m-0 grid list-none gap-x-6 p-2 md:grid-cols-2">
+            {recent.map((act) => {
+              const name = act.entity_type === 'applicant' ? nameOf(act.entity_id) : null;
+              const inner = (
+                <>
+                  <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${act.kind === 'call' ? 'bg-[var(--accent-soft)] text-[var(--accent-ink)]' : 'bg-[var(--paper-2)] text-[var(--ink-muted)]'}`}>
+                    <Icon name={activityIcon(act)} size={15} />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="truncate text-[15px] text-[var(--ink)]">{name && act.kind === 'call' ? `${name}: ${act.body}` : act.body}</div>
+                    <div className="text-[13px] text-[var(--ink-muted)]">{timeAgo(act.created_at)}</div>
                   </div>
-                  <span className="w-6 text-right font-mono text-[15px] text-[var(--ink-muted)]">{count}</span>
+                </>
+              );
+              return (
+                <li key={act.id}>
+                  {name ? (
+                    <Link to={`/applicants/${act.entity_id}`} className="flex items-center gap-3 rounded-md px-3 py-2 hover:bg-[var(--surface-2)]">{inner}</Link>
+                  ) : (
+                    <div className="flex items-center gap-3 px-3 py-2">{inner}</div>
+                  )}
                 </li>
               );
             })}
           </ul>
-        </Card>
-
-        {/* Recent activity */}
-        <Card>
-          <CardHeader title="Recent activity" />
-          <div className="p-5">
-            {recent.length === 0 ? (
-              <p className="m-0 text-[15px] text-[var(--ink-muted)]">Nothing yet. Paste a screenshot to begin.</p>
-            ) : (
-              <ul className="m-0 flex list-none flex-col gap-3 p-0">
-                {recent.map((act) => {
-                  const name = act.entity_type === 'applicant' ? nameOf(act.entity_id) : null;
-                  const fromShot = act.body.includes('screenshot') || act.inbox_item_id != null;
-                  return (
-                    <li key={act.id} className="flex gap-2.5">
-                      <span aria-hidden className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: fromShot ? 'var(--brass)' : 'var(--line-strong)' }} />
-                      <div className="min-w-0">
-                        {name ? (
-                          <button onClick={() => navigate(`/applicants/${act.entity_id}`)} className="text-left text-[15px] text-[var(--ink)] hover:underline">
-                            {act.body}
-                          </button>
-                        ) : (
-                          <div className="text-[15px] text-[var(--ink)]">{act.body}</div>
-                        )}
-                        <div className="font-mono text-[13px] text-[var(--ink-muted)]">{timeAgo(act.created_at)}</div>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-        </Card>
-      </div>
+        )}
+      </Card>
     </div>
   );
 }
 
-function StatCard({ label, value, to, tone }: { label: string; value: string; to: string; tone?: string }) {
-  return (
-    <Link to={to} className="block">
-      <Card className="p-4 transition-shadow hover:shadow-[var(--shadow-pop)]">
-        <div className="text-[13px] text-[var(--ink-muted)]">{label}</div>
-        <div className="mt-1 font-mono text-[22px] font-semibold" style={{ color: tone ?? 'var(--ink)' }}>{value}</div>
-      </Card>
-    </Link>
-  );
+function activityIcon(a: Activity): IconName {
+  if (a.kind === 'call') return 'phone';
+  if (a.kind === 'stage_change') return 'arrowRight';
+  if (a.entity_type === 'property') return 'building';
+  if (a.kind === 'created') return a.body.includes('screenshot') ? 'inbox' : 'plus';
+  return 'pencil';
 }
 
-function getGreeting(): string {
+function greeting(): string {
   const h = new Date().getHours();
   if (h < 12) return 'Good morning';
   if (h < 17) return 'Good afternoon';

@@ -1,17 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useApplicants, useContacts, useProperties } from '../../lib/hooks';
+import { useApplicants, useProperties } from '../../lib/hooks';
+import { Avatar, Icon } from '../../components/ui';
 import { areaOf, matchesTerms, parseQuery, searchText } from '../../lib/search';
 
 interface Hit {
   id: string;
   label: string;
   sub: string;
-  group: 'Applicants' | 'Properties' | 'Contacts';
+  group: 'Clients' | 'Properties';
   to: string;
 }
 
-/** Global ⌘K / Ctrl-K search (§8.7) across applicants, properties, contacts. */
+/** Opens the search from anywhere, e.g. the search button in the header. */
+export const openSearch = () => window.dispatchEvent(new Event('keel:search'));
+
+/** Global ⌘K / Ctrl-K search (§8.7) across clients and properties. */
 export function CommandSearch() {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
@@ -21,7 +25,6 @@ export function CommandSearch() {
 
   const { data: applicants = [] } = useApplicants();
   const { data: properties = [] } = useProperties();
-  const { data: contacts = [] } = useContacts();
 
   // Open on Cmd/Ctrl-K
   useEffect(() => {
@@ -32,8 +35,10 @@ export function CommandSearch() {
       }
       if (e.key === 'Escape') setOpen(false);
     };
+    const onOpen = () => setOpen(true);
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keel:search', onOpen);
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keel:search', onOpen); };
   }, []);
 
   useEffect(() => {
@@ -52,7 +57,7 @@ export function CommandSearch() {
     const terms = parseQuery(q);
     for (const a of applicants) {
       if (matchesTerms(searchText(a), terms)) {
-        out.push({ id: a.id, label: a.full_name, sub: [areaOf(a), a.stage].filter(Boolean).join(' · '), group: 'Applicants', to: `/applicants/${a.id}` });
+        out.push({ id: a.id, label: a.full_name, sub: [areaOf(a), a.stage].filter(Boolean).join(' · '), group: 'Clients', to: `/applicants/${a.id}` });
       }
     }
     for (const p of properties) {
@@ -60,13 +65,8 @@ export function CommandSearch() {
         out.push({ id: p.id, label: p.address_line, sub: [p.postcode, p.status].filter(Boolean).join(' · '), group: 'Properties', to: '/properties' });
       }
     }
-    for (const c of contacts) {
-      if (c.full_name.toLowerCase().includes(s) || c.organisation?.toLowerCase().includes(s)) {
-        out.push({ id: c.id, label: c.full_name, sub: [c.organisation, c.borough].filter(Boolean).join(' · '), group: 'Contacts', to: '/contacts' });
-      }
-    }
     return out.slice(0, 12);
-  }, [q, applicants, properties, contacts]);
+  }, [q, applicants, properties]);
 
   const go = (hit: Hit) => {
     setOpen(false);
@@ -76,11 +76,13 @@ export function CommandSearch() {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-start justify-center bg-black/40 pt-[14vh]" onClick={() => setOpen(false)}>
+    <div className="fixed inset-0 z-50 grid place-items-start justify-center bg-[rgba(42,40,36,0.35)] pt-[14vh] backdrop-blur-[2px]" onClick={() => setOpen(false)}>
       <div
         onClick={(e) => e.stopPropagation()}
         className="flex w-[min(600px,94vw)] flex-col overflow-hidden rounded-lg border border-[var(--line-strong)] bg-[var(--surface)] shadow-[var(--shadow-pop)]"
       >
+        <div className="flex items-center gap-3 border-b border-[var(--line)] px-4">
+        <Icon name="search" size={20} className="text-[var(--ink-muted)]" />
         <input
           ref={inputRef}
           value={q}
@@ -90,9 +92,10 @@ export function CommandSearch() {
             if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
             if (e.key === 'Enter' && hits[active]) go(hits[active]);
           }}
-          placeholder="Search applicants, properties, contacts…"
-          className="border-b border-[var(--line)] bg-transparent px-4 py-3 text-[18px] text-[var(--ink)] outline-none"
+          placeholder="Search clients and properties…"
+          className="min-w-0 flex-1 bg-transparent py-3.5 text-[18px] text-[var(--ink)] outline-none"
         />
+        </div>
         <div className="max-h-[60vh] overflow-y-auto py-1">
           {q && hits.length === 0 && (
             <div className="px-4 py-6 text-center text-[15px] text-[var(--ink-muted)]">No matches.</div>
@@ -103,11 +106,10 @@ export function CommandSearch() {
               onClick={() => go(hit)}
               onMouseEnter={() => setActive(i)}
               className="flex w-full items-center gap-3 px-4 py-2.5 text-left"
-              style={{ background: i === active ? 'var(--paper)' : 'transparent' }}
+              style={{ background: i === active ? 'var(--surface-2)' : 'transparent' }}
             >
-              <span className="rounded bg-[var(--stage-lead-bg)] px-1.5 py-0.5 text-[13px] text-[var(--stage-lead-fg)]">
-                {hit.group.slice(0, -1)}
-              </span>
+              {hit.group === 'Clients' ? <Avatar name={hit.label} size={30} />
+                : <span className="grid h-[30px] w-[30px] place-items-center rounded-full bg-[var(--paper-2)] text-[var(--ink-muted)]"><Icon name="building" size={16} /></span>}
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[15px] text-[var(--ink)]">{hit.label}</span>
                 {hit.sub && <span className="block truncate font-mono text-[13px] text-[var(--ink-muted)]">{hit.sub}</span>}

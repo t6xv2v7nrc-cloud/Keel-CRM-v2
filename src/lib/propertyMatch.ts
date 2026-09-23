@@ -9,14 +9,16 @@
 // where they want to live all count, ranked below a direct fit. Every match
 // carries plain-English reasons and cautions so the decision stays with you.
 //
-// House rule: anything over £1,300 pcm is always offered to clients on PIP
-// (alone or with UC / LCWRA) or in full-time work, whatever their stated
-// budget or area, unless the property physically cannot work for them.
+// House rule (Settings): anything over the premium rent (standard £1,300 pcm)
+// is always offered to clients on PIP (alone or with UC / LCWRA) or in
+// full-time work, whatever their stated budget or area, unless the property
+// physically cannot work for them.
 
 import type { Applicant } from './types';
 import { benefitsOf, effectiveTier, householdOf, isUrgent } from './search';
 import type { HouseholdKey } from './search';
 import { URGENCY_LABEL } from './tiering';
+import { activeSettings } from './settings';
 import {
   areNeighbours, areasIn, boroughFromDistrict, boroughOfArea, boroughsIn, canonicalBorough, districtOf, districtsIn,
   boroughsOfRegion, regionsIn, titleCase,
@@ -46,8 +48,6 @@ export interface Match {
 }
 
 const MATCHABLE_STAGES = new Set(['lead', 'referred', 'viewing', 'offer']);
-/** Above this rent, PIP and full-time clients are always offered the property. */
-export const PREMIUM_RENT = 1300;
 const NUM: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5 };
 const n = (s: string) => NUM[s.toLowerCase()] ?? Number(s);
 const money = (v: number) => `£${Math.round(v).toLocaleString('en-GB')}`;
@@ -64,7 +64,7 @@ interface Needs {
   strictArea: boolean; // "Harrow only", "nowhere else": no next-door suggestions
   openToOthers: boolean; // "I don't mind if it is further north": other areas are a caution, not a no
   selfContained: boolean; // asked for self-contained: no rooms
-  premiumOk: 'PIP' | 'full-time' | null; // can take a property over PREMIUM_RENT
+  premiumOk: string | null; // why they can take a property over the premium rent: "PIP", "full-time"...
   beds: { min: number; max: number; asked: boolean } | null;
   household: HouseholdKey | null;
   children: number;
@@ -72,6 +72,17 @@ interface Needs {
   furnished: 'yes' | 'no' | null;
   budget: number | null;
   onBenefits: boolean;
+}
+
+/** Why a client is always offered premium properties, per Settings, or null. */
+function premiumReason(a: Applicant): string | null {
+  const f = activeSettings().premiumFor;
+  const has = (k: string) => benefitsOf(a).some((b) => b.key === k);
+  if (f.pip && has('pip')) return 'PIP';
+  if (f.lcwra && has('lcwra')) return 'LCWRA';
+  if (f.fullTime && a.work_status === 'full_time') return 'full-time';
+  if (f.partTime && a.work_status === 'part_time') return 'part-time';
+  return null;
 }
 
 export function clientNeeds(a: Applicant): Needs {
@@ -129,7 +140,7 @@ export function clientNeeds(a: Applicant): Needs {
     strictArea,
     openToOthers: /\b(?:don'?t|do\s+not|wouldn'?t|would\s+not)\s+mind\b|\bopen\s+to\b|\bnot\s+fussy\b/i.test(text),
     selfContained,
-    premiumOk: benefitsOf(a).some((b) => b.key === 'pip') ? 'PIP' : a.work_status === 'full_time' ? 'full-time' : null,
+    premiumOk: premiumReason(a),
     flexible: /\b(anywhere|any\s+area|anywhere\s+in\s+london|flexible\s+on\s+area|open\s+to\s+(?:any|all|other)\s+areas?)\b/i.test(text),
     beds,
     household,
@@ -184,7 +195,8 @@ export function scoreMatch(p: PropertyLike, a: Applicant): Match | null {
   const askLabel = (min: number, max: number) =>
     min === max ? (min === 0 ? 'studio' : `${min} bed`) : min === 0 ? `studio or ${max} bed` : `${min}-${max} bed`;
 
-  const premium = p.rent_pcm != null && p.rent_pcm > PREMIUM_RENT;
+  const premiumRent = activeSettings().premiumRent;
+  const premium = p.rent_pcm != null && p.rent_pcm > premiumRent;
   const premiumFit = premium && need.premiumOk !== null;
 
   // Size (a room for a family or a couple, or a studio for a family, never works)
@@ -216,7 +228,7 @@ export function scoreMatch(p: PropertyLike, a: Applicant): Match | null {
   // Rent
   if (premiumFit) {
     score += 15;
-    reasons.push(`Over ${money(PREMIUM_RENT)}, open to ${need.premiumOk === 'PIP' ? 'PIP' : 'full-time'} clients`);
+    reasons.push(`Over ${money(premiumRent)}, open to ${need.premiumOk} clients`);
   } else if (p.rent_pcm != null && need.budget) {
     const over = p.rent_pcm - need.budget;
     if (over <= 0) { score += 15; reasons.push(`${money(p.rent_pcm)} within ${money(need.budget)} budget`); }
@@ -228,7 +240,7 @@ export function scoreMatch(p: PropertyLike, a: Applicant): Match | null {
   }
   if (premium && !premiumFit && !(need.budget && p.rent_pcm! <= need.budget)) {
     score -= 5;
-    cautions.push(`Over ${money(PREMIUM_RENT)} with no PIP or full-time work: check they can afford it`);
+    cautions.push(`Over ${money(premiumRent)}: check they can afford it`);
   }
 
   // Area, best fit first
@@ -295,8 +307,11 @@ const RANK: Record<Strength, number> = { strong: 0, good: 1, possible: 2 };
 const byBest = (x: Match, y: Match) =>
   RANK[x.strength] - RANK[y.strength] || y.score - x.score || effectiveTier(x.applicant) - effectiveTier(y.applicant);
 
+/** Settings can hide "Possible" matches. */
+const shown = (m: Match) => m.strength !== 'possible' || activeSettings().showPossibleMatches;
+
 export function matchesForProperty(p: PropertyLike, applicants: Applicant[]): Match[] {
-  return applicants.map((a) => scoreMatch(p, a)).filter((m): m is Match => m !== null).sort(byBest);
+  return applicants.map((a) => scoreMatch(p, a)).filter((m): m is Match => m !== null && shown(m)).sort(byBest);
 }
 
 export interface PropertyMatch<P extends PropertyLike> { property: P; match: Match }
@@ -304,6 +319,6 @@ export interface PropertyMatch<P extends PropertyLike> { property: P; match: Mat
 export function matchesForApplicant<P extends PropertyLike>(a: Applicant, properties: P[]): PropertyMatch<P>[] {
   return properties
     .map((property) => ({ property, match: scoreMatch(property, a) }))
-    .filter((x): x is PropertyMatch<P> => x.match !== null)
+    .filter((x): x is PropertyMatch<P> => x.match !== null && shown(x.match))
     .sort((x, y) => byBest(x.match, y.match));
 }

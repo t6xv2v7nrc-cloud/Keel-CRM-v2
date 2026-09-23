@@ -6,9 +6,11 @@ Read `KEEL_CRM_PLAN.md` for the full build plan. Work phase by phase; do not sta
 
 ```
 src/
-  lib/        supabase.ts, matching.ts, format.ts (phone/E.164, money, dates)
-  components/ ui primitives on tokens (Button, Badge, Card, Field, Toast, KeelLine)
-  features/   bin/ pipeline/ applicants/ properties/ contacts/ fees/
+  lib/        supabase.ts, matching.ts, format.ts (phone/E.164, money, dates),
+              settings.ts (shared rules), tiering.ts, calls.ts, propertyMatch.ts
+  components/ ui primitives on tokens (Button, Badge, Card, Field, Toast, KeelLine,
+              Icon, Visuals: avatars, page headers, stat tiles, SVG charts)
+  features/   dashboard/ bin/ pipeline/ calls/ applicants/ properties/ settings/
   types/      extraction.ts (shared contract, imported by netlify functions)
 netlify/functions/ extract.ts, lib/prompt.ts, lib/claude.ts
 supabase/migrations/
@@ -21,7 +23,10 @@ supabase/migrations/
 - British English in all UI copy; no em dashes in user-facing text.
 - Every DB write that changes state creates an `activities` row.
 - Commit per phase with `phase-N:` prefix.
-- Styling: Tailwind utilities + CSS custom-property tokens from `src/styles/tokens.css` (§7 of the plan). No component libraries.
+- Styling: Tailwind utilities + CSS custom-property tokens from `src/styles/tokens.css`. No component libraries.
+  Palette: creamy greys with one green accent (`--accent`); brick red only for delete and errors.
+  Use the semantic tokens (`--note-*` for cautions, `--chip-*` for tags, `--strong/good/possible-*`, `--tier-N-*`), not stage colours.
+- Rules that change behaviour (tiers, urgency, premium rent, call follow-ups) live in Settings (`lib/settings.ts`), not constants.
 - Buttons say what they do ("Confirm and update Lubna", not "Submit"). Sentence case everywhere.
 - Stage moves are monotonic by default; regressions need an explicit user toggle.
 
