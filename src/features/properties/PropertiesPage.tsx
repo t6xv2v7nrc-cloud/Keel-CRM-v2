@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button, Card, TierBadge, useToast } from '../../components/ui';
 import {
-  PROPERTY_STATUS_LABEL, useApplicants, useDeleteProperties, useProperties, useSetPropertyStatus,
+  NeedsDatabaseUpdate, PROPERTY_STATUS_LABEL, useAddProperties, useApplicants, useDeleteProperties, useProperties, useSetPropertyStatus,
 } from '../../lib/hooks';
 import { isLocalProperty, localProperties } from '../../lib/localProperties';
-import type { NewProperty } from '../../lib/hooks';
+import type { NewProperty, SavedProperty } from '../../lib/hooks';
 import type { Applicant, Property } from '../../lib/types';
 import { parsePropertyList } from '../../lib/parseProperties';
 import type { ParsedProperty } from '../../lib/parseProperties';
@@ -26,6 +26,14 @@ const STRENGTH: Record<Strength, { label: string; bg: string; fg: string }> = {
 };
 
 const isAvailable = (p: Property) => p.status === 'void' || p.status === 'under_offer';
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** A property saved on this device, ready to move to the account (keeps its status and save time). */
+const toSaved = (p: Property): SavedProperty => ({
+  address_line: p.address_line, postcode: p.postcode, area: p.area, borough: p.borough, property_type: p.property_type,
+  bedrooms: p.bedrooms, rent_pcm: p.rent_pcm, rent_text: p.rent_text, bills: p.bills, furnished: p.furnished,
+  available_from: p.available_from, notes: p.notes, source_tag: p.source_tag, status: p.status, created_at: p.created_at,
+});
 
 /** Properties (§8.4): paste a stock list, see every property matched to clients. */
 export function PropertiesPage() {
@@ -33,7 +41,29 @@ export function PropertiesPage() {
   const { data: applicants = [] } = useApplicants();
   const setStatus = useSetPropertyStatus();
   const del = useDeleteProperties();
+  const add = useAddProperties();
   const { toast } = useToast();
+  const [needsUpdate, setNeedsUpdate] = useState(false);
+
+  // Lists saved before syncing existed live only in this browser: move them to the account once.
+  const deviceOnly = properties.filter((p) => isLocalProperty(p.id));
+  const moveToAccount = async (ps: Property[]) => {
+    try {
+      await add.mutateAsync({ rows: ps.map(toSaved), source: '' });
+      localProperties.remove(ps.map((p) => p.id));
+      setNeedsUpdate(false);
+      toast(`Moved ${plural(ps.length, 'property', 'properties')} from this device to your account. They now show on your phone too.`, 'success');
+    } catch (e) {
+      if (e instanceof NeedsDatabaseUpdate) setNeedsUpdate(true);
+      else toast(`Could not move saved properties to your account: ${(e as Error).message}`, 'danger');
+    }
+  };
+  const moveTried = useRef(false);
+  useEffect(() => {
+    if (moveTried.current || isLoading || deviceOnly.length === 0) return;
+    moveTried.current = true;
+    void moveToAccount(deviceOnly);
+  });
 
   const [pasteOpen, setPasteOpen] = useState(false);
   const [listsOpen, setListsOpen] = useState(false);
@@ -99,14 +129,25 @@ export function PropertiesPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {properties.some((p) => isLocalProperty(p.id)) && (
+          {properties.length > 0 && (
             <Button onClick={() => setListsOpen((v) => !v)}>{listsOpen ? 'Hide saved lists' : 'Saved lists'}</Button>
           )}
           {!showPaste && <Button variant="brass" onClick={() => setPasteOpen(true)}>Paste properties</Button>}
         </div>
       </header>
 
-      {listsOpen && <SavedLists properties={properties.filter((p) => isLocalProperty(p.id))} onClose={() => setListsOpen(false)} />}
+      {needsUpdate && (
+        <div role="alert" className="rounded-md border border-[var(--stage-offer-fg)] bg-[var(--stage-offer-bg)] p-4 text-[15px] text-[var(--ink)]">
+          <strong>Lists cannot sync to your phone yet.</strong> The database needs a one-off update: in Supabase, open the SQL Editor,
+          paste in <code className="font-mono text-[13px]">supabase/migrations/0004_properties_import.sql</code> and click Run. Then reload this page.
+          {deviceOnly.length > 0 && <> Your {plural(deviceOnly.length, 'property', 'properties')} saved on this device will move across then.</>}
+        </div>
+      )}
+
+      {listsOpen && (
+        <SavedLists properties={properties} onClose={() => setListsOpen(false)}
+          onMove={(ps) => void moveToAccount(ps)} moving={add.isPending} />
+      )}
 
       {showPaste && (
         <PasteImport
@@ -114,12 +155,13 @@ export function PropertiesPage() {
           applicants={applicants}
           canClose={properties.length > 0}
           onClose={() => setPasteOpen(false)}
-          onAdded={(added) => {
+          onNeedsUpdate={() => setNeedsUpdate(true)}
+          onAdded={(added, where) => {
             setJustAdded(new Set(added.map((p) => p.id)));
             setPasteOpen(false);
             setStatusFilter('available');
             const found = added.reduce((s, p) => s + matchesForProperty(p, applicants).length, 0);
-            toast(`Saved ${added.length} ${added.length === 1 ? 'property' : 'properties'} on this device · ${found} client ${found === 1 ? 'match' : 'matches'}`, 'success');
+            toast(`Saved ${plural(added.length, 'property', 'properties')} ${where === 'account' ? 'to your account, so they show on your phone too' : 'on this device only'} · ${plural(found, 'client match', 'client matches')}`, 'success');
           }}
         />
       )}
@@ -186,17 +228,20 @@ export function PropertiesPage() {
   );
 }
 
-// ── Saved lists (this device) and purging ─────────────────────────
+// ── Saved lists and purging ────────────────────────────────────────
 
 const PURGE_AFTER_DAYS = 14;
 
-function SavedLists({ properties, onClose }: { properties: Property[]; onClose: () => void }) {
+function SavedLists({ properties, onClose, onMove, moving }: {
+  properties: Property[]; onClose: () => void; onMove: (ps: Property[]) => void; moving: boolean;
+}) {
   const { toast } = useToast();
+  const del = useDeleteProperties();
   // Each paste is saved in one go, so a list is the properties sharing a save time and source.
   const lists = useMemo(() => {
     const by = new Map<string, Property[]>();
     for (const p of properties) {
-      const key = `${p.created_at}|${p.source_tag ?? ''}`;
+      const key = `${p.created_at}|${p.source_tag ?? ''}|${isLocalProperty(p.id)}`;
       by.set(key, [...(by.get(key) ?? []), p]);
     }
     return [...by.values()].sort((a, b) => b[0].created_at.localeCompare(a[0].created_at));
@@ -207,18 +252,20 @@ function SavedLists({ properties, onClose }: { properties: Property[]; onClose: 
 
   const purge = (ps: Property[], what: string) => {
     if (ps.length === 0) return;
-    if (!window.confirm(`Purge ${what} (${ps.length} ${ps.length === 1 ? 'property' : 'properties'}) from this device? This cannot be undone.`)) return;
-    localProperties.remove(ps.map((p) => p.id));
-    toast(`Purged ${ps.length} ${ps.length === 1 ? 'property' : 'properties'}`, 'success');
+    if (!window.confirm(`Purge ${what} (${plural(ps.length, 'property', 'properties')})? This removes them from every device and cannot be undone.`)) return;
+    del.mutate(ps.map((p) => p.id), {
+      onSuccess: () => toast(`Purged ${plural(ps.length, 'property', 'properties')}`, 'success'),
+      onError: (e) => toast(`Purge failed: ${(e as Error).message}`, 'danger'),
+    });
   };
 
   return (
     <Card className="flex flex-col gap-4 p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="m-0 text-[18px] font-semibold text-[var(--ink)]">Saved lists on this device</h2>
+          <h2 className="m-0 text-[18px] font-semibold text-[var(--ink)]">Saved lists</h2>
           <p className="m-0 mt-1 max-w-[720px] text-[15px] text-[var(--ink-muted)]">
-            Pasted lists are kept in this browser, so they are not on your other devices. Purge them when they go out of date.
+            Lists are saved to your account, so they show on your phone and any other device you sign in on. Purge them when they go out of date.
           </p>
         </div>
         <button onClick={onClose} className="text-[15px] text-[var(--link)] hover:underline">Close</button>
@@ -227,17 +274,24 @@ function SavedLists({ properties, onClose }: { properties: Property[]; onClose: 
       <ul className="m-0 flex list-none flex-col divide-y divide-[var(--line)] rounded-md border border-[var(--line)] p-0">
         {lists.map((ps) => {
           const available = ps.filter((p) => p.status === 'void' || p.status === 'under_offer').length;
+          const onDevice = ps.filter((p) => isLocalProperty(p.id));
           return (
-            <li key={`${ps[0].created_at}|${ps[0].source_tag ?? ''}`} className="flex flex-wrap items-center gap-3 px-4 py-3">
+            <li key={`${ps[0].created_at}|${ps[0].source_tag ?? ''}|${onDevice.length > 0}`} className="flex flex-wrap items-center gap-3 px-4 py-3">
               <div className="min-w-0 flex-1">
-                <div className="text-[15px] font-medium text-[var(--ink)]">
-                  {ps[0].source_tag ? `From ${ps[0].source_tag}` : 'Pasted list'}, saved {shortDate(ps[0].created_at)}
+                <div className="flex flex-wrap items-center gap-2 text-[15px] font-medium text-[var(--ink)]">
+                  {ps[0].source_tag ? `From ${ps[0].source_tag}` : 'List'}, saved {shortDate(ps[0].created_at)}
+                  {onDevice.length > 0 && <DeviceOnlyTag />}
                 </div>
                 <div className="text-[13px] text-[var(--ink-muted)]">
                   {ps.length} {ps.length === 1 ? 'property' : 'properties'} · {available} still available
                 </div>
               </div>
-              <Button variant="danger" className="min-h-0 px-3 py-1.5 text-[13px]"
+              {onDevice.length > 0 && (
+                <Button className="min-h-0 px-3 py-1.5 text-[13px]" disabled={moving} onClick={() => onMove(onDevice)}>
+                  Move to your account
+                </Button>
+              )}
+              <Button variant="danger" className="min-h-0 px-3 py-1.5 text-[13px]" disabled={del.isPending}
                 onClick={() => purge(ps, ps[0].source_tag ? `the list from ${ps[0].source_tag}` : 'this list')}>
                 Purge this list
               </Button>
@@ -265,14 +319,17 @@ function SavedLists({ properties, onClose }: { properties: Property[]; onClose: 
 
 type Draft = ParsedProperty & { key: string; include: boolean; duplicate: boolean };
 
-function PasteImport({ existing, applicants, canClose, onClose, onAdded }: {
+function PasteImport({ existing, applicants, canClose, onClose, onAdded, onNeedsUpdate }: {
   existing: Property[];
   applicants: Applicant[];
   canClose: boolean;
   onClose: () => void;
-  onAdded: (added: Property[]) => void;
+  onAdded: (added: Property[], where: 'account' | 'device') => void;
+  onNeedsUpdate: () => void;
 }) {
   const { toast } = useToast();
+  const add = useAddProperties();
+  const [blocked, setBlocked] = useState(false); // the database is not ready for lists yet
   const [text, setText] = useState('');
   const [source, setSource] = useState('');
   const [drafts, setDrafts] = useState<Draft[] | null>(null);
@@ -295,16 +352,23 @@ function PasteImport({ existing, applicants, canClose, onClose, onAdded }: {
 
   const chosen = (drafts ?? []).filter((d) => d.include);
 
-  const save = () => {
-    const rows: NewProperty[] = chosen.map((d) => ({
-      address_line: d.address_line, postcode: d.postcode, area: d.area, borough: d.borough,
-      property_type: d.property_type, bedrooms: d.bedrooms, rent_pcm: d.rent_pcm, rent_text: d.rent_text,
-      bills: d.bills, furnished: d.furnished, available_from: d.available_from, notes: d.notes,
-      source_tag: source.trim() || null,
-    }));
-    const { added, saved } = localProperties.add(rows);
+  const rows = (): NewProperty[] => chosen.map((d) => ({
+    address_line: d.address_line, postcode: d.postcode, area: d.area, borough: d.borough,
+    property_type: d.property_type, bedrooms: d.bedrooms, rent_pcm: d.rent_pcm, rent_text: d.rent_text,
+    bills: d.bills, furnished: d.furnished, available_from: d.available_from, notes: d.notes,
+    source_tag: source.trim() || null,
+  }));
+  const save = () => add.mutate({ rows: rows(), source: source.trim() }, {
+    onSuccess: (added) => { setText(''); setDrafts(null); onAdded(added, 'account'); },
+    onError: (e) => {
+      if (e instanceof NeedsDatabaseUpdate) { setBlocked(true); onNeedsUpdate(); }
+      else toast(`Could not save the list: ${(e as Error).message}`, 'danger');
+    },
+  });
+  const saveOnDevice = () => {
+    const { added, saved } = localProperties.add(rows());
     if (!saved) toast('This browser would not save the list, so it will be gone when you close the tab. Check you are not in a private window.', 'danger');
-    setText(''); setDrafts(null); onAdded(added);
+    setText(''); setDrafts(null); onAdded(added, 'device');
   };
 
   return (
@@ -315,7 +379,7 @@ function PasteImport({ existing, applicants, canClose, onClose, onAdded }: {
           <p className="m-0 mt-1 max-w-[720px] text-[15px] text-[var(--ink-muted)]">
             One property per line or per block, or rows copied from a spreadsheet. Notes that apply to every property,
             like "They are all en-suite rooms" or "Rent is 1-bed LHA", are applied to each one. Lines marked let,
-            taken or under offer are skipped. The list is saved on this device, and you can purge it under Saved lists.
+            taken or under offer are skipped. Lists are saved to your account, so they show on your phone too.
           </p>
         </div>
         {canClose && <button onClick={onClose} className="text-[15px] text-[var(--link)] hover:underline">Close</button>}
@@ -427,10 +491,16 @@ function PasteImport({ existing, applicants, canClose, onClose, onAdded }: {
             })}
           </div>
 
-          <div className="flex justify-end gap-2">
+          {/* Stays on screen while scrolling a long list, so Save is always in reach */}
+          <div className="sticky bottom-0 z-10 -mx-5 -mb-5 flex flex-wrap items-center justify-end gap-2 rounded-b-lg border-t border-[var(--line)] bg-[var(--surface)] px-5 py-3 shadow-[0_-6px_16px_rgba(0,0,0,0.08)]">
+            <span className="mr-auto text-[15px] text-[var(--ink)]">
+              {blocked ? <span className="text-[var(--danger)]">Cannot sync yet: see the note at the top of the page.</span>
+                : <><strong>{chosen.length}</strong> of {plural(drafts.length, 'property', 'properties')} ticked</>}
+            </span>
             <Button onClick={() => setDrafts(null)}>Back</Button>
-            <Button variant="primary" onClick={save} disabled={chosen.length === 0}>
-              Save {chosen.length} {chosen.length === 1 ? 'property' : 'properties'}
+            {blocked && <Button onClick={saveOnDevice} disabled={chosen.length === 0}>Save on this device for now</Button>}
+            <Button variant="primary" onClick={save} disabled={chosen.length === 0 || add.isPending}>
+              {add.isPending ? 'Saving…' : `Save ${plural(chosen.length, 'property', 'properties')}`}
             </Button>
           </div>
         </>
@@ -471,7 +541,7 @@ function PropertyCard({ p, matches, isNew, selected, onToggle, onStatus, onDelet
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="m-0 text-[18px] font-semibold text-[var(--ink)]">{p.address_line}</h3>
             {isNew && <span className="rounded bg-[var(--brass)] px-2 py-0.5 text-[13px] font-semibold text-[var(--brass-text)]">New</span>}
-            {!isLocalProperty(p.id) && <span className="rounded bg-[var(--paper)] px-2 py-0.5 text-[13px] text-[var(--ink-muted)]">In database</span>}
+            {isLocalProperty(p.id) && <DeviceOnlyTag />}
           </div>
           <div className="mt-1 text-[15px] text-[var(--ink-muted)]">{facts.join(' · ') || 'No details'}</div>
         </div>
@@ -526,6 +596,10 @@ function MatchRow({ m }: { m: Match }) {
       )}
     </li>
   );
+}
+
+function DeviceOnlyTag() {
+  return <span className="rounded bg-[var(--stage-offer-bg)] px-2 py-0.5 text-[13px] font-normal text-[var(--stage-offer-fg)]">Only on this device</span>;
 }
 
 function StrengthBadge({ s }: { s: Strength }) {

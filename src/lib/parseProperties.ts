@@ -7,9 +7,11 @@
 //     every property that does not state its own value
 //   • multi-unit lines ("Units 1 & 2", "Flats 1-3") expanded into one row each
 //   • lines marked let / taken / under offer, or crossed out (~~), are skipped
+//   • a whole email: greetings, sign-off and signature are dropped, and place
+//     headings ("Barnet", "READING") set the borough for the listings below them
 
 import {
-  areasIn, boroughFromDistrict, boroughOfArea, canonicalBorough, districtOf, POSTCODE_RE, titleCase,
+  areasIn, boroughFromDistrict, boroughOfArea, canonicalBorough, districtOf, placeHeading, POSTCODE_RE, titleCase,
 } from './london';
 
 export interface ParsedProperty {
@@ -179,6 +181,9 @@ function expandUnits(line: string): string[] {
     .replace(/^\s*\d+\s*(?:x\s*)?(?:studios|flats|rooms|units|apartments)\s+(?=(?:Unit|Flat|Room|Apartment)\b)/i, ''));
 }
 
+// "London" or a county tells us nothing about the locality
+const GENERIC_PLACE_RE = /^(?:greater\s+)?london$|^(?:middlesex|herts|hertfordshire|surrey|essex|kent|berkshire|uk|united\s+kingdom|england)$/i;
+
 function parseAddress(line: string, today: Date) {
   const full = line.match(POSTCODE_RE);
   const district = districtOf(line);
@@ -208,7 +213,7 @@ function parseAddress(line: string, today: Date) {
   // Locality: the last piece that is not a street, unit or house number.
   const placePieces = addr
     .map((p) => p.replace(POSTCODE_RE, '').replace(/\b[A-Z]{1,2}\d[A-Z\d]?\s*$/i, '').trim())
-    .filter((p) => p && !STREET_RE.test(p) && !UNIT_PREFIX_RE.test(p) && !HOUSE_NUMBER_RE.test(p));
+    .filter((p) => p && !STREET_RE.test(p) && !UNIT_PREFIX_RE.test(p) && !HOUSE_NUMBER_RE.test(p) && !GENERIC_PLACE_RE.test(p));
   const placeText = placePieces.join(', ');
   const districtBorough = boroughFromDistrict(district);
   const borough = canonicalBorough(placeText) ?? districtBorough
@@ -267,15 +272,30 @@ function tableToLines(lines: string[]): string[] {
 
 const GLOBAL_RE = /\b(all|every|each|they\s+are|these\s+are|both|whole\s+block|throughout)\b/i;
 
+// Email wrapping around a list
+const GREETING_RE = /^(?:good\s+(?:morning|afternoon|evening|day)|hi|hello|hey|dear|morning|afternoon)\b[^.!?\d]{0,40}[,!.]?\s*$/i;
+const SIGNOFF_RE = /^(?:(?:kind|best|warm|warmest|many)\s+(?:regards|wishes|thanks)|with\s+(?:kind\s+)?regards|regards|thanks|thank\s+you|cheers|sincerely|yours\s+(?:sincerely|faithfully|truly))\b[^\d]{0,30}$/i;
+const HEADING_RE = /^(?:(?:current(?:ly)?|latest|our|new)\s+)?(?:available\s+)?(?:properties|property\s+list|stock|listings?|units)(?:\s+(?:available|below|list))?(?:\s+(?:this|next)\s+week|\s+now)?\s*:?$/i;
+const PLEASANTRY_RE = /^(?:please\s+(?:find|see|feel\s+free|let\s+(?:me|us)\s+know|do\s+not\s+hesitate|don'?t\s+hesitate|contact|get\s+in\s+touch|reach\s+out|call)|feel\s+free|do\s+not\s+hesitate|don'?t\s+hesitate|we\s+(?:will|would|'ll)\s+be\s+(?:happy|glad|pleased)|i\s+hope|hope\s+(?:you|this|all)|thanks?\b|thank\s+you|any\s+questions|if\s+you\s+have\s+any)/i;
+
+/** Keeps the facts in a note line and drops the pleasantries around them. */
+const withoutPleasantries = (line: string) =>
+  line.split(/(?<=[.!?])\s+/).filter((sentence) => !PLEASANTRY_RE.test(sentence.trim())).join(' ').trim();
+
+type Section = { borough: string | null; area: string | null };
+
 export function parsePropertyList(input: string, today = new Date()): ParseResult {
   let lines = input.replace(/\r/g, '').split('\n');
   if (lines.filter((l) => l.includes('\t')).length >= 2) lines = tableToLines(lines);
 
   const blocks: string[][] = [];
+  const blockSection = new Map<string[], Section>();
   const shared: string[] = [];
   const skipped: string[] = [];
   let group: string[][] = []; // blocks created by the latest listing line (several for "Units 1 & 2")
   let afterBlank = true;
+  let section: Section | null = null; // from a heading like "Barnet"
+  let signedOff = false; // after "Kind regards" comes the signature
 
   for (const raw of lines) {
     const line = cleanLead(raw);
@@ -288,12 +308,21 @@ export function parsePropertyList(input: string, today = new Date()): ParseResul
     }
     if (isListingLine(line, detect(line, today))) {
       group = expandUnits(line).map((l) => [l]);
-      blocks.push(...group);
+      for (const b of group) { blocks.push(b); if (section) blockSection.set(b, section); }
       afterBlank = false;
-    } else if (group.length && !afterBlank && !GLOBAL_RE.test(line)) {
+      continue;
+    }
+    if (signedOff) continue;
+    if (SIGNOFF_RE.test(line)) { signedOff = true; group = []; continue; }
+    if (GREETING_RE.test(line) || HEADING_RE.test(line)) { group = []; afterBlank = true; continue; }
+    // A place on its own line is a heading, unless it is the next line of a property block
+    const heading = afterBlank || !group.length || /:\s*$/.test(line) || line === line.toUpperCase() ? placeHeading(line) : null;
+    if (heading) { section = heading; group = []; afterBlank = true; continue; }
+    if (group.length && !afterBlank && !GLOBAL_RE.test(line)) {
       group.forEach((b) => b.push(line)); // detail line for the property (or every unit) above
     } else {
-      shared.push(line);
+      const kept = withoutPleasantries(line);
+      if (kept) shared.push(kept);
     }
   }
 
@@ -310,6 +339,8 @@ export function parsePropertyList(input: string, today = new Date()): ParseResul
   for (const b of blocks) {
     const text = b.join(' - ');
     const addr = parseAddress(b[0], today);
+    const sec = blockSection.get(b);
+    if (sec) { addr.borough ??= sec.borough; addr.area ??= sec.area; }
     const key = addr.address_line.toLowerCase().replace(/[^a-z0-9]/g, '');
     if (seen.has(key)) continue;
     seen.add(key);

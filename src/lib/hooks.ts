@@ -156,7 +156,7 @@ function useDbProperties() {
   });
 }
 
-/** Every property: lists saved on this device first, then any in the database. */
+/** Every property: saved to the account (so on every device), plus any still only on this device. */
 export function useProperties() {
   const db = useDbProperties();
   const local = useLocalProperties();
@@ -167,6 +167,42 @@ export function useProperties() {
 export type NewProperty = Pick<Property,
   'address_line' | 'postcode' | 'area' | 'borough' | 'property_type' | 'bedrooms' | 'rent_pcm' | 'rent_text'
   | 'bills' | 'furnished' | 'available_from' | 'notes' | 'source_tag'>;
+
+/** A property to save; status and save time are kept when moving a list from this device. */
+export type SavedProperty = NewProperty & Partial<Pick<Property, 'status' | 'created_at'>>;
+
+/** Thrown when the properties table is missing the list columns (0004 not run yet). */
+export class NeedsDatabaseUpdate extends Error {
+  constructor() {
+    super('Your database needs a one-off update before lists can sync. Run supabase/migrations/0004_properties_import.sql in the Supabase SQL Editor.');
+  }
+}
+const isMissingColumn = (e: { message?: string; code?: string }) =>
+  e.code === 'PGRST204' || /could not find the .+ column|schema cache/i.test(e.message ?? '');
+
+/** In chunks, so a long list of ids never makes the request URL too long. */
+const chunks = <T,>(xs: T[], size = 100) => Array.from({ length: Math.ceil(xs.length / size) }, (_, i) => xs.slice(i * size, (i + 1) * size));
+
+/** Save a pasted list to the account, so it shows on every device, and log each property. */
+export function useAddProperties() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ rows, source }: { rows: SavedProperty[]; source: string }): Promise<Property[]> => {
+      // one insert, so the whole list shares a save time (that is how Saved lists groups it)
+      const { data, error } = await supabase.from('properties').insert(rows.map((r) => ({ status: 'void', ...r }))).select();
+      if (error) throw isMissingColumn(error) ? new NeedsDatabaseUpdate() : error;
+      const added = data as Property[];
+      await supabase.from('activities').insert(added.map((p) => ({
+        entity_type: 'property',
+        entity_id: p.id,
+        kind: 'created',
+        body: `Added ${p.address_line} from a pasted list${source ? ` (${source})` : ''}`,
+      })));
+      return added;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['properties'] }),
+  });
+}
 
 export const PROPERTY_STATUS_LABEL: Record<Property['status'], string> = {
   void: 'Available', under_offer: 'Under offer', let: 'Let', withdrawn: 'Withdrawn',
@@ -196,11 +232,11 @@ export function useDeleteProperties() {
   return useMutation({
     mutationFn: async (all: string[]) => {
       localProperties.remove(all.filter(isLocalProperty));
-      const ids = all.filter((id) => !isLocalProperty(id));
-      if (ids.length === 0) return;
-      await supabase.from('activities').delete().eq('entity_type', 'property').in('entity_id', ids);
-      const { error } = await supabase.from('properties').delete().in('id', ids);
-      if (error) throw error;
+      for (const ids of chunks(all.filter((id) => !isLocalProperty(id)))) {
+        await supabase.from('activities').delete().eq('entity_type', 'property').in('entity_id', ids);
+        const { error } = await supabase.from('properties').delete().in('id', ids);
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['properties'] });

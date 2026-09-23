@@ -285,8 +285,9 @@ export function scoreMatch(p: PropertyLike, a: Applicant): Match | null {
     if (!areaFit && !rentFit && !isUrgent(a)) return null;
     if (score < 30) return null;
   }
-  // Without knowing where they want to live, it is never better than possible
-  const strength: Strength = areaUnknown ? 'possible' : score >= 70 ? 'strong' : score >= 45 ? 'good' : 'possible';
+  // Good and strong mean the area fits: an unknown or different area is never better than possible
+  const areaOff = areaUnknown || !areaFit || cautions.some((c) => /open to other areas/.test(c));
+  const strength: Strength = areaOff ? 'possible' : score >= 70 ? 'strong' : score >= 45 ? 'good' : 'possible';
   return { applicant: a, score, strength, reasons, cautions };
 }
 

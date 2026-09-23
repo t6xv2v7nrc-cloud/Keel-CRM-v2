@@ -1,7 +1,7 @@
-// Property lists saved in this browser (localStorage) rather than the database.
-// Stock lists go stale within weeks, so they live on the device and can be
-// purged in bulk from the Properties tab. They only exist in this browser:
-// another device or a cleared browser will not have them.
+// Property lists saved in this browser (localStorage) only. Lists normally go to
+// the account so they sync across devices; this is the fallback while the database
+// is not ready for them, and holds lists saved before syncing existed. The
+// Properties page moves anything here to the account as soon as it can.
 
 import { useSyncExternalStore } from 'react';
 import type { Property } from './types';

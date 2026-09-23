@@ -9,8 +9,12 @@ export const BOROUGHS = [
   'Lewisham', 'Merton', 'Newham', 'Redbridge', 'Richmond upon Thames', 'Southwark', 'Sutton',
   'Tower Hamlets', 'Waltham Forest', 'Wandsworth', 'Westminster',
   // just outside London, seen in partner stock lists
-  'Hertsmere', 'Epsom & Ewell', 'Elmbridge', 'Spelthorne', 'Tandridge', 'Thurrock', 'Slough', 'Norwich',
+  'Hertsmere', 'Epsom & Ewell', 'Elmbridge', 'Spelthorne', 'Tandridge', 'Thurrock', 'Slough', 'Norwich', 'Reading',
 ] as const;
+
+// Names that are also everyday words ("I am reading..."): only recognised when a
+// field holds exactly that name, never when found inside free text.
+const EVERYDAY_WORD_BOROUGHS = new Set<string>(['Reading']);
 
 // Alternative ways a borough is written (lowercased, "&" as "and").
 const BOROUGH_ALIASES: Record<string, string> = {
@@ -68,7 +72,8 @@ const DISTRICT: Record<string, string> = {
   IG8: 'Redbridge', IG11: 'Barking & Dagenham',
   EN1: 'Enfield', EN2: 'Enfield', EN3: 'Enfield', EN4: 'Barnet', EN5: 'Barnet', EN6: 'Hertsmere',
   SM1: 'Sutton', SM2: 'Sutton', SM3: 'Sutton', SM4: 'Merton', SM5: 'Sutton', SM6: 'Sutton',
-  SL1: 'Slough',
+  SL1: 'Slough', SL2: 'Slough', SL3: 'Slough',
+  RG1: 'Reading', RG2: 'Reading', RG4: 'Reading', RG30: 'Reading', RG31: 'Reading',
 };
 
 // Well-known neighbourhoods → borough. Multi-word names are matched first.
@@ -126,12 +131,12 @@ const low = (s: string) => ` ${s.toLowerCase().replace(/&/g, ' and ').replace(/[
 /** Area names, longest first so "north finchley" wins over "finchley". */
 const AREA_NAMES = Object.keys(AREAS).sort((a, b) => b.length - a.length);
 const BOROUGH_KEYS = [
-  ...BOROUGHS.map((b) => [b.toLowerCase().replace(/&/g, 'and'), b] as const),
+  ...BOROUGHS.filter((b) => !EVERYDAY_WORD_BOROUGHS.has(b)).map((b) => [b.toLowerCase().replace(/&/g, 'and'), b] as const),
   ...Object.entries(BOROUGH_ALIASES),
 ].sort((a, b) => b[0].length - a[0].length);
 
 export const POSTCODE_RE = /\b([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})\b/i;
-const DISTRICT_RE = /\b(EC|WC|NW|SE|SW|N|E|W|HA|UB|TW|KT|CR|BR|DA|RM|IG|EN|SM|SL)(\d{1,2})[A-Z]?\b/gi;
+const DISTRICT_RE = /\b(EC|WC|NW|SE|SW|N|E|W|HA|UB|TW|KT|CR|BR|DA|RM|IG|EN|SM|SL|RG)(\d{1,2})[A-Z]?\b/gi;
 
 /** "N12 0AB" or a bare "N12" → "N12". */
 export function districtOf(text: string): string | null {
@@ -156,6 +161,8 @@ export const boroughFromDistrict = (d: string | null) => (d ? DISTRICT[d] ?? nul
 /** Finds a borough named in text: "Ealing Council", "RBKC", "LB of Harrow" → canonical name. */
 export function canonicalBorough(text: string | null | undefined): string | null {
   if (!text) return null;
+  const exact = BOROUGHS.find((b) => b.toLowerCase() === text.trim().toLowerCase());
+  if (exact) return exact;
   const t = low(text);
   for (const [key, borough] of BOROUGH_KEYS) if (t.includes(` ${key} `)) return borough;
   return null;
@@ -183,6 +190,24 @@ export function areasIn(text: string | null | undefined): string[] {
 }
 
 export const boroughOfArea = (area: string) => AREAS[area.toLowerCase()] ?? null;
+
+/** A line that is only a place name, used as a section heading in a stock list
+ *  ("Barnet", "READING", "Properties in Enfield:"). */
+export function placeHeading(line: string): { borough: string | null; area: string | null } | null {
+  if (/\d/.test(line)) return null;
+  const words = low(line)
+    .replace(/ (?:properties|property|available|area|borough|council|london|in|the|of|lb|royal|units?|rooms?|flats?) /g, ' ')
+    .replace(/ (?:properties|property|available|area|borough|council|london|in|the|of|lb|royal|units?|rooms?|flats?) /g, ' ')
+    .trim();
+  if (!words || words.split(' ').length > 3) return null;
+  const area = areasIn(words).find((a) => a === words);
+  if (area) return { area: titleCase(area), borough: boroughOfArea(area) };
+  const borough = canonicalBorough(words);
+  if (borough && (borough.toLowerCase().replace(/&/g, 'and') === words || BOROUGH_ALIASES[words] === borough)) {
+    return { area: null, borough };
+  }
+  return null;
+}
 
 /** Region phrases in text, however they are written: "North London", "south-east London",
  *  "SE London", "the South East or South West of London" → ["south east london", "south west london"]. */

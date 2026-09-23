@@ -66,6 +66,30 @@ check('£1,450 Croydon: UC-only client gets an affordability caution', forCroydo
 check('£1,350 Edmonton 1 bed: PIP family of 5 not offered (too small)', !matchesForProperty(edmonton1bed, [pipFamily]).length);
 check('£1,450 Croydon 2 bed: PIP family of 5 offered (2-3 bed fits)', names.some((n) => n.startsWith('Pam')));
 
+// A whole availability email: greeting, intro, headings, sign-off, signature
+const email = parsePropertyList(`Good Afternoon,
+
+Please find our latest available properties below. All units accept DSS/UC tenants, with no deposit or RIA required. Rents are set at or just above LHA rates. Please feel free to reach out if you have any clients who may be suitable and we will be happy to assist.
+
+PROPERTIES AVAILABLE
+
+Barnet
+Brentmead Place, London NW11 9LJ - Self-Contained Studio - £1,436 pcm - Bills: Exc. Council Tax & Electricity
+East Barnet Road, New Barnet EN4 8RW - En-suite Studio - £1,146.86 pcm - Bills: Exc. Council Tax & Electricity
+
+Reading
+12 Oxford Road, Reading RG1 7LH - En-suite Room - £750 pcm
+Studio, 5 Church Street, Caversham RG4 8AU - £900 pcm
+
+Kind regards,
+Ridwan Harir
+Keel Lettings Ltd`, new Date('2026-09-23'));
+check('email: 4 properties', email.properties.length === 4, email.properties.map((p) => p.address_line).join(' | '));
+check('email: only the facts are shared notes', email.sharedNotes.length === 1 && /^All units accept/.test(email.sharedNotes[0]), JSON.stringify(email.sharedNotes));
+check('email: "London" is not an area', email.properties[0].area === null && email.properties[0].borough === 'Barnet', `${email.properties[0].area} / ${email.properties[0].borough}`);
+check('email: Reading heading and RG postcodes give Reading', email.properties.slice(2).every((p) => p.borough === 'Reading'), email.properties.slice(2).map((p) => p.borough).join(', '));
+check('email: signature not in notes', !email.properties.some((p) => /Ridwan|Keel Lettings|Kind regards/.test(p.notes)));
+
 for (const m of rob) console.log(`   ${m.match.strength.padEnd(8)} ${m.property.address_line}: ${m.match.reasons.join('; ')}${m.match.cautions.length ? `  [! ${m.match.cautions.join('; ')}]` : ''}`);
 console.log(failed ? `\n${failed} failed` : '\nAll passed');
 process.exit(failed ? 1 : 0);
