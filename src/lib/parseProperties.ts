@@ -189,8 +189,10 @@ function parseAddress(line: string, today: Date) {
   for (const p of pieces(line)) {
     const pc = p.match(POSTCODE_RE);
     if (pc) { addr.push(p.slice(0, (pc.index ?? 0) + pc[0].length).trim()); break; }
-    const detailOnly = hasDetail(detect(p, today)) && !STREET_RE.test(p) && !UNIT_PREFIX_RE.test(p)
-      && !HOUSE_NUMBER_RE.test(p) && areasIn(p).length === 0;
+    // "2 bed flat" starts with a number but is the type, not a house number
+    const bedsFirst = /^\s*(?:\d|one|two|three|four|five)\s*[- ]?bed(?:room)?s?\b/i.test(p);
+    const detailOnly = hasDetail(detect(p, today)) && (bedsFirst || (!STREET_RE.test(p) && !UNIT_PREFIX_RE.test(p)
+      && !HOUSE_NUMBER_RE.test(p) && areasIn(p).length === 0));
     if (detailOnly) { if (addr.length) break; continue; }
     addr.push(p);
   }

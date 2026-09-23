@@ -117,7 +117,9 @@ const REGIONS: Record<string, string[]> = {
   'south east london': ['Lewisham', 'Greenwich', 'Southwark', 'Bexley', 'Bromley'],
   'south west london': ['Wandsworth', 'Merton', 'Lambeth', 'Richmond upon Thames', 'Kingston upon Thames', 'Sutton'],
   'west london': ['Ealing', 'Hounslow', 'Hillingdon', 'Hammersmith & Fulham', 'Kensington & Chelsea', 'Brent', 'Harrow'],
+  'central london': ['Westminster', 'Camden', 'Islington', 'City of London', 'Kensington & Chelsea', 'Southwark', 'Lambeth'],
 };
+const COMPASS_ABBR: Record<string, string> = { se: 'south east', sw: 'south west', ne: 'north east', nw: 'north west' };
 
 const low = (s: string) => ` ${s.toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim()} `;
 
@@ -182,12 +184,35 @@ export function areasIn(text: string | null | undefined): string[] {
 
 export const boroughOfArea = (area: string) => AREAS[area.toLowerCase()] ?? null;
 
-/** Boroughs covered by region phrases like "north london". */
-export function regionBoroughs(text: string | null | undefined): string[] {
+/** Region phrases in text, however they are written: "North London", "south-east London",
+ *  "SE London", "the South East or South West of London" → ["south east london", "south west london"]. */
+export function regionsIn(text: string | null | undefined): string[] {
   if (!text) return [];
-  const t = low(text);
-  return [...new Set(Object.entries(REGIONS).filter(([r]) => t.includes(` ${r} `)).flatMap(([, b]) => b))];
+  const w = low(text).trim().split(' ');
+  const found = new Set<string>();
+  w.forEach((word, i) => {
+    if (word !== 'london') return;
+    let j = i - 1;
+    if (w[j] === 'of') j--; // "south west of london"
+    // walk back over "<compass> [or|and] <compass> ..."
+    for (;;) {
+      if (j < 0) break;
+      let region: string | null = null;
+      if (COMPASS_ABBR[w[j]]) { region = COMPASS_ABBR[w[j]]; j--; }
+      else if (w[j] === 'central') { region = 'central'; j--; }
+      else if ((w[j] === 'east' || w[j] === 'west') && (w[j - 1] === 'north' || w[j - 1] === 'south')) { region = `${w[j - 1]} ${w[j]}`; j -= 2; }
+      else if (['north', 'south', 'east', 'west'].includes(w[j])) { region = w[j]; j--; }
+      if (!region) break;
+      found.add(`${region} london`);
+      if (w[j] === 'or' || w[j] === 'and') j--; else break;
+    }
+  });
+  return [...found].filter((r) => REGIONS[r]);
 }
+
+/** Boroughs in a region from regionsIn(), e.g. "north london". */
+export const boroughsOfRegion = (region: string) => REGIONS[region] ?? [];
+
 
 // Boroughs that share a border (or a central Thames bridge). Used to suggest
 // clients who asked for the borough next door.

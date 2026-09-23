@@ -8,6 +8,10 @@
 // next door to an ask, next door to their council, or a client who never said
 // where they want to live all count, ranked below a direct fit. Every match
 // carries plain-English reasons and cautions so the decision stays with you.
+//
+// House rule: anything over £1,300 pcm is always offered to clients on PIP
+// (alone or with UC / LCWRA) or in full-time work, whatever their stated
+// budget or area, unless the property physically cannot work for them.
 
 import type { Applicant } from './types';
 import { benefitsOf, effectiveTier, householdOf, isUrgent } from './search';
@@ -15,7 +19,7 @@ import type { HouseholdKey } from './search';
 import { URGENCY_LABEL } from './tiering';
 import {
   areNeighbours, areasIn, boroughFromDistrict, boroughOfArea, boroughsIn, canonicalBorough, districtOf, districtsIn,
-  regionBoroughs, titleCase,
+  boroughsOfRegion, regionsIn, titleCase,
 } from './london';
 
 export interface PropertyLike {
@@ -42,6 +46,8 @@ export interface Match {
 }
 
 const MATCHABLE_STAGES = new Set(['lead', 'referred', 'viewing', 'offer']);
+/** Above this rent, PIP and full-time clients are always offered the property. */
+export const PREMIUM_RENT = 1300;
 const NUM: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5 };
 const n = (s: string) => NUM[s.toLowerCase()] ?? Number(s);
 const money = (v: number) => `£${Math.round(v).toLocaleString('en-GB')}`;
@@ -52,9 +58,13 @@ interface Needs {
   wantedAreas: string[];
   wantedDistricts: string[];
   wantedBoroughs: Map<string, { why: string; ask: string }>; // borough → why it counts, and what they asked for
+  askNames: string[]; // every place they named, for "Wants X or Y, this is Z"
   councilBorough: string | null;
   flexible: boolean;
   strictArea: boolean; // "Harrow only", "nowhere else": no next-door suggestions
+  openToOthers: boolean; // "I don't mind if it is further north": other areas are a caution, not a no
+  selfContained: boolean; // asked for self-contained: no rooms
+  premiumOk: 'PIP' | 'full-time' | null; // can take a property over PREMIUM_RENT
   beds: { min: number; max: number; asked: boolean } | null;
   household: HouseholdKey | null;
   children: number;
@@ -87,9 +97,15 @@ export function clientNeeds(a: Applicant): Needs {
   const strictArea = /\b(nowhere\s+else|must\s+be\s+in)\b/i.test(text)
     || [...wantedAreas, ...wantedDistricts, ...askedBoroughs].some((name) =>
       new RegExp(`\\b${escape(name)}\\s+only\\b|\\bonly\\s+(?:in\\s+|around\\s+)?${escape(name)}\\b`, 'i').test(text));
-  const regionText = text.match(/\b(north|south|east|west)(\s+(east|west))?\s+london\b/i)?.[0];
-  const region = `Wants ${titleCase(regionText ?? 'the area')}`;
-  for (const b of regionBoroughs(text)) want(b, region, region);
+  const regions = regionsIn(text);
+  for (const r of regions) {
+    const label = `Wants ${titleCase(r)}`;
+    for (const b of boroughsOfRegion(r)) want(b, label, label);
+  }
+  const askNames = [...new Map(
+    [...wantedAreas.map(titleCase), ...wantedDistricts, ...askedBoroughs, ...regions.map(titleCase)].map((x) => [x.toLowerCase(), x]),
+  ).values()];
+  const selfContained = /\bself[- ]?contained\b|\bown\s+(?:kitchen|bathroom|front\s+door)\b/i.test(text);
 
   // Bedrooms: what they asked for, else what the household needs
   let beds: Needs['beds'] = null;
@@ -102,13 +118,18 @@ export function clientNeeds(a: Applicant): Needs {
     const min = Math.max(2, 1 + Math.floor(children / 2));
     beds = { min, max: children >= 2 ? min + 1 : min, asked: false };
   } else if (household === 'single' || household === 'couple') beds = { min: 0, max: 1, asked: false };
+  else if (selfContained) beds = { min: 0, max: 1, asked: true }; // "a self-contained unit", household not recorded
 
   return {
     wantedAreas,
     wantedDistricts,
     wantedBoroughs,
+    askNames,
     councilBorough: canonicalBorough(a.council || a.referring_borough),
     strictArea,
+    openToOthers: /\b(?:don'?t|do\s+not|wouldn'?t|would\s+not)\s+mind\b|\bopen\s+to\b|\bnot\s+fussy\b/i.test(text),
+    selfContained,
+    premiumOk: benefitsOf(a).some((b) => b.key === 'pip') ? 'PIP' : a.work_status === 'full_time' ? 'full-time' : null,
     flexible: /\b(anywhere|any\s+area|anywhere\s+in\s+london|flexible\s+on\s+area|open\s+to\s+(?:any|all|other)\s+areas?)\b/i.test(text),
     beds,
     household,
@@ -163,10 +184,14 @@ export function scoreMatch(p: PropertyLike, a: Applicant): Match | null {
   const askLabel = (min: number, max: number) =>
     min === max ? (min === 0 ? 'studio' : `${min} bed`) : min === 0 ? `studio or ${max} bed` : `${min}-${max} bed`;
 
-  // Size
+  const premium = p.rent_pcm != null && p.rent_pcm > PREMIUM_RENT;
+  const premiumFit = premium && need.premiumOk !== null;
+
+  // Size (a room for a family or a couple, or a studio for a family, never works)
   const isFamily = need.household === 'family' || need.children > 0;
   if (f.kind === 'room' && (isFamily || need.household === 'couple')) return null;
   if (f.kind === 'studio' && isFamily) return null;
+  if (f.kind === 'room' && need.selfContained) return null;
   if (f.beds == null) {
     cautions.push('Size not stated');
   } else if (need.beds) {
@@ -181,13 +206,18 @@ export function scoreMatch(p: PropertyLike, a: Applicant): Match | null {
     } else if (f.beds - max === 1) {
       score += 6;
       cautions.push('Bigger than needed');
+    } else if (premiumFit) {
+      cautions.push('Much bigger than needed');
     } else {
       return null; // far too big to be affordable or suitable
     }
   }
 
   // Rent
-  if (p.rent_pcm != null && need.budget) {
+  if (premiumFit) {
+    score += 15;
+    reasons.push(`Over ${money(PREMIUM_RENT)}, open to ${need.premiumOk === 'PIP' ? 'PIP' : 'full-time'} clients`);
+  } else if (p.rent_pcm != null && need.budget) {
     const over = p.rent_pcm - need.budget;
     if (over <= 0) { score += 15; reasons.push(`${money(p.rent_pcm)} within ${money(need.budget)} budget`); }
     else if (over <= need.budget * 0.1) { score += 3; cautions.push(`${money(over)} over budget`); }
@@ -195,6 +225,10 @@ export function scoreMatch(p: PropertyLike, a: Applicant): Match | null {
   } else if (f.lha) {
     if (need.onBenefits) { score += 15; reasons.push(`${p.rent_text} rent, on benefits`); }
     else score += 5;
+  }
+  if (premium && !premiumFit && !(need.budget && p.rent_pcm! <= need.budget)) {
+    score -= 5;
+    cautions.push(`Over ${money(PREMIUM_RENT)} with no PIP or full-time work: check they can afford it`);
   }
 
   // Area, best fit first
@@ -215,15 +249,19 @@ export function scoreMatch(p: PropertyLike, a: Applicant): Match | null {
   else if (nextToCouncil && !hasWants) { score += 12; reasons.push(`${f.borough} is next door to their council (${need.councilBorough})`); }
   else if (need.flexible && !hasWants) { score += 8; reasons.push('Open to any area'); }
   else if (areaUnknown) { score += 5; cautions.push('Area not stated: ask them'); }
-  else {
-    areaFit = false;
-    if (hasWants && f.borough) {
+  else if (hasWants && f.borough) {
+    const names = need.askNames.slice(0, 3);
+    const wants = `Wants ${names.length > 1 ? `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}` : names[0] ?? 'another area'}`;
+    if (need.openToOthers && !need.strictArea) {
+      score += 3;
+      cautions.push(`${wants}, this is ${f.borough} (says they are open to other areas)`);
+    } else {
+      areaFit = false;
       score -= 30;
-      const wants = need.wantedAreas.length ? `Asked for ${titleCase(need.wantedAreas[0])}`
-        : need.wantedDistricts.length ? `Asked for ${need.wantedDistricts[0]}`
-        : [...need.wantedBoroughs.values()][0].ask;
       cautions.push(`${wants}, this is ${f.borough}`);
     }
+  } else {
+    areaFit = false;
   }
   if (ownCouncil && (askedArea || askedDistrict || boroughWant)) {
     score += 5; // their own council's area as well as their ask
@@ -243,8 +281,10 @@ export function scoreMatch(p: PropertyLike, a: Applicant): Match | null {
   if (isUrgent(a)) { score += 10; reasons.push(`Urgent: ${URGENCY_LABEL[a.urgency ?? ''] ?? a.urgency}`); }
 
   const rentFit = reasons.some((r) => /within|rent, on benefits/.test(r));
-  if (!areaFit && !rentFit && !isUrgent(a)) return null;
-  if (score < 30) return null;
+  if (!premiumFit) { // the premium rule always offers it
+    if (!areaFit && !rentFit && !isUrgent(a)) return null;
+    if (score < 30) return null;
+  }
   // Without knowing where they want to live, it is never better than possible
   const strength: Strength = areaUnknown ? 'possible' : score >= 70 ? 'strong' : score >= 45 ? 'good' : 'possible';
   return { applicant: a, score, strength, reasons, cautions };

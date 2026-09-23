@@ -1,5 +1,7 @@
+import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from './supabase';
+import { isLocalProperty, localProperties, useLocalProperties } from './localProperties';
 import type { Activity, Applicant, Contact, Placement, Property } from './types';
 import type { ApplicantStage } from '../types/extraction';
 
@@ -140,7 +142,7 @@ export function useContacts() {
 }
 
 // ── Properties ──────────────────────────────────────────────────────
-export function useProperties() {
+function useDbProperties() {
   return useQuery({
     queryKey: ['properties'],
     queryFn: async (): Promise<Property[]> => {
@@ -154,38 +156,17 @@ export function useProperties() {
   });
 }
 
-/** Supabase says "Could not find the 'bedrooms' column" until 0004 has been run. */
-const needsMigration = (e: { message?: string }) =>
-  /column|schema cache/i.test(e.message ?? '')
-    ? new Error('The database needs a one-off update first: run supabase/migrations/0004_properties_import.sql in the Supabase SQL Editor, then try again.')
-    : e;
+/** Every property: lists saved on this device first, then any in the database. */
+export function useProperties() {
+  const db = useDbProperties();
+  const local = useLocalProperties();
+  const data = useMemo(() => [...local, ...(db.data ?? [])], [local, db.data]);
+  return { data, isLoading: db.isLoading && local.length === 0 };
+}
 
 export type NewProperty = Pick<Property,
   'address_line' | 'postcode' | 'area' | 'borough' | 'property_type' | 'bedrooms' | 'rent_pcm' | 'rent_text'
   | 'bills' | 'furnished' | 'available_from' | 'notes' | 'source_tag'>;
-
-/** Add a batch of properties (from a pasted list) and log each one. */
-export function useAddProperties() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ rows, source }: { rows: NewProperty[]; source: string }): Promise<Property[]> => {
-      const { data, error } = await supabase
-        .from('properties')
-        .insert(rows.map((r) => ({ ...r, status: 'void' })))
-        .select();
-      if (error) throw needsMigration(error);
-      const added = data as Property[];
-      await supabase.from('activities').insert(added.map((p) => ({
-        entity_type: 'property',
-        entity_id: p.id,
-        kind: 'created',
-        body: `Added ${p.address_line} from a pasted list${source ? ` (${source})` : ''}`,
-      })));
-      return added;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['properties'] }),
-  });
-}
 
 export const PROPERTY_STATUS_LABEL: Record<Property['status'], string> = {
   void: 'Available', under_offer: 'Under offer', let: 'Let', withdrawn: 'Withdrawn',
@@ -195,6 +176,7 @@ export function useSetPropertyStatus() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ p, status }: { p: Property; status: Property['status'] }) => {
+      if (isLocalProperty(p.id)) { localProperties.setStatus([p.id], status); return; }
       const { error } = await supabase.from('properties').update({ status }).eq('id', p.id);
       if (error) throw error;
       await supabase.from('activities').insert({
@@ -208,11 +190,14 @@ export function useSetPropertyStatus() {
   });
 }
 
-/** Delete properties and their activity. A linked placement keeps its record. */
+/** Delete properties (and their activity, for database ones). A linked placement keeps its record. */
 export function useDeleteProperties() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (ids: string[]) => {
+    mutationFn: async (all: string[]) => {
+      localProperties.remove(all.filter(isLocalProperty));
+      const ids = all.filter((id) => !isLocalProperty(id));
+      if (ids.length === 0) return;
       await supabase.from('activities').delete().eq('entity_type', 'property').in('entity_id', ids);
       const { error } = await supabase.from('properties').delete().in('id', ids);
       if (error) throw error;

@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button, Card, TierBadge, useToast } from '../../components/ui';
 import {
-  PROPERTY_STATUS_LABEL, useAddProperties, useApplicants, useDeleteProperties, useProperties, useSetPropertyStatus,
+  PROPERTY_STATUS_LABEL, useApplicants, useDeleteProperties, useProperties, useSetPropertyStatus,
 } from '../../lib/hooks';
+import { isLocalProperty, localProperties } from '../../lib/localProperties';
 import type { NewProperty } from '../../lib/hooks';
 import type { Applicant, Property } from '../../lib/types';
 import { parsePropertyList } from '../../lib/parseProperties';
@@ -35,6 +36,7 @@ export function PropertiesPage() {
   const { toast } = useToast();
 
   const [pasteOpen, setPasteOpen] = useState(false);
+  const [listsOpen, setListsOpen] = useState(false);
   const [justAdded, setJustAdded] = useState<Set<string>>(new Set());
   const [status, setStatusFilter] = useState<'available' | Property['status'] | 'all'>('available');
   const [borough, setBorough] = useState('all');
@@ -96,8 +98,15 @@ export function PropertiesPage() {
             {totalMatches > 0 && <> · <strong className="text-[var(--ink)]">{totalMatches}</strong> client matches</>}
           </p>
         </div>
-        {!showPaste && <Button variant="brass" onClick={() => setPasteOpen(true)}>Paste properties</Button>}
+        <div className="flex flex-wrap gap-2">
+          {properties.some((p) => isLocalProperty(p.id)) && (
+            <Button onClick={() => setListsOpen((v) => !v)}>{listsOpen ? 'Hide saved lists' : 'Saved lists'}</Button>
+          )}
+          {!showPaste && <Button variant="brass" onClick={() => setPasteOpen(true)}>Paste properties</Button>}
+        </div>
       </header>
+
+      {listsOpen && <SavedLists properties={properties.filter((p) => isLocalProperty(p.id))} onClose={() => setListsOpen(false)} />}
 
       {showPaste && (
         <PasteImport
@@ -110,7 +119,7 @@ export function PropertiesPage() {
             setPasteOpen(false);
             setStatusFilter('available');
             const found = added.reduce((s, p) => s + matchesForProperty(p, applicants).length, 0);
-            toast(`Added ${added.length} ${added.length === 1 ? 'property' : 'properties'} · ${found} client ${found === 1 ? 'match' : 'matches'}`, 'success');
+            toast(`Saved ${added.length} ${added.length === 1 ? 'property' : 'properties'} on this device · ${found} client ${found === 1 ? 'match' : 'matches'}`, 'success');
           }}
         />
       )}
@@ -177,6 +186,81 @@ export function PropertiesPage() {
   );
 }
 
+// ── Saved lists (this device) and purging ─────────────────────────
+
+const PURGE_AFTER_DAYS = 14;
+
+function SavedLists({ properties, onClose }: { properties: Property[]; onClose: () => void }) {
+  const { toast } = useToast();
+  // Each paste is saved in one go, so a list is the properties sharing a save time and source.
+  const lists = useMemo(() => {
+    const by = new Map<string, Property[]>();
+    for (const p of properties) {
+      const key = `${p.created_at}|${p.source_tag ?? ''}`;
+      by.set(key, [...(by.get(key) ?? []), p]);
+    }
+    return [...by.values()].sort((a, b) => b[0].created_at.localeCompare(a[0].created_at));
+  }, [properties]);
+  const cutoff = new Date(Date.now() - PURGE_AFTER_DAYS * 86_400_000).toISOString();
+  const old = properties.filter((p) => p.created_at < cutoff);
+  const done = properties.filter((p) => p.status === 'let' || p.status === 'withdrawn');
+
+  const purge = (ps: Property[], what: string) => {
+    if (ps.length === 0) return;
+    if (!window.confirm(`Purge ${what} (${ps.length} ${ps.length === 1 ? 'property' : 'properties'}) from this device? This cannot be undone.`)) return;
+    localProperties.remove(ps.map((p) => p.id));
+    toast(`Purged ${ps.length} ${ps.length === 1 ? 'property' : 'properties'}`, 'success');
+  };
+
+  return (
+    <Card className="flex flex-col gap-4 p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="m-0 text-[18px] font-semibold text-[var(--ink)]">Saved lists on this device</h2>
+          <p className="m-0 mt-1 max-w-[720px] text-[15px] text-[var(--ink-muted)]">
+            Pasted lists are kept in this browser, so they are not on your other devices. Purge them when they go out of date.
+          </p>
+        </div>
+        <button onClick={onClose} className="text-[15px] text-[var(--link)] hover:underline">Close</button>
+      </div>
+
+      <ul className="m-0 flex list-none flex-col divide-y divide-[var(--line)] rounded-md border border-[var(--line)] p-0">
+        {lists.map((ps) => {
+          const available = ps.filter((p) => p.status === 'void' || p.status === 'under_offer').length;
+          return (
+            <li key={`${ps[0].created_at}|${ps[0].source_tag ?? ''}`} className="flex flex-wrap items-center gap-3 px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <div className="text-[15px] font-medium text-[var(--ink)]">
+                  {ps[0].source_tag ? `From ${ps[0].source_tag}` : 'Pasted list'}, saved {shortDate(ps[0].created_at)}
+                </div>
+                <div className="text-[13px] text-[var(--ink-muted)]">
+                  {ps.length} {ps.length === 1 ? 'property' : 'properties'} · {available} still available
+                </div>
+              </div>
+              <Button variant="danger" className="min-h-0 px-3 py-1.5 text-[13px]"
+                onClick={() => purge(ps, ps[0].source_tag ? `the list from ${ps[0].source_tag}` : 'this list')}>
+                Purge this list
+              </Button>
+            </li>
+          );
+        })}
+      </ul>
+
+      <div className="flex flex-wrap gap-2">
+        <Button className="min-h-0 px-3 py-1.5 text-[13px]" disabled={done.length === 0} onClick={() => purge(done, 'let and withdrawn properties')}>
+          Purge let and withdrawn ({done.length})
+        </Button>
+        <Button className="min-h-0 px-3 py-1.5 text-[13px]" disabled={old.length === 0} onClick={() => purge(old, `properties saved over ${PURGE_AFTER_DAYS} days ago`)}>
+          Purge saved over {PURGE_AFTER_DAYS} days ago ({old.length})
+        </Button>
+        <Button variant="danger" className="min-h-0 px-3 py-1.5 text-[13px]" onClick={() => purge(properties, 'every saved property')}>
+          Purge everything ({properties.length})
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 // ── Paste + preview ────────────────────────────────────────────────
 
 type Draft = ParsedProperty & { key: string; include: boolean; duplicate: boolean };
@@ -188,7 +272,6 @@ function PasteImport({ existing, applicants, canClose, onClose, onAdded }: {
   onClose: () => void;
   onAdded: (added: Property[]) => void;
 }) {
-  const add = useAddProperties();
   const { toast } = useToast();
   const [text, setText] = useState('');
   const [source, setSource] = useState('');
@@ -219,10 +302,9 @@ function PasteImport({ existing, applicants, canClose, onClose, onAdded }: {
       bills: d.bills, furnished: d.furnished, available_from: d.available_from, notes: d.notes,
       source_tag: source.trim() || null,
     }));
-    add.mutate({ rows, source: source.trim() }, {
-      onSuccess: (added) => { setText(''); setDrafts(null); onAdded(added); },
-      onError: (e) => toast((e as Error).message, 'danger'),
-    });
+    const { added, saved } = localProperties.add(rows);
+    if (!saved) toast('This browser would not save the list, so it will be gone when you close the tab. Check you are not in a private window.', 'danger');
+    setText(''); setDrafts(null); onAdded(added);
   };
 
   return (
@@ -233,7 +315,7 @@ function PasteImport({ existing, applicants, canClose, onClose, onAdded }: {
           <p className="m-0 mt-1 max-w-[720px] text-[15px] text-[var(--ink-muted)]">
             One property per line or per block, or rows copied from a spreadsheet. Notes that apply to every property,
             like "They are all en-suite rooms" or "Rent is 1-bed LHA", are applied to each one. Lines marked let,
-            taken or under offer are skipped.
+            taken or under offer are skipped. The list is saved on this device, and you can purge it under Saved lists.
           </p>
         </div>
         {canClose && <button onClick={onClose} className="text-[15px] text-[var(--link)] hover:underline">Close</button>}
@@ -347,8 +429,8 @@ function PasteImport({ existing, applicants, canClose, onClose, onAdded }: {
 
           <div className="flex justify-end gap-2">
             <Button onClick={() => setDrafts(null)}>Back</Button>
-            <Button variant="primary" onClick={save} disabled={chosen.length === 0 || add.isPending}>
-              {add.isPending ? 'Adding…' : `Add ${chosen.length} ${chosen.length === 1 ? 'property' : 'properties'}`}
+            <Button variant="primary" onClick={save} disabled={chosen.length === 0}>
+              Save {chosen.length} {chosen.length === 1 ? 'property' : 'properties'}
             </Button>
           </div>
         </>
@@ -389,6 +471,7 @@ function PropertyCard({ p, matches, isNew, selected, onToggle, onStatus, onDelet
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="m-0 text-[18px] font-semibold text-[var(--ink)]">{p.address_line}</h3>
             {isNew && <span className="rounded bg-[var(--brass)] px-2 py-0.5 text-[13px] font-semibold text-[var(--brass-text)]">New</span>}
+            {!isLocalProperty(p.id) && <span className="rounded bg-[var(--paper)] px-2 py-0.5 text-[13px] text-[var(--ink-muted)]">In database</span>}
           </div>
           <div className="mt-1 text-[15px] text-[var(--ink-muted)]">{facts.join(' · ') || 'No details'}</div>
         </div>
