@@ -189,4 +189,52 @@ export function regionBoroughs(text: string | null | undefined): string[] {
   return [...new Set(Object.entries(REGIONS).filter(([r]) => t.includes(` ${r} `)).flatMap(([, b]) => b))];
 }
 
+// Boroughs that share a border (or a central Thames bridge). Used to suggest
+// clients who asked for the borough next door.
+const BORDERS: [string, string][] = [
+  ['Barking & Dagenham', 'Newham'], ['Barking & Dagenham', 'Redbridge'], ['Barking & Dagenham', 'Havering'],
+  ['Barnet', 'Enfield'], ['Barnet', 'Haringey'], ['Barnet', 'Camden'], ['Barnet', 'Brent'], ['Barnet', 'Harrow'], ['Barnet', 'Hertsmere'],
+  ['Bexley', 'Greenwich'], ['Bexley', 'Bromley'],
+  ['Brent', 'Camden'], ['Brent', 'Westminster'], ['Brent', 'Kensington & Chelsea'], ['Brent', 'Hammersmith & Fulham'],
+  ['Brent', 'Ealing'], ['Brent', 'Harrow'],
+  ['Bromley', 'Greenwich'], ['Bromley', 'Lewisham'], ['Bromley', 'Southwark'], ['Bromley', 'Lambeth'], ['Bromley', 'Croydon'], ['Bromley', 'Tandridge'],
+  ['Camden', 'Haringey'], ['Camden', 'Islington'], ['Camden', 'City of London'], ['Camden', 'Westminster'],
+  ['City of London', 'Westminster'], ['City of London', 'Islington'], ['City of London', 'Hackney'],
+  ['City of London', 'Tower Hamlets'], ['City of London', 'Southwark'],
+  ['Croydon', 'Lambeth'], ['Croydon', 'Southwark'], ['Croydon', 'Merton'], ['Croydon', 'Sutton'], ['Croydon', 'Tandridge'],
+  ['Ealing', 'Harrow'], ['Ealing', 'Hillingdon'], ['Ealing', 'Hounslow'], ['Ealing', 'Hammersmith & Fulham'],
+  ['Enfield', 'Haringey'], ['Enfield', 'Waltham Forest'], ['Enfield', 'Hertsmere'],
+  ['Greenwich', 'Lewisham'],
+  ['Hackney', 'Haringey'], ['Hackney', 'Islington'], ['Hackney', 'Tower Hamlets'], ['Hackney', 'Newham'], ['Hackney', 'Waltham Forest'],
+  ['Hammersmith & Fulham', 'Kensington & Chelsea'], ['Hammersmith & Fulham', 'Hounslow'],
+  ['Hammersmith & Fulham', 'Richmond upon Thames'], ['Hammersmith & Fulham', 'Wandsworth'],
+  ['Haringey', 'Waltham Forest'], ['Haringey', 'Islington'],
+  ['Harrow', 'Hillingdon'], ['Harrow', 'Hertsmere'],
+  ['Havering', 'Redbridge'], ['Havering', 'Thurrock'],
+  ['Hillingdon', 'Hounslow'], ['Hillingdon', 'Slough'], ['Hillingdon', 'Spelthorne'],
+  ['Hounslow', 'Richmond upon Thames'], ['Hounslow', 'Spelthorne'],
+  ['Kensington & Chelsea', 'Westminster'], ['Kensington & Chelsea', 'Wandsworth'],
+  ['Kingston upon Thames', 'Richmond upon Thames'], ['Kingston upon Thames', 'Merton'], ['Kingston upon Thames', 'Sutton'],
+  ['Kingston upon Thames', 'Wandsworth'], ['Kingston upon Thames', 'Epsom & Ewell'], ['Kingston upon Thames', 'Elmbridge'],
+  ['Lambeth', 'Wandsworth'], ['Lambeth', 'Southwark'], ['Lambeth', 'Westminster'], ['Lambeth', 'Merton'],
+  ['Lewisham', 'Southwark'],
+  ['Merton', 'Wandsworth'], ['Merton', 'Sutton'],
+  ['Newham', 'Tower Hamlets'], ['Newham', 'Waltham Forest'], ['Newham', 'Redbridge'],
+  ['Redbridge', 'Waltham Forest'],
+  ['Richmond upon Thames', 'Wandsworth'], ['Richmond upon Thames', 'Elmbridge'], ['Richmond upon Thames', 'Spelthorne'],
+  ['Southwark', 'Tower Hamlets'], ['Southwark', 'Westminster'],
+  ['Sutton', 'Epsom & Ewell'],
+  ['Wandsworth', 'Westminster'],
+];
+const NEIGHBOURS = new Map<string, Set<string>>();
+for (const [a, b] of BORDERS) {
+  if (!NEIGHBOURS.has(a)) NEIGHBOURS.set(a, new Set());
+  if (!NEIGHBOURS.has(b)) NEIGHBOURS.set(b, new Set());
+  NEIGHBOURS.get(a)!.add(b);
+  NEIGHBOURS.get(b)!.add(a);
+}
+
+/** True when two boroughs share a border. */
+export const areNeighbours = (a: string, b: string) => NEIGHBOURS.get(a)?.has(b) ?? false;
+
 export const titleCase = (s: string) => s.replace(/\b[a-z]/g, (c) => c.toUpperCase());

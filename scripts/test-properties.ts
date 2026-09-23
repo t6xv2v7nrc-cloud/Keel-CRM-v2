@@ -60,6 +60,9 @@ const clients = [
   make({ full_name: 'Farah (family 3 kids, 2-3 bed Enfield/Edmonton, £1,800)', on_uc: true, pip: true, household_type: 'family', children: 3, council: 'Enfield',
     council_registered: true, budget_pcm: 1800, notes: 'Me and my 3 daughters. 2 to 3 bed, Enfield or Edmonton, part furnished.' }),
   make({ full_name: 'George (single, no notes)', work_status: 'part_time', household_type: 'single', council: 'Ealing' }),
+  make({ full_name: 'Hana (single, no area given, UC, £1,000)', on_uc: true, household_type: 'single', budget_pcm: 1000, notes: 'I need somewhere as soon as possible.' }),
+  make({ full_name: 'Idris (couple, Barnet council, no ask)', on_uc: true, household_type: 'couple', council: 'Barnet', budget_pcm: 1400 }),
+  make({ full_name: 'Jade (single, asked N15 only)', on_uc: true, household_type: 'single', budget_pcm: 1000, notes: 'Looking around N15.' }),
   make({ full_name: 'Placed Paul (already placed)', stage: 'placed', household_type: 'single', notes: 'North Finchley' }),
 ];
 

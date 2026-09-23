@@ -4,15 +4,17 @@
 // postcode, or are they registered with that council), size (does it fit the
 // household), rent (within budget, or LHA rent for someone on benefits) and
 // priority (tier, urgency). Hard mismatches (a room for a family, a flat far
-// too small) are left out entirely. Every match carries plain-English reasons
-// and cautions so the decision stays with you.
+// too small) are left out entirely. The net is deliberately wide: the borough
+// next door to an ask, next door to their council, or a client who never said
+// where they want to live all count, ranked below a direct fit. Every match
+// carries plain-English reasons and cautions so the decision stays with you.
 
 import type { Applicant } from './types';
 import { benefitsOf, effectiveTier, householdOf, isUrgent } from './search';
 import type { HouseholdKey } from './search';
 import { URGENCY_LABEL } from './tiering';
 import {
-  areasIn, boroughFromDistrict, boroughOfArea, boroughsIn, canonicalBorough, districtOf, districtsIn,
+  areNeighbours, areasIn, boroughFromDistrict, boroughOfArea, boroughsIn, canonicalBorough, districtOf, districtsIn,
   regionBoroughs, titleCase,
 } from './london';
 
@@ -49,9 +51,10 @@ const money = (v: number) => `£${Math.round(v).toLocaleString('en-GB')}`;
 interface Needs {
   wantedAreas: string[];
   wantedDistricts: string[];
-  wantedBoroughs: Map<string, string>; // borough → why ("Asked for Tottenham")
+  wantedBoroughs: Map<string, { why: string; ask: string }>; // borough → why it counts, and what they asked for
   councilBorough: string | null;
   flexible: boolean;
+  strictArea: boolean; // "Harrow only", "nowhere else": no next-door suggestions
   beds: { min: number; max: number; asked: boolean } | null;
   household: HouseholdKey | null;
   children: number;
@@ -67,14 +70,26 @@ export function clientNeeds(a: Applicant): Needs {
   const children = Math.max(a.children ?? 0, household === 'family' && !a.children ? 1 : 0);
 
   const wantedAreas = areasIn(text);
-  const wantedBoroughs = new Map<string, string>();
+  const wantedDistricts = districtsIn(text);
+  const wantedBoroughs: Needs['wantedBoroughs'] = new Map();
+  const want = (b: string | null, why: string, ask: string) => { if (b && !wantedBoroughs.has(b)) wantedBoroughs.set(b, { why, ask }); };
   for (const area of wantedAreas) {
     const b = boroughOfArea(area);
-    if (b && !wantedBoroughs.has(b)) wantedBoroughs.set(b, `Asked for ${titleCase(area)}, same borough (${b})`);
+    want(b, `Asked for ${titleCase(area)}, same borough (${b})`, `Asked for ${titleCase(area)} (${b})`);
   }
-  for (const b of boroughsIn(text)) if (!wantedBoroughs.has(b)) wantedBoroughs.set(b, `Asked for ${b}`);
+  for (const d of wantedDistricts) {
+    const b = boroughFromDistrict(d);
+    want(b, `Asked for ${d}, same borough (${b})`, `Asked for ${d} (${b})`);
+  }
+  const askedBoroughs = boroughsIn(text);
+  for (const b of askedBoroughs) want(b, `Asked for ${b}`, `Asked for ${b}`);
+  const escape = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const strictArea = /\b(nowhere\s+else|must\s+be\s+in)\b/i.test(text)
+    || [...wantedAreas, ...wantedDistricts, ...askedBoroughs].some((name) =>
+      new RegExp(`\\b${escape(name)}\\s+only\\b|\\bonly\\s+(?:in\\s+|around\\s+)?${escape(name)}\\b`, 'i').test(text));
   const regionText = text.match(/\b(north|south|east|west)(\s+(east|west))?\s+london\b/i)?.[0];
-  for (const b of regionBoroughs(text)) if (!wantedBoroughs.has(b)) wantedBoroughs.set(b, `Wants ${titleCase(regionText ?? 'the area')}`);
+  const region = `Wants ${titleCase(regionText ?? 'the area')}`;
+  for (const b of regionBoroughs(text)) want(b, region, region);
 
   // Bedrooms: what they asked for, else what the household needs
   let beds: Needs['beds'] = null;
@@ -90,9 +105,10 @@ export function clientNeeds(a: Applicant): Needs {
 
   return {
     wantedAreas,
-    wantedDistricts: districtsIn(text),
+    wantedDistricts,
     wantedBoroughs,
     councilBorough: canonicalBorough(a.council || a.referring_borough),
+    strictArea,
     flexible: /\b(anywhere|any\s+area|anywhere\s+in\s+london|flexible\s+on\s+area|open\s+to\s+(?:any|all|other)\s+areas?)\b/i.test(text),
     beds,
     household,
@@ -181,24 +197,35 @@ export function scoreMatch(p: PropertyLike, a: Applicant): Match | null {
     else score += 5;
   }
 
-  // Area
+  // Area, best fit first
   const askedArea = need.wantedAreas.find((x) => f.areas.has(x));
   const askedDistrict = f.district && need.wantedDistricts.includes(f.district) ? f.district : null;
-  const boroughWhy = f.borough ? need.wantedBoroughs.get(f.borough) : undefined;
+  const boroughWant = f.borough ? need.wantedBoroughs.get(f.borough) : undefined;
+  const ownCouncil = Boolean(f.borough && need.councilBorough === f.borough);
+  const nextToWant = f.borough && !need.strictArea ? [...need.wantedBoroughs].find(([b]) => areNeighbours(b, f.borough!))?.[1] : undefined;
   const hasWants = need.wantedAreas.length > 0 || need.wantedDistricts.length > 0 || need.wantedBoroughs.size > 0;
+  const nextToCouncil = Boolean(f.borough && need.councilBorough && areNeighbours(need.councilBorough, f.borough));
+  const areaUnknown = !hasWants && !need.councilBorough && !need.flexible;
+  let areaFit = true;
   if (askedArea) { score += 45; reasons.push(`Asked for ${titleCase(askedArea)}`); }
   else if (askedDistrict) { score += 40; reasons.push(`Asked for ${askedDistrict}`); }
-  else if (boroughWhy) { score += 32; reasons.push(boroughWhy); }
-  else if (f.borough && need.councilBorough === f.borough) { score += 22; reasons.push(`Registered with ${f.borough} council`); }
+  else if (boroughWant) { score += 32; reasons.push(boroughWant.why); }
+  else if (ownCouncil) { score += 22; reasons.push(`Registered with ${f.borough} council`); }
+  else if (nextToWant) { score += 15; reasons.push(`${nextToWant.ask}, ${f.borough} is next door`); }
+  else if (nextToCouncil && !hasWants) { score += 12; reasons.push(`${f.borough} is next door to their council (${need.councilBorough})`); }
   else if (need.flexible && !hasWants) { score += 8; reasons.push('Open to any area'); }
-  else if (hasWants && f.borough) {
-    score -= 30;
-    const wants = need.wantedAreas.length ? `Asked for ${titleCase(need.wantedAreas[0])}`
-      : need.wantedDistricts.length ? `Asked for ${need.wantedDistricts[0]}`
-      : [...need.wantedBoroughs.values()][0];
-    cautions.push(`${wants}, this is ${f.borough}`);
+  else if (areaUnknown) { score += 5; cautions.push('Area not stated: ask them'); }
+  else {
+    areaFit = false;
+    if (hasWants && f.borough) {
+      score -= 30;
+      const wants = need.wantedAreas.length ? `Asked for ${titleCase(need.wantedAreas[0])}`
+        : need.wantedDistricts.length ? `Asked for ${need.wantedDistricts[0]}`
+        : [...need.wantedBoroughs.values()][0].ask;
+      cautions.push(`${wants}, this is ${f.borough}`);
+    }
   }
-  if (need.councilBorough && f.borough === need.councilBorough && (askedArea || askedDistrict || boroughWhy)) {
+  if (ownCouncil && (askedArea || askedDistrict || boroughWant)) {
     score += 5; // their own council's area as well as their ask
   }
 
@@ -215,15 +242,17 @@ export function scoreMatch(p: PropertyLike, a: Applicant): Match | null {
   if (tier === 1) { score += 10; reasons.push('Tier 1'); } else if (tier === 2) { score += 4; }
   if (isUrgent(a)) { score += 10; reasons.push(`Urgent: ${URGENCY_LABEL[a.urgency ?? ''] ?? a.urgency}`); }
 
-  const areaFit = Boolean(askedArea || askedDistrict || boroughWhy || (f.borough && need.councilBorough === f.borough) || (need.flexible && !hasWants));
   const rentFit = reasons.some((r) => /within|rent, on benefits/.test(r));
   if (!areaFit && !rentFit && !isUrgent(a)) return null;
   if (score < 30) return null;
-  return { applicant: a, score, strength: score >= 70 ? 'strong' : score >= 45 ? 'good' : 'possible', reasons, cautions };
+  // Without knowing where they want to live, it is never better than possible
+  const strength: Strength = areaUnknown ? 'possible' : score >= 70 ? 'strong' : score >= 45 ? 'good' : 'possible';
+  return { applicant: a, score, strength, reasons, cautions };
 }
 
+const RANK: Record<Strength, number> = { strong: 0, good: 1, possible: 2 };
 const byBest = (x: Match, y: Match) =>
-  y.score - x.score || effectiveTier(x.applicant) - effectiveTier(y.applicant);
+  RANK[x.strength] - RANK[y.strength] || y.score - x.score || effectiveTier(x.applicant) - effectiveTier(y.applicant);
 
 export function matchesForProperty(p: PropertyLike, applicants: Applicant[]): Match[] {
   return applicants.map((a) => scoreMatch(p, a)).filter((m): m is Match => m !== null).sort(byBest);
@@ -235,5 +264,5 @@ export function matchesForApplicant<P extends PropertyLike>(a: Applicant, proper
   return properties
     .map((property) => ({ property, match: scoreMatch(property, a) }))
     .filter((x): x is PropertyMatch<P> => x.match !== null)
-    .sort((x, y) => y.match.score - x.match.score);
+    .sort((x, y) => byBest(x.match, y.match));
 }

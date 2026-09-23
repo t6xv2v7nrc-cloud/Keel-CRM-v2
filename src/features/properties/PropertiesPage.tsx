@@ -330,10 +330,13 @@ function PasteImport({ existing, applicants, canClose, onClose, onAdded }: {
                     {top.length === 0 ? (
                       <span className="text-[var(--ink-muted)]">No matching clients yet</span>
                     ) : (
-                      <span className="text-[var(--ink)]">
-                        <StrengthBadge s={top[0].strength} /> {top[0].applicant.full_name}
-                        <span className="text-[var(--ink-muted)]"> · {top[0].reasons.slice(0, 2).join(' · ')}</span>
-                        {top.length > 1 && <span className="text-[var(--ink-muted)]"> · and {top.length - 1} more</span>}
+                      <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[var(--ink)]">
+                        {top.slice(0, 3).map((m) => (
+                          <span key={m.applicant.id} className="inline-flex items-center gap-1.5">
+                            <StrengthBadge s={m.strength} /> {m.applicant.full_name}
+                          </span>
+                        ))}
+                        {top.length > 3 && <span className="text-[var(--ink-muted)]">and {top.length - 3} more</span>}
                       </span>
                     )}
                   </div>
@@ -356,12 +359,19 @@ function PasteImport({ existing, applicants, canClose, onClose, onAdded }: {
 
 // ── Property card with its matches ────────────────────────────────
 
+const SHOW_MATCHES = 8;
+
 function PropertyCard({ p, matches, isNew, selected, onToggle, onStatus, onDelete }: {
   p: Property; matches: Match[]; isNew: boolean; selected: boolean;
   onToggle: () => void; onStatus: (s: Property['status']) => void; onDelete: () => void;
 }) {
   const [showAll, setShowAll] = useState(false);
-  const shown = showAll ? matches : matches.slice(0, 3);
+  const shown = showAll ? matches : matches.slice(0, SHOW_MATCHES);
+  const breakdown = (['strong', 'good', 'possible'] as const)
+    .map((st) => [st, matches.filter((m) => m.strength === st).length] as const)
+    .filter(([, c]) => c > 0)
+    .map(([st, c]) => `${c} ${st}`)
+    .join(', ');
   const facts = [
     p.area, p.borough && p.borough.toLowerCase() !== p.area?.toLowerCase() ? p.borough : null, p.property_type,
     p.rent_text ?? (p.rent_pcm ? `${money(p.rent_pcm)} pcm` : null),
@@ -398,13 +408,14 @@ function PropertyCard({ p, matches, isNew, selected, onToggle, onStatus, onDelet
             <>
               <div className="mb-2 text-[13px] font-medium text-[var(--ink-muted)]">
                 {matches.length} matching {matches.length === 1 ? 'client' : 'clients'}
+                {matches.length > 1 && <span className="font-normal">: {breakdown}</span>}
               </div>
               <ul className="m-0 flex list-none flex-col gap-3 p-0">
                 {shown.map((m) => <MatchRow key={m.applicant.id} m={m} />)}
               </ul>
-              {matches.length > 3 && (
-                <button onClick={() => setShowAll((v) => !v)} className="mt-2 text-[13px] text-[var(--link)] hover:underline">
-                  {showAll ? 'Show fewer' : `Show ${matches.length - 3} more`}
+              {matches.length > SHOW_MATCHES && (
+                <button onClick={() => setShowAll((v) => !v)} className="mt-3 text-[13px] text-[var(--link)] hover:underline">
+                  {showAll ? 'Show fewer' : `Show all ${matches.length} clients`}
                 </button>
               )}
             </>
