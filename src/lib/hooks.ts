@@ -302,7 +302,12 @@ export function useSaveSettings() {
         ? { key: 'app', value: teamPart(value) }
         : { key: myKey(uid!), value: myPart(value) };
       const { error } = await supabase.from('settings').upsert({ ...row, updated_at: new Date().toISOString() });
-      if (error) throw error;
+      if (error) {
+        if (error.code === '42501' || /row-level security/i.test(error.message)) {
+          throw new Error(scope === 'team' ? 'Only the owner can change team settings.' : 'You can only change your own settings.');
+        }
+        throw error;
+      }
       return value;
     },
     onSuccess: () => {
@@ -324,7 +329,7 @@ export function useTeam() {
     queryKey: ['team'],
     staleTime: 5 * 60_000,
     queryFn: async (): Promise<{ members: Profile[]; ready: boolean }> => {
-      const { data, error } = await supabase.from('profiles').select('id, email, display_name').order('created_at');
+      const { data, error } = await supabase.from('profiles').select('*').order('created_at');
       if (error) {
         if (missingTable(error)) return { members: [], ready: false };
         throw error;
@@ -359,7 +364,17 @@ export function usePeople() {
       return m?.display_name || nameFromEmail(m?.email) || null;
     };
     const meProfile = session ? byId.get(session.id) : undefined;
+    // Roles arrive with the 0007 update; before that everyone may change team settings
+    const rolesReady = members.some((m) => m.role !== undefined);
+    const owner = members.find((m) => m.role === 'owner') ?? null;
+    const isOwner = !!meProfile && meProfile.role === 'owner';
     return {
+      rolesReady,
+      owner,
+      ownerName: owner ? nameOf(owner.id) : null,
+      isOwner,
+      /** May change team settings (tier logic, urgency, matching rules). */
+      canEditTeam: !rolesReady || isOwner,
       ready,
       members,
       meId: session?.id ?? null,
@@ -398,6 +413,20 @@ export function useSaveProfile() {
       const { error } = await supabase.from('profiles')
         .upsert({ id: u.id, email: u.email, display_name: displayName.trim() || nameFromEmail(u.email), updated_at: new Date().toISOString() });
       if (error) throw missingTable(error) ? new Error(TEAM_UPDATE) : error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['team'] }),
+  });
+}
+
+/** The owner hands ownership (and control of team settings) to someone else. */
+export function useHandOver() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ toId, meId }: { toId: string; meId: string }) => {
+      const { error } = await supabase.from('profiles').update({ role: 'owner' }).eq('id', toId);
+      if (error) throw error;
+      const { error: e2 } = await supabase.from('profiles').update({ role: 'member' }).eq('id', meId);
+      if (e2) throw e2;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['team'] }),
   });

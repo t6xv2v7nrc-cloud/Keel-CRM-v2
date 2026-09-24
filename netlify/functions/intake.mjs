@@ -72,7 +72,8 @@ function normUrgency(v = '') {
   return undefined;
 }
 
-// Agreed tier rules (mirror of src/lib/tiering.ts).
+// Standard tier logic, used only for the tier stored when a referral arrives.
+// The app works tiers out live from the tier logic in Team settings.
 function computeTier({ household_type, on_uc, pip, lcwra, council_registered, work_status }) {
   if (household_type === 'single' && on_uc && pip && lcwra && council_registered) return 1;
   if (council_registered && (on_uc || work_status === 'full_time')) return 2;

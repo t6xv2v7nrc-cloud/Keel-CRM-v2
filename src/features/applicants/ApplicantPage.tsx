@@ -1,22 +1,19 @@
-import { useRef, useState } from 'react';
-import type { ReactNode } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
-  Avatar, Button, Card, CardHeader, Empty, Field, Help, Icon, KeelLine, StageBadge, TierBadge, UrgentChip, useToast,
+  Avatar, Button, Card, CardHeader, Empty, Help, Icon, KeelLine, StageBadge, TierBadge, UrgentChip, useToast,
 } from '../../components/ui';
 import {
-  useActivities, useApplicant, useAssign, useCalls, useDeleteApplicant, usePeople, useProperties, useSetNextCall, useUpdateApplicant,
-  useUpdateTriage,
+  useActivities, useApplicant, useAssign, useCalls, useDeleteApplicant, usePeople, useProperties, useSetNextCall,
 } from '../../lib/hooks';
 import { matchesForApplicant } from '../../lib/propertyMatch';
 import { money, timeAgo } from '../../lib/format';
-import { computeTier, tierReason, HOUSEHOLD_LABEL, WORK_STATUS_LABEL, URGENCY_LABEL } from '../../lib/tiering';
-import type { Tier } from '../../lib/tiering';
 import { effectiveTier, isUrgent } from '../../lib/search';
 import { addDays, dayLabel, OUTCOME_LABEL, todayIso } from '../../lib/calls';
 import type { Activity, Applicant, Call } from '../../lib/types';
 import { CallHistory, CallLogger } from '../calls/CallLogger';
 import { CallsNeedUpdate } from '../calls/CallsPage';
+import { ClientDetails } from './ClientDetails';
 
 export function ApplicantPage() {
   const { id } = useParams<{ id: string }>();
@@ -28,6 +25,12 @@ export function ApplicantPage() {
   const { toast } = useToast();
   const [logging, setLogging] = useState(false);
   const callsRef = useRef<HTMLDivElement>(null);
+  const { hash } = useLocation();
+  const loaded = !!applicant;
+  // Arriving from "found in notes" in the Pipeline: go straight to the details
+  useEffect(() => {
+    if (loaded && hash === '#details') setTimeout(() => document.getElementById('details')?.scrollIntoView({ block: 'start' }), 50);
+  }, [loaded, hash]);
 
   if (isLoading) return <div className="grid min-h-[50vh] place-items-center text-[var(--ink-muted)]">Loading…</div>;
   if (!applicant) return <div className="grid min-h-[50vh] place-items-center text-[var(--ink-muted)]">Client not found.</div>;
@@ -60,6 +63,8 @@ export function ApplicantPage() {
 
       <HeroCard applicant={applicant} lastCall={mine[0]} onLogCall={startCall} />
 
+      <ClientDetails applicant={applicant} />
+
       <SuitablePropertiesCard applicant={applicant} />
 
       <div className="grid gap-6 md:grid-cols-[1fr_360px]">
@@ -84,7 +89,6 @@ export function ApplicantPage() {
         </div>
 
         <div className="flex flex-col gap-6">
-          <ReferralCard applicant={applicant} />
           <Card>
             <CardHeader icon="flag" title="Progress" help="progress" />
             <div className="p-5"><KeelLine current={applicant.stage} /></div>
@@ -250,254 +254,15 @@ function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
   );
 }
 
-// ── Referral triage (editable) ─────────────────────────────────────
-
-const yesNo = (b: boolean | null | undefined) => (b === true ? 'Yes' : b === false ? 'No' : 'Not known');
-
-/** Referral triage: every answer can be changed here, and the tier follows the
- *  rules in Settings unless you set it by hand. */
-function ReferralCard({ applicant }: { applicant: Applicant }) {
-  const triage = useUpdateTriage();
-  const { toast } = useToast();
-  const effective = effectiveTier(applicant);
-  const auto = computeTier(applicant);
-  const locked = applicant.tier_locked === true || (applicant.tier_locked === undefined && applicant.tier != null && applicant.tier !== auto);
-
-  const change = (patch: Partial<Applicant>, note: string) => {
-    const before = effective;
-    const merged = { ...applicant, ...patch };
-    const after = 'tier' in patch ? (patch.tier as Tier) : locked ? before : computeTier(merged);
-    triage.mutate({ applicant, patch, note }, {
-      onSuccess: () => toast(after !== before ? `${note}. Now Tier ${after}` : note, 'success'),
-      onError: (e) => toast(`Could not save: ${(e as Error).message}`, 'danger'),
-    });
-  };
-
-  const setTierByHand = (t: Tier) => {
-    if (t === effective && locked) return;
-    change({ tier: t, tier_locked: true }, `Tier set to ${t} by hand`);
-  };
-  const useRules = () => change({ tier: auto, tier_locked: false }, `Tier back to the rules (Tier ${auto})`);
-
-  const field = (label: string, key: keyof Applicant) => (v: string) => {
-    const value = v.trim() || null;
-    if ((applicant[key] ?? null) === value) return;
-    change({ [key]: value } as Partial<Applicant>, value ? `${label} set to ${value}` : `${label} cleared`);
-  };
-
-  return (
-    <Card>
-      <CardHeader icon="layers" title="Referral triage" help="triage">
-        {isUrgent(applicant) && <UrgentChip />}
-        <TierBadge tier={effective} />
-      </CardHeader>
-      <div className="flex flex-col gap-4 p-5">
-        {/* Tier */}
-        <div className="flex flex-col gap-2">
-          <div className="grid grid-cols-3 gap-1 rounded-lg bg-[var(--paper-2)] p-1" role="group" aria-label="Tier">
-            {([1, 2, 3] as Tier[]).map((t) => {
-              const on = t === effective;
-              return (
-                <button key={t} onClick={() => setTierByHand(t)} aria-pressed={on} disabled={triage.isPending}
-                  className={`rounded-md py-1.5 text-[13px] font-semibold transition-colors ${
-                    on ? 'bg-[var(--surface)] text-[var(--ink)] shadow-[var(--shadow-card)]' : 'text-[var(--ink-muted)] hover:text-[var(--ink)]'}`}>
-                  Tier {t}
-                </button>
-              );
-            })}
-          </div>
-          <p className="m-0 text-[13px] text-[var(--ink-muted)]">
-            {locked ? (
-              <>Set by hand. The rules would give Tier {auto}: {tierReason(applicant)}{' '}
-                <button onClick={useRules} className="text-[var(--link)] hover:underline">Use the rules</button></>
-            ) : (
-              <>From the answers below: {tierReason(applicant)} <Link to="/settings" className="text-[var(--link)] hover:underline">Change the rules</Link></>
-            )}
-          </p>
-        </div>
-
-        {/* Answers */}
-        <div className="flex flex-col divide-y divide-[var(--line)] rounded-lg border border-[var(--line)]">
-          <TriageRow label="Household">
-            <Choice value={applicant.household_type ?? ''} onChange={(v) => change({ household_type: v || null }, `Household set to ${v ? HOUSEHOLD_LABEL[v].toLowerCase() : 'not known'}`)}
-              options={[['', 'Not known'], ...Object.entries(HOUSEHOLD_LABEL)]} />
-          </TriageRow>
-          {([['on_uc', 'On UC'], ['pip', 'PIP'], ['lcwra', 'LCWRA'], ['council_registered', 'Council-registered']] as const).map(([key, label]) => (
-            <TriageRow key={key} label={label}>
-              <YesNo value={applicant[key]} onChange={(v) => change({ [key]: v } as Partial<Applicant>, `${label} set to ${yesNo(v).toLowerCase()}`)} />
-            </TriageRow>
-          ))}
-          <TriageRow label="Work">
-            <Choice value={applicant.work_status ?? ''} onChange={(v) => change({ work_status: v || null }, `Work set to ${v ? WORK_STATUS_LABEL[v].toLowerCase() : 'not known'}`)}
-              options={[['', 'Not known'], ...Object.entries(WORK_STATUS_LABEL)]} />
-          </TriageRow>
-          <TriageRow label="Urgency">
-            <Choice value={applicant.urgency ?? ''} onChange={(v) => change({ urgency: v || null }, `Urgency set to ${v ? URGENCY_LABEL[v].toLowerCase() : 'not known'}`)}
-              options={[['', 'Not known'], ...Object.entries(URGENCY_LABEL)]} />
-          </TriageRow>
-          <TriageRow label="Council">
-            <InlineText value={applicant.council ?? ''} placeholder="e.g. Barnet" onSave={field('Council', 'council')} />
-          </TriageRow>
-          <TriageRow label="Situation">
-            <InlineText value={applicant.housing_situation ?? ''} placeholder="e.g. sofa surfing" onSave={field('Housing situation', 'housing_situation')} />
-          </TriageRow>
-          <TriageRow label="Consent">
-            <YesNo value={applicant.consent} onChange={(v) => change({ consent: v }, `Consent set to ${yesNo(v).toLowerCase()}`)} />
-          </TriageRow>
-        </div>
-
-        {/* Housing officer */}
-        <div className="flex flex-col gap-2">
-          <span className="flex items-center gap-1.5 text-[13px] font-medium text-[var(--ink-muted)]"><Icon name="user" size={14} /> Housing officer</span>
-          <div className="flex flex-col divide-y divide-[var(--line)] rounded-lg border border-[var(--line)]">
-            <TriageRow label="Name"><InlineText value={applicant.officer_name ?? ''} placeholder="Not given" onSave={field('Officer name', 'officer_name')} /></TriageRow>
-            <TriageRow label="Email"><InlineText value={applicant.officer_email ?? ''} placeholder="Not given" onSave={field('Officer email', 'officer_email')} /></TriageRow>
-            <TriageRow label="Phone"><InlineText value={applicant.officer_phone ?? ''} placeholder="Not given" mono onSave={field('Officer phone', 'officer_phone')} /></TriageRow>
-          </div>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-function TriageRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex min-h-[44px] items-center justify-between gap-3 px-3 py-1.5">
-      <span className="shrink-0 text-[13px] text-[var(--ink-muted)]">{label}</span>
-      <div className="flex min-w-0 justify-end">{children}</div>
-    </div>
-  );
-}
-
-/** Yes / No / Not known. */
-function YesNo({ value, onChange }: { value: boolean | null | undefined; onChange: (v: boolean | null) => void }) {
-  const opts: Array<[boolean | null, string]> = [[true, 'Yes'], [false, 'No'], [null, '?']];
-  return (
-    <div className="inline-flex rounded-md border border-[var(--line-strong)] p-0.5">
-      {opts.map(([v, label]) => {
-        const on = (value ?? null) === v;
-        return (
-          <button key={label} onClick={() => !on && onChange(v)} aria-pressed={on} title={v === null ? 'Not known' : label}
-            className={`min-w-[38px] rounded px-2 py-0.5 text-[13px] font-medium transition-colors ${
-              on ? (v === true ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'bg-[var(--ink)] text-[var(--surface)]') : 'text-[var(--ink-muted)] hover:text-[var(--ink)]'}`}>
-            {label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function Choice({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: Array<[string, string]> }) {
-  return (
-    <select value={value} onChange={(e) => onChange(e.target.value)}
-      className="max-w-[190px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 py-1 text-[13px] text-[var(--ink)]">
-      {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-    </select>
-  );
-}
-
-/** Text that saves when you leave the box or press Enter. */
-function InlineText({ value, placeholder, onSave, mono = false }: { value: string; placeholder: string; onSave: (v: string) => void; mono?: boolean }) {
-  const [v, setV] = useState(value);
-  const [was, setWas] = useState(value);
-  if (value !== was) { setWas(value); setV(value); }
-  return (
-    <input value={v} placeholder={placeholder} onChange={(e) => setV(e.target.value)} onBlur={() => onSave(v)}
-      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setV(value); }}
-      className={`w-[190px] rounded-md border border-transparent bg-transparent px-2 py-1 text-right text-[13px] text-[var(--ink)] outline-none hover:border-[var(--line-strong)] focus:border-[var(--accent)] focus:bg-[var(--surface)] focus:text-left ${mono ? 'font-mono' : ''}`} />
-  );
-}
-
 // ── Hero ───────────────────────────────────────────────────────────
 
-/** Client header with an inline edit mode. */
+/** Client header: who they are, where they are, and the quick actions. */
 function HeroCard({ applicant, lastCall, onLogCall }: { applicant: Applicant; lastCall?: Call; onLogCall: () => void }) {
-  const update = useUpdateApplicant();
-  const { toast } = useToast();
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<Partial<Applicant>>({});
   const tier = effectiveTier(applicant);
-
   const household = [
     applicant.adults ? `${applicant.adults} adult${applicant.adults > 1 ? 's' : ''}` : null,
     applicant.children ? `${applicant.children} child${applicant.children > 1 ? 'ren' : ''}` : null,
   ].filter(Boolean).join(', ');
-
-  const start = () => {
-    setDraft({
-      full_name: applicant.full_name,
-      phone: applicant.phone ?? '',
-      email: applicant.email ?? '',
-      referring_borough: applicant.referring_borough ?? '',
-      benefit_type: applicant.benefit_type ?? '',
-      budget_pcm: applicant.budget_pcm ?? undefined,
-      lha_band: applicant.lha_band ?? '',
-      adults: applicant.adults ?? 1,
-      children: applicant.children ?? 0,
-      requirements: applicant.requirements ?? '',
-      notes: applicant.notes ?? '',
-    });
-    setEditing(true);
-  };
-
-  const set = (k: keyof Applicant, v: string | number) => setDraft((d) => ({ ...d, [k]: v }));
-
-  const save = async () => {
-    if (!draft.full_name?.trim()) { toast('Name is required', 'danger'); return; }
-    try {
-      await update.mutateAsync({
-        id: applicant.id,
-        full_name: draft.full_name,
-        phone: draft.phone || null,
-        email: draft.email || null,
-        referring_borough: draft.referring_borough || null,
-        benefit_type: draft.benefit_type || null,
-        budget_pcm: draft.budget_pcm ? Number(draft.budget_pcm) : null,
-        lha_band: draft.lha_band || null,
-        adults: draft.adults != null ? Number(draft.adults) : null,
-        children: draft.children != null ? Number(draft.children) : null,
-        requirements: draft.requirements || null,
-        notes: draft.notes || null,
-      });
-      toast('Client updated', 'success');
-      setEditing(false);
-    } catch (e) {
-      toast(`Save failed: ${(e as Error).message}`, 'danger');
-    }
-  };
-
-  if (editing) {
-    return (
-      <Card className="p-6">
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Full name" value={draft.full_name ?? ''} onChange={(e) => set('full_name', e.target.value)} />
-          <Field label="Phone" mono value={draft.phone ?? ''} onChange={(e) => set('phone', e.target.value)} />
-          <Field label="Email" value={draft.email ?? ''} onChange={(e) => set('email', e.target.value)} />
-          <Field label="Borough" value={draft.referring_borough ?? ''} onChange={(e) => set('referring_borough', e.target.value)} />
-          <Field label="Benefit (UC/HB)" value={draft.benefit_type ?? ''} onChange={(e) => set('benefit_type', e.target.value)} />
-          <Field label="Budget pcm" mono type="number" value={String(draft.budget_pcm ?? '')} onChange={(e) => set('budget_pcm', e.target.value)} />
-          <Field label="Adults" type="number" value={String(draft.adults ?? '')} onChange={(e) => set('adults', e.target.value)} />
-          <Field label="Children" type="number" value={String(draft.children ?? '')} onChange={(e) => set('children', e.target.value)} />
-          <Field label="LHA band" value={draft.lha_band ?? ''} onChange={(e) => set('lha_band', e.target.value)} />
-        </div>
-        <label className="mt-4 flex flex-col gap-1">
-          <span className="text-[13px] font-medium text-[var(--ink-muted)]">Requirements</span>
-          <textarea value={draft.requirements ?? ''} onChange={(e) => set('requirements', e.target.value)} rows={2}
-            className="rounded-md border border-[var(--line-strong)] bg-[var(--surface)] p-2 text-[15px] text-[var(--ink)] outline-none focus:border-[var(--accent)]" />
-        </label>
-        <label className="mt-4 flex flex-col gap-1">
-          <span className="text-[13px] font-medium text-[var(--ink-muted)]">Looking for / notes</span>
-          <textarea value={draft.notes ?? ''} onChange={(e) => set('notes', e.target.value)} rows={4}
-            className="rounded-md border border-[var(--line-strong)] bg-[var(--surface)] p-2 text-[15px] text-[var(--ink)] outline-none focus:border-[var(--accent)]" />
-        </label>
-        <div className="mt-5 flex justify-end gap-2">
-          <Button onClick={() => setEditing(false)} disabled={update.isPending}>Cancel</Button>
-          <Button variant="primary" onClick={save} disabled={update.isPending}>{update.isPending ? 'Saving…' : 'Save changes'}</Button>
-        </div>
-      </Card>
-    );
-  }
 
   const next = applicant.next_call_at;
   return (
@@ -523,7 +288,7 @@ function HeroCard({ applicant, lastCall, onLogCall }: { applicant: Applicant; la
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <AssignPicker applicant={applicant} />
-            <Button onClick={start} className="min-h-0 px-3 py-2 text-[13px]"><Icon name="pencil" size={14} />Edit</Button>
+            <Button onClick={() => document.getElementById('details')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="min-h-0 px-3 py-2 text-[13px]"><Icon name="pencil" size={14} />Edit details</Button>
             <Button variant="primary" onClick={onLogCall} className="min-h-0 px-3 py-2 text-[13px]"><Icon name="phoneOut" size={14} />Log call</Button>
           </div>
         </div>
@@ -535,13 +300,6 @@ function HeroCard({ applicant, lastCall, onLogCall }: { applicant: Applicant; la
           <Meta icon="calendar" label="Next call" value={next ? dayLabel(next) : 'Not set'} strong={!!next && next <= todayIso()} />
         </dl>
 
-        {applicant.requirements && <p className="mt-4 mb-0 text-[15px] text-[var(--ink)]">{applicant.requirements}</p>}
-        {applicant.notes && (
-          <div className="mt-4 rounded-lg border-l-4 border-[var(--accent)] bg-[var(--surface-2)] p-3.5">
-            <div className="text-[13px] font-medium text-[var(--ink-muted)]">Looking for / notes</div>
-            <p className="m-0 mt-1 whitespace-pre-wrap text-[15px] text-[var(--ink)]">{applicant.notes}</p>
-          </div>
-        )}
       </div>
     </Card>
   );

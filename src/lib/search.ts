@@ -10,7 +10,7 @@ import type { Applicant } from './types';
 import { APPLICANT_STAGES } from '../types/extraction';
 import type { ApplicantStage } from '../types/extraction';
 import {
-  computeTier, HOUSEHOLD_LABEL, WORK_STATUS_LABEL, URGENCY_LABEL, URGENCY_RANK,
+  computeTier, HOUSEHOLD_LABEL, tierCount, WORK_STATUS_LABEL, URGENCY_LABEL, URGENCY_RANK,
 } from './tiering';
 import type { Tier } from './tiering';
 import { activeSettings } from './settings';
@@ -33,7 +33,7 @@ export const benefitsOf = (a: Applicant) => BENEFITS.filter((b) => b.has(a));
 /** The tier in force: a tier set by hand (locked) wins; otherwise the current
  *  rules decide, so a change in Settings reaches every unlocked client. */
 export const effectiveTier = (a: Applicant): Tier => {
-  const stored = a.tier === 1 || a.tier === 2 || a.tier === 3 ? a.tier : null;
+  const stored = typeof a.tier === 'number' && a.tier >= 1 && a.tier <= tierCount() ? a.tier : null;
   if (a.tier_locked === undefined) return stored ?? computeTier(a); // before the 0005 update
   return a.tier_locked && stored ? stored : computeTier(a);
 };
@@ -110,7 +110,7 @@ export type YesNoAny = 'any' | 'yes' | 'no';
 export interface PipelineFilters {
   q: string;
   stage: StageFilter;
-  tier: 'any' | '1' | '2' | '3';
+  tier: string; // 'any' or a tier number
   household: 'any' | HouseholdKey | 'unknown';
   work: 'any' | 'not_working' | 'part_time' | 'full_time';
   councilReg: YesNoAny;
@@ -154,7 +154,7 @@ export function filtersFromParams(p: URLSearchParams): PipelineFilters {
   return {
     q: p.get('q') ?? '',
     stage: oneOf<StageFilter>(p.get('stage'), ['active', 'all', ...APPLICANT_STAGES], 'active'),
-    tier: oneOf(p.get('tier'), ['any', '1', '2', '3'] as const, 'any'),
+    tier: /^\d{1,2}$/.test(p.get('tier') ?? '') ? p.get('tier')! : 'any',
     household: oneOf(p.get('type'), ['any', 'single', 'couple', 'family', 'other', 'unknown'] as const, 'any'),
     work: oneOf(p.get('work'), ['any', 'not_working', 'part_time', 'full_time'] as const, 'any'),
     councilReg: oneOf(p.get('reg'), ['any', 'yes', 'no'] as const, 'any'),

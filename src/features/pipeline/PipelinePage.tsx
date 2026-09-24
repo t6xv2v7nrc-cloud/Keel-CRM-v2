@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApplicants, useCalls, useMoveStage, useDeleteApplicant, usePeople } from '../../lib/hooks';
 import { Avatar, Card, Help, Icon, PageHeader, TierBadge, UrgentChip, useToast } from '../../components/ui';
 import { callState, dayLabel, lastCallMap, OUTCOME_LABEL, todayIso } from '../../lib/calls';
+import { readNotes } from '../../lib/readNotes';
 import type { CallState } from '../../lib/calls';
 import { APPLICANT_STAGES } from '../../types/extraction';
 import type { ApplicantStage } from '../../types/extraction';
 import type { Applicant, Call } from '../../lib/types';
 import { money, timeAgo } from '../../lib/format';
-import { HOUSEHOLD_LABEL, URGENCY_LABEL, WORK_STATUS_LABEL } from '../../lib/tiering';
+import { HOUSEHOLD_LABEL, tierLabel, tierNumbers, URGENCY_LABEL, WORK_STATUS_LABEL } from '../../lib/tiering';
 import {
   applyFilters, areaOf, BENEFITS, benefitsOf, DEFAULT_FILTERS, effectiveTier, filtersFromParams,
   filtersToParams, householdOf, isActive, isUrgent, parseQuery, previewText, searchText, sortApplicants,
@@ -50,6 +51,11 @@ export function PipelinePage() {
   const { calls } = useCalls();
   const last = useMemo(() => lastCallMap(calls), [calls]);
   const people = usePeople();
+  // How many form answers each client's own notes could fill in
+  const fromNotes = useMemo(() => new Map(applicants.map((a) => {
+    const r = readNotes(a);
+    return [a.id, r.suggestions.filter((s) => s.confidence >= 0.55).length + r.flags.filter((f) => f.fix).length] as const;
+  })), [applicants]);
   const moveStage = useMoveStage();
   const deleteApplicant = useDeleteApplicant();
   const { toast } = useToast();
@@ -124,7 +130,7 @@ export function PipelinePage() {
   const pills: Pill[] = [];
   if (filters.q) pills.push({ label: `Search: ${filters.q}`, remove: (f) => ({ ...f, q: '' }) });
   if (filters.stage !== 'active') pills.push({ label: filters.stage === 'all' ? 'All stages' : STAGE_LABEL[filters.stage], remove: (f) => ({ ...f, stage: 'active' }) });
-  if (filters.tier !== 'any') pills.push({ label: `Tier ${filters.tier}`, remove: (f) => ({ ...f, tier: 'any' }) });
+  if (filters.tier !== 'any') pills.push({ label: tierLabel(Number(filters.tier)), remove: (f) => ({ ...f, tier: 'any' }) });
   if (filters.household !== 'any') pills.push({ label: filters.household === 'unknown' ? 'Client type not set' : HOUSEHOLD_LABEL[filters.household], remove: (f) => ({ ...f, household: 'any' }) });
   if (filters.work !== 'any') pills.push({ label: WORK_STATUS_LABEL[filters.work], remove: (f) => ({ ...f, work: 'any' }) });
   if (filters.councilReg !== 'any') pills.push({ label: filters.councilReg === 'yes' ? 'Council-registered' : 'Not council-registered', remove: (f) => ({ ...f, councilReg: 'any' }) });
@@ -186,7 +192,7 @@ export function PipelinePage() {
               ...PICKABLE_STAGES.map((s): [string, string] => [s, `${STAGE_LABEL[s]} (${stageCounts.get(s) ?? 0})`]),
             ]} />
           <FilterSelect label="Tier" value={filters.tier} onChange={(v) => update({ tier: v as PipelineFilters['tier'] })}
-            options={[['any', 'Any'], ['1', 'Tier 1'], ['2', 'Tier 2'], ['3', 'Tier 3']]} />
+            options={[['any', 'Any'], ...tierNumbers().map((t): [string, string] => [String(t), tierLabel(t)])]} />
           <FilterSelect label="Client type" value={filters.household} onChange={(v) => update({ household: v as PipelineFilters['household'] })}
             options={[['any', 'Any'], ['single', 'Single'], ['couple', 'Couple'], ['family', 'Family with children'], ['other', 'Other'], ['unknown', 'Not set']]} />
           <FilterSelect label="Work" value={filters.work} onChange={(v) => update({ work: v as PipelineFilters['work'] })}
@@ -286,6 +292,12 @@ export function PipelinePage() {
                           <Highlight text={a.full_name} terms={terms} />
                         </button>
                         {a.phone && <div className="font-mono text-[13px] text-[var(--ink-muted)]">{a.phone}</div>}
+                        {(fromNotes.get(a.id) ?? 0) > 0 && (
+                          <Link to={`/applicants/${a.id}#details`} title="Answers Keel found in their notes"
+                            className="mt-1 inline-flex items-center gap-1 rounded bg-[var(--accent-soft)] px-1.5 py-0.5 text-[12px] font-medium text-[var(--accent-ink)] hover:underline">
+                            <Icon name="sparkle" size={12} /> {fromNotes.get(a.id)} found in notes
+                          </Link>
+                        )}
                         {a.assigned_to && (
                           <div className="mt-0.5 inline-flex items-center gap-1 text-[12px] text-[var(--ink-muted)]">
                             <Icon name="user" size={12} />{people.whoOf(a.assigned_to) === 'you' ? 'You' : people.nameOf(a.assigned_to)}

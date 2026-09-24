@@ -7,7 +7,8 @@ Read `KEEL_CRM_PLAN.md` for the full build plan. Work phase by phase; do not sta
 ```
 src/
   lib/        supabase.ts, matching.ts, format.ts (phone/E.164, money, dates),
-              settings.ts (team rules + my settings), tiering.ts, calls.ts, propertyMatch.ts,
+              settings.ts (team rules + my settings, tier logic types), tiering.ts (tier engine),
+              calls.ts, propertyMatch.ts, readNotes.ts (form answers from free text),
               help.ts (words behind the "?" help buttons)
   components/ ui primitives on tokens (Button, Badge, Card, Field, Toast, KeelLine,
               Icon, Visuals: avatars, page headers, stat tiles, SVG charts)
@@ -28,6 +29,8 @@ supabase/migrations/
   Palette: creamy greys with one green accent (`--accent`); brick red only for delete and errors.
   Use the semantic tokens (`--note-*` for cautions, `--chip-*` for tags, `--strong/good/possible-*`, `--tier-N-*`), not stage colours.
 - Rules that change behaviour (tiers, urgency, premium rent, call follow-ups) live in Settings (`lib/settings.ts`), not constants.
+  Tiers are data (`tierLogic`: any number of tiers, conditions on client answers); never assume 3 tiers, use `tierNumbers()`/`tierLabel()`.
+  Only the owner (`profiles.role`, migration 0007) can change team settings; RLS enforces it.
   Team settings are shared (key `app`); personal ones (`PERSONAL_KEYS`) are per person (key `user:<id>`).
 - Two or more people use Keel: show who did things (`calls.created_by`, `activities.actor`, `usePeople().whoOf`),
   and give new features a `<Help topic=... />` with its words in `lib/help.ts`.

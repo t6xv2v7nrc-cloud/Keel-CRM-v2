@@ -121,4 +121,5 @@ export interface Profile {
   id: string;
   email: string | null;
   display_name: string | null;
+  role?: 'owner' | 'member'; // 0007; the owner alone changes team settings
 }

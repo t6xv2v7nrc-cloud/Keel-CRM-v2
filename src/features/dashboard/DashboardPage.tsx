@@ -9,7 +9,7 @@ import { timeAgo } from '../../lib/format';
 import { effectiveTier, isActive, isUrgent } from '../../lib/search';
 import { matchesForProperty } from '../../lib/propertyMatch';
 import { addDays, callQueue, callsPerDay, isoDay, lastCallMap, OUTCOME_LABEL, queueLabel, todayIso } from '../../lib/calls';
-import type { Tier } from '../../lib/tiering';
+import { tierColor, tierCount, tierLabel, tierNumbers } from '../../lib/tiering';
 import type { ApplicantStage } from '../../types/extraction';
 import type { Activity } from '../../lib/types';
 
@@ -17,7 +17,6 @@ const FUNNEL: Array<{ stage: ApplicantStage; label: string }> = [
   { stage: 'lead', label: 'Lead' }, { stage: 'referred', label: 'Referred' }, { stage: 'viewing', label: 'Viewing' },
   { stage: 'offer', label: 'Offer' }, { stage: 'placed', label: 'Placed' },
 ];
-const TIER_COLOR: Record<Tier, string> = { 1: 'var(--accent)', 2: 'color-mix(in srgb, var(--accent) 45%, var(--paper-2))', 3: 'var(--ink-faint)' };
 
 export function DashboardPage() {
   const people = usePeople();
@@ -34,9 +33,9 @@ export function DashboardPage() {
 
   const active = useMemo(() => applicants.filter(isActive), [applicants]);
   const tiers = useMemo(() => {
-    const counts: Record<Tier, number> = { 1: 0, 2: 0, 3: 0 };
-    for (const a of active) counts[effectiveTier(a)] += 1;
-    return counts;
+    const counts = new Map<number, number>(tierNumbers().map((t) => [t, 0]));
+    for (const a of active) counts.set(effectiveTier(a), (counts.get(effectiveTier(a)) ?? 0) + 1);
+    return tierNumbers().map((t) => ({ label: tierLabel(t), value: counts.get(t) ?? 0, color: tierColor(t, tierCount()) }));
   }, [active]);
   const urgent = active.filter(isUrgent).length;
 
@@ -116,9 +115,9 @@ export function DashboardPage() {
           </CardHeader>
           <div className="flex flex-wrap items-center gap-6 p-5">
             <Donut size={150} centre={active.length} centreSub="active clients"
-              slices={([1, 2, 3] as Tier[]).map((t) => ({ label: `Tier ${t}`, value: tiers[t], color: TIER_COLOR[t] }))} />
-            <Legend slices={([1, 2, 3] as Tier[]).map((t) => ({ label: `Tier ${t}`, value: tiers[t], color: TIER_COLOR[t] }))}
-              onPick={(label) => navigate(`/pipeline?tier=${label.slice(-1)}`)} />
+              slices={tiers} />
+            <Legend slices={tiers}
+              onPick={(label) => navigate(`/pipeline?tier=${tiers.findIndex((t) => t.label === label) + 1}`)} />
           </div>
         </Card>
 

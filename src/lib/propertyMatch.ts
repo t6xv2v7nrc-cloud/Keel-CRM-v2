@@ -17,7 +17,7 @@
 import type { Applicant } from './types';
 import { benefitsOf, effectiveTier, householdOf, isUrgent } from './search';
 import type { HouseholdKey } from './search';
-import { URGENCY_LABEL } from './tiering';
+import { tierCount, tierLabel, URGENCY_LABEL } from './tiering';
 import { activeSettings } from './settings';
 import {
   areNeighbours, areasIn, boroughFromDistrict, boroughOfArea, boroughsIn, canonicalBorough, districtOf, districtsIn,
@@ -289,7 +289,7 @@ export function scoreMatch(p: PropertyLike, a: Applicant): Match | null {
 
   // Priority
   const tier = effectiveTier(a);
-  if (tier === 1) { score += 10; reasons.push('Tier 1'); } else if (tier === 2) { score += 4; }
+  if (tier === 1) { score += 10; reasons.push(tierLabel(1)); } else if (tier === 2 && tierCount() > 2) { score += 4; }
   if (isUrgent(a)) { score += 10; reasons.push(`Urgent: ${URGENCY_LABEL[a.urgency ?? ''] ?? a.urgency}`); }
 
   const rentFit = reasons.some((r) => /within|rent, on benefits/.test(r));

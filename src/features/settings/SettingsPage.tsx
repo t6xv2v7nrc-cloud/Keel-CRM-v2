@@ -1,25 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Avatar, Button, Card, CardHeader, Donut, Help, Icon, PageHeader, useToast } from '../../components/ui';
+import { Avatar, Button, Card, CardHeader, Help, Icon, PageHeader, useToast } from '../../components/ui';
 import type { IconName } from '../../components/ui';
-import { useApplicants, useCalls, usePeople, useSaveProfile, useSaveSettings, useSettings } from '../../lib/hooks';
+import { useApplicants, useCalls, useHandOver, usePeople, useSaveProfile, useSaveSettings, useSettings } from '../../lib/hooks';
 import { DEFAULT_SETTINGS, myPart, teamPart } from '../../lib/settings';
 import type { AppSettings } from '../../lib/settings';
-import { computeTier, describeRules, TIER_META, URGENCY_LABEL } from '../../lib/tiering';
-import type { Tier } from '../../lib/tiering';
+import { URGENCY_LABEL } from '../../lib/tiering';
+import { TierLogicEditor } from './TierLogicEditor';
 import { isActive } from '../../lib/search';
 import { addDays, isoDay } from '../../lib/calls';
 import { money } from '../../lib/format';
-import type { Applicant } from '../../lib/types';
-
-/** A tier set by hand stays; everyone else follows the rules being edited
- *  (the same logic as effectiveTier, for rules not saved yet). */
-function tierUnder(a: Applicant, s: AppSettings): Tier {
-  const stored = a.tier === 1 || a.tier === 2 || a.tier === 3 ? a.tier : null;
-  if (stored && (a.tier_locked || a.tier_locked === undefined)) return stored;
-  return computeTier(a, s.tiers);
-}
 
 const same = (x: unknown, y: unknown) => JSON.stringify(x) === JSON.stringify(y);
 
@@ -91,10 +82,10 @@ export function SettingsPage() {
         <MySettingsTab draft={draft} set={set} name={name} setName={setName} teamReady={people.ready}
           email={people.members.find((m) => m.id === people.meId)?.email ?? null} />
       )}
-      {tab === 'team' && <TeamSettingsTab draft={draft} set={set} saved={settings} />}
+      {tab === 'team' && <TeamSettingsTab draft={draft} set={set} saved={settings} canEdit={people.canEditTeam} ownerName={people.ownerName} rolesReady={people.rolesReady} />}
       {tab === 'people' && <PeopleTab />}
 
-      {tab !== 'people' && (
+      {(tab === 'me' || (tab === 'team' && people.canEditTeam)) && (
         <SaveBar
           dirty={tab === 'me' ? myDirty : teamDirty}
           who={tab === 'me' ? 'only you' : 'everyone'}
@@ -175,61 +166,41 @@ function MySettingsTab({ draft, set, name, setName, teamReady, email }: {
 
 // ── Team settings ──────────────────────────────────────────────────
 
-function TeamSettingsTab({ draft, set, saved }: {
+function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: {
   draft: AppSettings; set: <K extends keyof AppSettings>(k: K, v: AppSettings[K]) => void; saved: AppSettings;
+  canEdit: boolean; ownerName: string | null; rolesReady: boolean;
 }) {
   const { data: applicants = [] } = useApplicants();
   const active = useMemo(() => applicants.filter(isActive), [applicants]);
-  const tiersNow = useMemo(() => count(active.map((a) => tierUnder(a, saved))), [active, saved]);
-  const tiersDraft = useMemo(() => count(active.map((a) => tierUnder(a, draft))), [active, draft]);
-  const locked = active.filter((a) => a.tier_locked).length;
   const urgentDraft = active.filter((a) => draft.urgentLevels.includes(a.urgency ?? '')).length;
-  const rules = describeRules(draft.tiers);
-  const t1 = (k: keyof AppSettings['tiers']['tier1']) => (v: boolean) => set('tiers', { ...draft.tiers, tier1: { ...draft.tiers.tier1, [k]: v } });
-  const t2 = (k: keyof AppSettings['tiers']['tier2']) => (v: boolean) => set('tiers', { ...draft.tiers, tier2: { ...draft.tiers.tier2, [k]: v } });
 
   return (
-    <>
-      <WhoNote icon="users">These rules apply to everyone. Changing them updates tiers, urgent flags and matches for both of you straight away.</WhoNote>
+    <fieldset disabled={!canEdit} className="m-0 flex min-w-0 flex-col gap-6 border-0 p-0">
+      {canEdit ? (
+        <WhoNote icon="users">
+          These rules apply to everyone. Changing them updates tiers, urgent flags and matches for all of you straight away.
+          {rolesReady ? ' Only you, as the owner, can change them.' : ''}
+        </WhoNote>
+      ) : (
+        <WhoNote icon="key">Only {ownerName ?? 'the owner'} can change team settings. You can see them here, and set your own preferences under My settings.</WhoNote>
+      )}
+      {!rolesReady && <UpdateNote file="0007_owner.sql">Right now anyone signed in can change team settings. To make them yours alone, run a one-off database update.</UpdateNote>}
 
       <Card>
-        <CardHeader icon="layers" title="Referral triage: tiers" help="tiers" />
-        <div className="grid gap-6 p-5 md:grid-cols-[1fr_220px]">
-          <div className="flex flex-col gap-5">
-            <Rule tier={1} summary={rules.tier1} intro="Tier 1 when the client is all of these:">
-              <Toggle on={draft.tiers.tier1.single} label="Single" onChange={t1('single')} />
-              <Toggle on={draft.tiers.tier1.uc} label="On UC" onChange={t1('uc')} />
-              <Toggle on={draft.tiers.tier1.pip} label="PIP" onChange={t1('pip')} />
-              <Toggle on={draft.tiers.tier1.lcwra} label="LCWRA" onChange={t1('lcwra')} />
-              <Toggle on={draft.tiers.tier1.councilRegistered} label="Council-registered" onChange={t1('councilRegistered')} />
-            </Rule>
-            <Rule tier={2} summary={rules.tier2} intro="Otherwise Tier 2 when the client is">
-              <Toggle on={draft.tiers.tier2.councilRegistered} label="Council-registered" onChange={t2('councilRegistered')} />
-              <span className="self-center text-[13px] text-[var(--ink-muted)]">and any of</span>
-              <Toggle on={draft.tiers.tier2.uc} label="On UC" onChange={t2('uc')} />
-              <Toggle on={draft.tiers.tier2.fullTime} label="Full-time work" onChange={t2('fullTime')} />
-              <Toggle on={draft.tiers.tier2.partTime} label="Part-time work" onChange={t2('partTime')} />
-              <Toggle on={draft.tiers.tier2.pip} label="PIP" onChange={t2('pip')} />
-            </Rule>
-            <p className="m-0 text-[13px] text-[var(--ink-muted)]">
-              Everyone else is Tier 3. A tier set by hand on a client stays as it is{locked ? ` (${locked} active ${locked === 1 ? 'client' : 'clients'})` : ''}.
-            </p>
-          </div>
-          <div className="flex flex-col items-center gap-3 rounded-lg bg-[var(--surface-2)] p-4">
-            <Donut size={128} thickness={16} centre={active.length} centreSub="active"
-              slices={([1, 2, 3] as Tier[]).map((t) => ({ label: `Tier ${t}`, value: tiersDraft[t], color: TIER_COLOR[t] }))} />
-            <ul className="m-0 w-full list-none p-0 text-[13px]">
-              {([1, 2, 3] as Tier[]).map((t) => (
-                <li key={t} className="flex items-center justify-between py-0.5">
-                  <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: TIER_COLOR[t] }} />{TIER_META[t].label}</span>
-                  <span className="font-mono">
-                    {tiersDraft[t]}
-                    {tiersDraft[t] !== tiersNow[t] && <span className="text-[var(--accent-ink)]"> ({tiersDraft[t] > tiersNow[t] ? '+' : ''}{tiersDraft[t] - tiersNow[t]})</span>}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            <span className="text-center text-[12px] text-[var(--ink-muted)]">Preview with these rules</span>
+        <CardHeader icon="layers" title="Referral triage: tier logic" help="tiers" />
+        <div className="flex flex-col gap-4 p-5">
+          <p className="m-0 text-[15px] text-[var(--ink-muted)]">
+            Tiers are checked from the top. A client gets the first tier whose conditions they meet; the last tier is everyone else.
+            Add, rename, reorder or remove tiers as the business changes.
+          </p>
+          <TierLogicEditor logic={draft.tierLogic} saved={saved.tierLogic} onChange={(l) => set('tierLogic', l)} active={active} />
+          <div className="flex flex-wrap items-center gap-4 border-t border-[var(--line)] pt-4">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--paper-2)] text-[var(--ink-muted)]"><Icon name="pencil" size={16} /></span>
+            <div className="min-w-[220px] flex-1">
+              <div className="text-[15px] font-medium text-[var(--ink)]">Co-workers can set a tier by hand</div>
+              <div className="text-[13px] text-[var(--ink-muted)]">When off, only the owner can override a client's tier on the client page.</div>
+            </div>
+            <Switch on={draft.membersCanSetTier} onChange={(v) => set('membersCanSetTier', v)} label="Co-workers can set a tier by hand" />
           </div>
         </div>
       </Card>
@@ -274,7 +245,7 @@ function TeamSettingsTab({ draft, set, saved }: {
           <p className="m-0 pl-12 text-[13px] text-[var(--ink-muted)]">How long to wait before calling again is a personal setting, under My settings.</p>
         </div>
       </Card>
-    </>
+    </fieldset>
   );
 }
 
@@ -311,9 +282,13 @@ function PeopleTab() {
                     <div className="flex items-center gap-2 text-[15px] font-medium text-[var(--ink)]">
                       {name}
                       {m.id === people.meId && <span className="rounded bg-[var(--accent-soft)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--accent-ink)]">You</span>}
+                      {m.role === 'owner' && <span className="inline-flex items-center gap-1 rounded bg-[var(--ink)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--surface)]"><Icon name="key" size={11} />Owner</span>}
                     </div>
                     <div className="truncate text-[13px] text-[var(--ink-muted)]">{m.email}</div>
                   </div>
+                  {people.isOwner && m.id !== people.meId && (
+                    <HandOver toId={m.id} toName={name} meId={people.meId!} />
+                  )}
                   <div className="flex gap-5 text-center">
                     <div><div className="font-mono text-[18px] font-semibold text-[var(--ink)]">{s.clients}</div><div className="text-[12px] text-[var(--ink-muted)]">clients</div></div>
                     <div><div className="font-mono text-[18px] font-semibold text-[var(--ink)]">{s.calls}</div><div className="text-[12px] text-[var(--ink-muted)]">calls this week</div></div>
@@ -356,14 +331,6 @@ function PeopleTab() {
 
 // ── Pieces ─────────────────────────────────────────────────────────
 
-const TIER_COLOR: Record<Tier, string> = { 1: 'var(--accent)', 2: 'color-mix(in srgb, var(--accent) 45%, var(--paper-2))', 3: 'var(--ink-faint)' };
-
-function count(tiers: Tier[]): Record<Tier, number> {
-  const c: Record<Tier, number> = { 1: 0, 2: 0, 3: 0 };
-  for (const t of tiers) c[t] += 1;
-  return c;
-}
-
 function WhoNote({ icon, children }: { icon: IconName; children: ReactNode }) {
   return (
     <div className="flex items-center gap-3 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-4 py-3 text-[15px] text-[var(--ink)]">
@@ -398,19 +365,6 @@ function SaveBar({ dirty, who, saving, disabled, onUndo, onStandard, standardLab
           <Icon name="check" size={16} />{saving ? 'Saving…' : saveLabel}
         </Button>
       </div>
-    </div>
-  );
-}
-
-function Rule({ tier, intro, summary, children }: { tier: Tier; intro: string; summary: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-2.5">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded px-2 py-0.5 text-[13px] font-semibold" style={{ background: TIER_META[tier].bg, color: TIER_META[tier].fg }}>{TIER_META[tier].label}</span>
-        <span className="text-[15px] text-[var(--ink)]">{intro}</span>
-      </div>
-      <div className="flex flex-wrap gap-2">{children}</div>
-      <div className="text-[13px] text-[var(--ink-muted)]">In short: <strong className="font-medium text-[var(--ink)]">{summary}</strong></div>
     </div>
   );
 }
@@ -477,5 +431,24 @@ function NumberField({ label, value, onChange, min, step = 1, prefix }: {
           className="h-10 w-24 bg-transparent px-2.5 font-mono text-[15px] text-[var(--ink)] outline-none" />
       </span>
     </label>
+  );
+}
+
+/** The owner hands control of team settings to someone else. */
+function HandOver({ toId, toName, meId }: { toId: string; toName: string; meId: string }) {
+  const hand = useHandOver();
+  const { toast } = useToast();
+  const go = () => {
+    if (!window.confirm(`Make ${toName} the owner? They will control team settings (tier logic, urgency, matching rules) and you will become a member.`)) return;
+    hand.mutate({ toId, meId }, {
+      onSuccess: () => toast(`${toName} is now the owner`, 'success'),
+      onError: (e) => toast(`Could not hand over: ${(e as Error).message}`, 'danger'),
+    });
+  };
+  return (
+    <button type="button" onClick={go} disabled={hand.isPending}
+      className="rounded-md border border-[var(--line-strong)] px-2.5 py-1 text-[12px] text-[var(--ink-muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]">
+      Make owner
+    </button>
   );
 }

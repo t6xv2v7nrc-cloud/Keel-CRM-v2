@@ -8,15 +8,78 @@
 // Pure helpers such as computeTier read the active settings (team rules plus
 // the signed-in person's own), which the app shell keeps up to date.
 
-export interface TierRules {
-  /** Tier 1 needs every ticked item. */
+// ── Tier logic ─────────────────────────────────────────────────────
+// Any number of tiers, checked in order; a client gets the first tier whose
+// conditions they meet, and the last tier is "everyone else". Each tier has
+// conditions that must all be true, plus (optionally) a list where at least
+// one must be true. Evaluated in tiering.ts.
+
+/** Client answers a condition can test. */
+export type CondField =
+  | 'household' | 'uc' | 'pip' | 'lcwra' | 'hb' | 'councilRegistered' | 'consent'
+  | 'work' | 'urgency' | 'children' | 'adults' | 'budget' | 'council';
+
+export interface Condition {
+  field: CondField;
+  /** yes / no / unknown for yes-no answers; oneOf / noneOf for choices;
+   *  atLeast / atMost for numbers; unknown works for everything. */
+  op: 'yes' | 'no' | 'oneOf' | 'noneOf' | 'atLeast' | 'atMost' | 'unknown';
+  values?: string[];
+  n?: number;
+}
+
+export interface TierDef {
+  label: string;
+  /** Every one of these must be true. */
+  all: Condition[];
+  /** And, if any are listed, at least one of these. */
+  any: Condition[];
+}
+
+export interface TierLogic { tiers: TierDef[] }
+
+export const DEFAULT_TIER_LOGIC: TierLogic = {
+  tiers: [
+    { label: 'Tier 1', all: [
+      { field: 'household', op: 'oneOf', values: ['single'] }, { field: 'uc', op: 'yes' }, { field: 'pip', op: 'yes' },
+      { field: 'lcwra', op: 'yes' }, { field: 'councilRegistered', op: 'yes' },
+    ], any: [] },
+    { label: 'Tier 2', all: [{ field: 'councilRegistered', op: 'yes' }],
+      any: [{ field: 'uc', op: 'yes' }, { field: 'work', op: 'oneOf', values: ['full_time'] }] },
+    { label: 'Tier 3', all: [], any: [] },
+  ],
+};
+
+/** Tier rules as saved before the rule builder (ticked boxes for two tiers). */
+interface OldTierRules {
   tier1: { single: boolean; uc: boolean; pip: boolean; lcwra: boolean; councilRegistered: boolean };
-  /** Tier 2 needs council registration (if ticked) and at least one of the other ticked items. */
   tier2: { councilRegistered: boolean; uc: boolean; fullTime: boolean; partTime: boolean; pip: boolean };
 }
 
+function fromOldRules(r: OldTierRules): TierLogic {
+  const yes = (field: CondField): Condition => ({ field, op: 'yes' });
+  const t1: Condition[] = [];
+  if (r.tier1.single) t1.push({ field: 'household', op: 'oneOf', values: ['single'] });
+  if (r.tier1.uc) t1.push(yes('uc'));
+  if (r.tier1.pip) t1.push(yes('pip'));
+  if (r.tier1.lcwra) t1.push(yes('lcwra'));
+  if (r.tier1.councilRegistered) t1.push(yes('councilRegistered'));
+  const t2any: Condition[] = [];
+  if (r.tier2.uc) t2any.push(yes('uc'));
+  if (r.tier2.pip) t2any.push(yes('pip'));
+  const work = [r.tier2.fullTime && 'full_time', r.tier2.partTime && 'part_time'].filter(Boolean) as string[];
+  if (work.length) t2any.push({ field: 'work', op: 'oneOf', values: work });
+  return { tiers: [
+    { label: 'Tier 1', all: t1, any: [] },
+    { label: 'Tier 2', all: r.tier2.councilRegistered ? [yes('councilRegistered')] : [], any: t2any },
+    { label: 'Tier 3', all: [], any: [] },
+  ] };
+}
+
 export interface AppSettings {
-  tiers: TierRules;
+  tierLogic: TierLogic;
+  /** Co-workers may set a client's tier by hand (the owner always can). */
+  membersCanSetTier: boolean;
   /** Urgency answers that count as urgent (flagged, sorted first, boost matches). */
   urgentLevels: string[];
   /** Properties above this rent are always offered to the clients below. */
@@ -38,10 +101,8 @@ export interface AppSettings {
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  tiers: {
-    tier1: { single: true, uc: true, pip: true, lcwra: true, councilRegistered: true },
-    tier2: { councilRegistered: true, uc: true, fullTime: true, partTime: false, pip: false },
-  },
+  tierLogic: DEFAULT_TIER_LOGIC,
+  membersCanSetTier: true,
   urgentLevels: ['homeless_tonight', 'at_risk_56'],
   premiumRent: 1300,
   premiumFor: { pip: true, lcwra: false, fullTime: true, partTime: false },
@@ -71,6 +132,8 @@ export const teamPart = (s: AppSettings): TeamSettings =>
  *  person saves their own.) */
 export function mergeSettings(team: unknown, mine: unknown): AppSettings {
   const base = withDefaults(DEFAULT_SETTINGS, team);
+  // tier rules saved before the rule builder
+  if (isObject(team) && !('tierLogic' in team) && isObject(team.tiers)) base.tierLogic = fromOldRules(team.tiers as unknown as OldTierRules);
   const own = isObject(mine) ? Object.fromEntries(Object.entries(mine).filter(([k]) => isPersonal(k))) : {};
   return withDefaults(base, own);
 }

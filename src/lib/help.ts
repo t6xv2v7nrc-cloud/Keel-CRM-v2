@@ -42,9 +42,9 @@ export const HELP = {
   tiers: {
     title: 'Tiers',
     body: [
-      'Tier 1 is the highest priority. Tiers are worked out from each client\'s triage answers using the rules in Team settings.',
-      'Standard rules: Tier 1 is single, on UC, PIP, LCWRA and council-registered. Tier 2 is council-registered and on UC or working full time. Everyone else is Tier 3.',
-      'A tier set by hand on a client is locked, so a rule change never moves that client.',
+      'Tier 1 is the highest priority. Tiers are worked out from each client\'s answers using the tier logic in Team settings, which only the owner can change.',
+      'Tiers are checked from the top: a client gets the first tier whose conditions they meet, and the last tier is everyone else. Tiers can be added, renamed, reordered or removed, and each can test any answer (household, benefits, work, council, urgency, children, budget and more).',
+      'A tier set by hand on a client is locked, so a change to the logic never moves that client.',
     ],
   },
   urgent: {
@@ -92,17 +92,32 @@ export const HELP = {
       'Reasons are listed under each property. Anything marked ! is worth checking before you call.',
     ],
   },
-  triage: {
-    title: 'Referral triage',
+  clientDetails: {
+    title: 'Client details',
     body: [
-      'The client\'s referral answers. Change any answer and the tier updates on its own.',
-      'Click a tier to set it by hand. That locks it, so rule changes in Settings leave this client alone. Use the rules unlocks it.',
-      'Every change is recorded on the timeline with the name of whoever made it.',
+      'Everything about the client in one place. Change any box and it saves when you click away (or press Enter); there is no separate edit mode.',
+      'The tier updates on its own as the answers change. Click a tier to set it by hand, which locks it; Use the logic unlocks it.',
+      'Every change goes on the timeline with the name of whoever made it.',
+    ],
+  },
+  readNotes: {
+    title: 'Found in their notes',
+    body: [
+      'Some clients write everything in the message box instead of the form. Keel reads what they wrote and suggests answers for the form.',
+      'Each suggestion shows the words it came from and an accuracy rating: High (80% or more) is usually right, Medium is worth a quick check, Low is a guess.',
+      'Nothing changes until you click Use this. Fill in all High only applies the High ones. Not right hides a suggestion.',
+    ],
+  },
+  stage: {
+    title: 'Stage',
+    body: [
+      'Where the client is: lead, referred, viewing, offer or placed, or lost.',
+      'Moving a client back a stage asks you to confirm first. Every move goes on the timeline.',
     ],
   },
   progress: {
     title: 'Progress',
-    body: ['Where the client is: lead, referred, viewing, offer or placed. Change the stage from the Pipeline.'],
+    body: ['Where the client is: lead, referred, viewing, offer or placed. Change it with Stage in Client details, or from the Pipeline.'],
   },
   timeline: {
     title: 'Timeline',
@@ -134,7 +149,7 @@ export const HELP = {
     title: 'Team settings',
     body: [
       'These rules apply to everyone. Changing them updates tiers, urgent flags and property matches for all of you straight away.',
-      'Agree changes with each other first.',
+      'Only the owner can change them. Everyone else can see them.',
     ],
   },
   team: {
