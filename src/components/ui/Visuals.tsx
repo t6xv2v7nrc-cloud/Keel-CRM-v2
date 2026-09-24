@@ -4,6 +4,8 @@
 import type { ReactNode } from 'react';
 import { Icon } from './Icon';
 import type { IconName } from './Icon';
+import { Help } from './Help';
+import type { HelpTopic } from '../../lib/help';
 
 // ── Avatar ─────────────────────────────────────────────────────────
 
@@ -30,7 +32,9 @@ export function Avatar({ name, size = 36, accent = false }: { name: string; size
 
 // ── Page header ────────────────────────────────────────────────────
 
-export function PageHeader({ icon, title, sub, children }: { icon: IconName; title: string; sub?: ReactNode; children?: ReactNode }) {
+export function PageHeader({ icon, title, sub, help, children }: {
+  icon: IconName; title: string; sub?: ReactNode; help?: HelpTopic; children?: ReactNode;
+}) {
   return (
     <header className="flex flex-wrap items-center justify-between gap-4">
       <div className="flex items-center gap-3.5">
@@ -38,7 +42,10 @@ export function PageHeader({ icon, title, sub, children }: { icon: IconName; tit
           <Icon name={icon} size={22} />
         </span>
         <div>
-          <h1 className="m-0 text-[28px] font-bold leading-tight text-[var(--ink)]">{title}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="m-0 text-[28px] font-bold leading-tight text-[var(--ink)]">{title}</h1>
+            {help && <Help topic={help} />}
+          </div>
           {sub && <p className="m-0 mt-0.5 text-[15px] text-[var(--ink-muted)]">{sub}</p>}
         </div>
       </div>

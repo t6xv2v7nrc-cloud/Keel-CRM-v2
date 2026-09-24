@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button, Icon, useToast } from '../../components/ui';
 import type { IconName } from '../../components/ui';
-import { useLogCall } from '../../lib/hooks';
+import { useLogCall, usePeople } from '../../lib/hooks';
 import { addDays, dayLabel, OUTCOMES, OUTCOME_LABEL, suggestedGap } from '../../lib/calls';
 import { timeAgo } from '../../lib/format';
 import type { Applicant, Call, CallOutcome } from '../../lib/types';
@@ -123,8 +123,20 @@ export function CallLogger({ applicant, onDone, autoFocus = false }: { applicant
   );
 }
 
-/** A client's calls, newest first. */
+/** "You called", "Sam called", "They called (logged by Sam)". */
+export function useCallWho() {
+  const { whoOf } = usePeople();
+  return (c: Call) => {
+    const who = whoOf(c.created_by);
+    if (c.direction === 'incoming') return who ? `They called, logged by ${who}` : 'They called';
+    if (!who) return 'Called';
+    return who === 'you' ? 'You called' : `${who} called`;
+  };
+}
+
+/** A client's calls, newest first, with who made each one. */
 export function CallHistory({ calls }: { calls: Call[] }) {
+  const callWho = useCallWho();
   if (calls.length === 0) return <p className="m-0 text-[15px] text-[var(--ink-muted)]">No calls logged yet.</p>;
   return (
     <ul className="m-0 flex list-none flex-col gap-3 p-0">
@@ -138,7 +150,7 @@ export function CallHistory({ calls }: { calls: Call[] }) {
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-baseline gap-x-2">
                 <span className="text-[15px] font-medium text-[var(--ink)]">{OUTCOME_LABEL[c.outcome]}</span>
-                <span className="text-[13px] text-[var(--ink-muted)]">{c.direction === 'incoming' ? 'They called' : 'You called'} · {timeAgo(c.created_at)}</span>
+                <span className="text-[13px] text-[var(--ink-muted)]">{callWho(c)} · {timeAgo(c.created_at)}</span>
               </div>
               {c.notes && <p className="m-0 mt-0.5 whitespace-pre-wrap text-[15px] text-[var(--ink)]">{c.notes}</p>}
             </div>

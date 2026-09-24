@@ -1,13 +1,13 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from './supabase';
 import { isLocalProperty, localProperties, useLocalProperties } from './localProperties';
-import { DEFAULT_SETTINGS, setActiveSettings, withDefaults } from './settings';
+import { DEFAULT_SETTINGS, mergeSettings, myPart, teamPart } from './settings';
 import type { AppSettings } from './settings';
 import { OUTCOME_LABEL } from './calls';
 import { computeTier } from './tiering';
 import { shortDate } from './format';
-import type { Activity, Applicant, Call, CallOutcome, Property } from './types';
+import type { Activity, Applicant, Call, CallOutcome, Profile, Property } from './types';
 import type { ApplicantStage } from '../types/extraction';
 
 // ── Applicants ──────────────────────────────────────────────────────
@@ -262,41 +262,163 @@ export function useDeleteProperties() {
   });
 }
 
-// ── Settings (one shared row; see settings.ts) ──────────────────────
+// ── Settings (team row + one row per person; see settings.ts) ───────
 const missingTable = (e: { message?: string; code?: string }) =>
   e.code === '42P01' || e.code === 'PGRST205' || /could not find the table|does not exist|schema cache/i.test(e.message ?? '');
 
-/** The saved settings. `ready` is false until the 0005 update has been run. */
+const myKey = (userId: string) => `user:${userId}`;
+const currentUserId = async () => (await supabase.auth.getSession()).data.session?.user.id ?? null;
+
+/** Team rules with the signed-in person's own settings on top. `ready` is
+ *  false until the 0005 update has been run. */
 export function useSettings() {
   const q = useQuery({
     queryKey: ['settings'],
     staleTime: 5 * 60_000,
     queryFn: async (): Promise<{ settings: AppSettings; ready: boolean }> => {
-      const { data, error } = await supabase.from('settings').select('value').eq('key', 'app').maybeSingle();
+      const uid = await currentUserId();
+      const { data, error } = await supabase.from('settings').select('key, value').in('key', uid ? ['app', myKey(uid)] : ['app']);
       if (error) {
         if (missingTable(error)) return { settings: DEFAULT_SETTINGS, ready: false };
         throw error;
       }
-      return { settings: withDefaults(DEFAULT_SETTINGS, data?.value), ready: true };
+      const rows = (data ?? []) as Array<{ key: string; value: unknown }>;
+      const team = rows.find((r) => r.key === 'app')?.value;
+      const mine = uid ? rows.find((r) => r.key === myKey(uid))?.value : undefined;
+      return { settings: mergeSettings(team, mine), ready: true };
     },
   });
   return { settings: q.data?.settings ?? DEFAULT_SETTINGS, ready: q.data?.ready ?? true, isLoading: q.isLoading };
 }
 
+/** Save either my own settings or the team's. */
 export function useSaveSettings() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (value: AppSettings) => {
-      const { error } = await supabase.from('settings').upsert({ key: 'app', value, updated_at: new Date().toISOString() });
+    mutationFn: async ({ scope, value }: { scope: 'me' | 'team'; value: AppSettings }) => {
+      const uid = await currentUserId();
+      if (scope === 'me' && !uid) throw new Error('Sign in again to save your settings.');
+      const row = scope === 'team'
+        ? { key: 'app', value: teamPart(value) }
+        : { key: myKey(uid!), value: myPart(value) };
+      const { error } = await supabase.from('settings').upsert({ ...row, updated_at: new Date().toISOString() });
       if (error) throw error;
       return value;
     },
-    onSuccess: (value) => {
-      setActiveSettings(value);
-      qc.setQueryData(['settings'], { settings: value, ready: true });
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['settings'] });
       // new copies so memoised tiers and matches are worked out again
       qc.invalidateQueries({ queryKey: ['applicants'] });
       qc.invalidateQueries({ queryKey: ['properties'] });
+    },
+  });
+}
+
+// ── Team (profiles, who did what, assignment) ───────────────────────
+const TEAM_UPDATE =
+  'Working as a team needs a one-off database update: run supabase/migrations/0006_team.sql in the Supabase SQL Editor.';
+
+/** Everyone who can sign in. `ready` is false until the 0006 update has been run. */
+export function useTeam() {
+  const q = useQuery({
+    queryKey: ['team'],
+    staleTime: 5 * 60_000,
+    queryFn: async (): Promise<{ members: Profile[]; ready: boolean }> => {
+      const { data, error } = await supabase.from('profiles').select('id, email, display_name').order('created_at');
+      if (error) {
+        if (missingTable(error)) return { members: [], ready: false };
+        throw error;
+      }
+      return { members: data as Profile[], ready: true };
+    },
+  });
+  return { members: q.data?.members ?? [], ready: q.data?.ready ?? true, isLoading: q.isLoading };
+}
+
+/** A friendly default name from an email address: "sam.jones@..." → "Sam". */
+export const nameFromEmail = (email: string | null | undefined) => {
+  const first = (email ?? '').split('@')[0].split(/[._\-+]/)[0];
+  return first ? first.charAt(0).toUpperCase() + first.slice(1) : 'Someone';
+};
+
+/** The signed-in person, the team, and a way to name anyone by id. */
+export function usePeople() {
+  const { members, ready } = useTeam();
+  const [session, setSession] = useState<{ id: string; email: string | null } | null>(null);
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      const u = data.session?.user;
+      setSession(u ? { id: u.id, email: u.email ?? null } : null);
+    });
+  }, []);
+  return useMemo(() => {
+    const byId = new Map(members.map((m) => [m.id, m]));
+    const nameOf = (id: string | null | undefined): string | null => {
+      if (!id) return null;
+      const m = byId.get(id);
+      return m?.display_name || nameFromEmail(m?.email) || null;
+    };
+    const meProfile = session ? byId.get(session.id) : undefined;
+    return {
+      ready,
+      members,
+      meId: session?.id ?? null,
+      myName: meProfile?.display_name || (session ? nameFromEmail(session.email) : null),
+      myProfile: meProfile ?? null,
+      nameOf,
+      /** "you" for the signed-in person, otherwise their name */
+      whoOf: (id: string | null | undefined) => (id && id === session?.id ? 'you' : nameOf(id)),
+    };
+  }, [members, ready, session]);
+}
+
+/** Make sure the signed-in person has a profile, so the others see their name. */
+export function useEnsureProfile() {
+  const qc = useQueryClient();
+  const { members, ready, isLoading } = useTeam();
+  const tried = useRef(false);
+  useEffect(() => {
+    if (tried.current || isLoading || !ready) return;
+    tried.current = true;
+    (async () => {
+      const u = (await supabase.auth.getSession()).data.session?.user;
+      if (!u || members.some((m) => m.id === u.id)) return;
+      const { error } = await supabase.from('profiles').insert({ id: u.id, email: u.email, display_name: nameFromEmail(u.email) });
+      if (!error) qc.invalidateQueries({ queryKey: ['team'] });
+    })();
+  }, [members, ready, isLoading, qc]);
+}
+
+export function useSaveProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (displayName: string) => {
+      const u = (await supabase.auth.getSession()).data.session?.user;
+      if (!u) throw new Error('Sign in again to change your name.');
+      const { error } = await supabase.from('profiles')
+        .upsert({ id: u.id, email: u.email, display_name: displayName.trim() || nameFromEmail(u.email), updated_at: new Date().toISOString() });
+      if (error) throw missingTable(error) ? new Error(TEAM_UPDATE) : error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['team'] }),
+  });
+}
+
+/** Give a client to one of the team (or nobody), and note it on the timeline. */
+export function useAssign() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ applicant, userId, name }: { applicant: Applicant; userId: string | null; name: string | null }) => {
+      const { error } = await supabase.from('applicants').update({ assigned_to: userId }).eq('id', applicant.id);
+      if (error) throw /assigned_to|schema cache/i.test(error.message) ? new Error(TEAM_UPDATE) : error;
+      await supabase.from('activities').insert({
+        entity_type: 'applicant', entity_id: applicant.id, kind: 'updated',
+        body: userId ? `Assigned to ${name ?? 'a team member'}` : 'No longer assigned',
+      });
+    },
+    onSuccess: (_d, { applicant }) => {
+      qc.invalidateQueries({ queryKey: ['applicants'] });
+      qc.invalidateQueries({ queryKey: ['applicants', applicant.id] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
     },
   });
 }

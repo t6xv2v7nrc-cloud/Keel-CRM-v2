@@ -117,10 +117,11 @@ export interface PipelineFilters {
   urgency: 'any' | 'urgent' | 'homeless_tonight' | 'at_risk_56' | 'temp_accommodation' | 'overcrowding';
   benefits: BenefitKey[]; // must have all of these
   calls: 'any' | 'due' | 'never' | 'scheduled'; // applied by the Pipeline, which has the call log
+  owner: string; // 'any' | 'me' | 'none' | a team member's id; applied by the Pipeline, which knows who is signed in
 }
 
 export const DEFAULT_FILTERS: PipelineFilters = {
-  q: '', stage: 'active', tier: 'any', household: 'any', work: 'any', councilReg: 'any', urgency: 'any', benefits: [], calls: 'any',
+  q: '', stage: 'active', tier: 'any', household: 'any', work: 'any', councilReg: 'any', urgency: 'any', benefits: [], calls: 'any', owner: 'any',
 };
 
 export function applyFilters(
@@ -160,6 +161,7 @@ export function filtersFromParams(p: URLSearchParams): PipelineFilters {
     urgency: oneOf(p.get('urgency'), ['any', 'urgent', 'homeless_tonight', 'at_risk_56', 'temp_accommodation', 'overcrowding'] as const, 'any'),
     benefits: (p.get('benefits') ?? '').split(',').filter((b): b is BenefitKey => BENEFITS.some((x) => x.key === b)),
     calls: oneOf(p.get('calls'), ['any', 'due', 'never', 'scheduled'] as const, 'any'),
+    owner: p.get('owner') || 'any',
   };
 }
 
@@ -175,6 +177,7 @@ export function filtersToParams(f: PipelineFilters, base = new URLSearchParams()
   set('urgency', f.urgency, 'any');
   set('benefits', f.benefits.join(','), '');
   set('calls', f.calls, 'any');
+  set('owner', f.owner, 'any');
   return p;
 }
 

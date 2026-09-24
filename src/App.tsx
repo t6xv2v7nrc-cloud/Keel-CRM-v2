@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { BrowserRouter, Link, NavLink, Route, Routes, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { BrowserRouter, Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { supabase } from './lib/supabase';
 import { AuthGate } from './features/auth/AuthGate';
@@ -14,7 +14,7 @@ import { PropertiesPage } from './features/properties/PropertiesPage';
 import { CallsPage } from './features/calls/CallsPage';
 import { SettingsPage } from './features/settings/SettingsPage';
 import { CommandSearch, openSearch } from './features/search/CommandSearch';
-import { useSettings } from './lib/hooks';
+import { useEnsureProfile, usePeople, useSettings } from './lib/hooks';
 import { setActiveSettings } from './lib/settings';
 import { ThemeToggle } from './components/ThemeToggle';
 import DevTokens from './routes/DevTokens';
@@ -58,9 +58,20 @@ function Shell() {
   const navigate = useNavigate();
   const { email, signOut } = useAuth();
 
-  // Shared rules (tiers, urgency, matching, calls) before any page works them out
-  const { settings } = useSettings();
+  // Team rules plus this person's own settings, before any page works them out
+  const { settings, isLoading: settingsLoading } = useSettings();
   setActiveSettings(settings);
+  useEnsureProfile();
+  const { myName } = usePeople();
+
+  // Open on the person's chosen start page, once, when they arrive at Home
+  const location = useLocation();
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current || settingsLoading) return;
+    started.current = true;
+    if (location.pathname === '/' && settings.startPage !== '/') navigate(settings.startPage, { replace: true });
+  }, [settingsLoading, settings.startPage, location.pathname, navigate]);
 
   // Keyboard shortcut: V jumps to the Bin ready to paste (ignored while typing).
   useEffect(() => {
@@ -117,7 +128,7 @@ function Shell() {
             <Icon name="sliders" size={17} />
           </NavLink>
           <ThemeToggle />
-          <UserMenu email={email} onSignOut={signOut} />
+          <UserMenu email={email} name={myName} onSignOut={signOut} />
         </div>
       </header>
 
@@ -138,12 +149,12 @@ function Shell() {
   );
 }
 
-function UserMenu({ email, onSignOut }: { email: string | null; onSignOut: () => void }) {
+function UserMenu({ email, name, onSignOut }: { email: string | null; name: string | null; onSignOut: () => void }) {
   const [open, setOpen] = useState(false);
   const [setting, setSetting] = useState(false);
   const [pw, setPw] = useState('');
   const [msg, setMsg] = useState('');
-  const initials = email ? email.slice(0, 2).toUpperCase() : '··';
+  const initials = name ? name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase() : email ? email.slice(0, 2).toUpperCase() : '··';
 
   useEffect(() => {
     if (!open) return;
@@ -176,7 +187,8 @@ function UserMenu({ email, onSignOut }: { email: string | null; onSignOut: () =>
         >
           <div className="border-b border-[var(--line)] px-4 py-3">
             <div className="text-[13px] text-[var(--ink-muted)]">Signed in as</div>
-            <div className="truncate text-[15px] text-[var(--ink)]">{email ?? '—'}</div>
+            <div className="truncate text-[15px] font-medium text-[var(--ink)]">{name ?? email ?? 'Unknown'}</div>
+            {name && email && <div className="truncate text-[13px] text-[var(--ink-muted)]">{email}</div>}
           </div>
 
           {setting ? (
@@ -204,6 +216,11 @@ function UserMenu({ email, onSignOut }: { email: string | null; onSignOut: () =>
           )}
 
           {msg && <div className="px-4 py-2 text-[13px] text-[var(--ink-muted)]">{msg}</div>}
+
+          <Link to="/settings" onClick={() => setOpen(false)}
+            className="block w-full border-b border-[var(--line)] px-4 py-3 text-left text-[15px] text-[var(--ink)] transition-colors hover:bg-[var(--paper)]">
+            My settings
+          </Link>
 
           <button
             onClick={onSignOut}

@@ -1,8 +1,12 @@
-// App-wide rules, edited on the Settings page and shared by every device
-// (one row in the settings table; loaded and saved by useSettings and
-// useSaveSettings in hooks.ts). They drive triage (tiers, urgency), property
-// matching and call follow-ups. Pure helpers such as computeTier read the
-// active settings, which the app shell keeps up to date.
+// Settings, edited on the Settings page and loaded by useSettings (hooks.ts).
+// Two kinds:
+//   • team settings: rules everyone works to (tiers, urgency, the premium rent
+//     rule, first-call deadline, purging). One shared row, key "app".
+//   • my settings: preferences each person sets for themselves (follow-up
+//     gaps, Possible matches, start page, default call list). One row per
+//     person, key "user:<id>".
+// Pure helpers such as computeTier read the active settings (team rules plus
+// the signed-in person's own), which the app shell keeps up to date.
 
 export interface TierRules {
   /** Tier 1 needs every ticked item. */
@@ -27,6 +31,10 @@ export interface AppSettings {
   firstCallWithinDays: number;
   /** Saved property lists older than this can be purged in one click. */
   purgeAfterDays: number;
+  /** Page to open after signing in. */
+  startPage: '/' | '/calls' | '/pipeline' | '/bin' | '/properties';
+  /** Which clients the Calls page shows first. */
+  callsView: 'everyone' | 'mine';
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -42,7 +50,30 @@ export const DEFAULT_SETTINGS: AppSettings = {
   callAgainAfterAnswered: 7,
   firstCallWithinDays: 1,
   purgeAfterDays: 14,
+  startPage: '/',
+  callsView: 'everyone',
 };
+
+/** Settings each person sets for themselves; everything else is shared by the team. */
+export const PERSONAL_KEYS = ['showPossibleMatches', 'callAgainAfterNoAnswer', 'callAgainAfterAnswered', 'startPage', 'callsView'] as const;
+type PersonalKey = (typeof PERSONAL_KEYS)[number];
+export type MySettings = Pick<AppSettings, PersonalKey>;
+export type TeamSettings = Omit<AppSettings, PersonalKey>;
+
+const isPersonal = (k: string): k is PersonalKey => (PERSONAL_KEYS as readonly string[]).includes(k);
+export const myPart = (s: AppSettings): MySettings =>
+  Object.fromEntries(Object.entries(s).filter(([k]) => isPersonal(k))) as MySettings;
+export const teamPart = (s: AppSettings): TeamSettings =>
+  Object.fromEntries(Object.entries(s).filter(([k]) => !isPersonal(k))) as TeamSettings;
+
+/** Team rules with this person's own preferences on top. (Before settings were
+ *  split, the team row also held the personal ones; those still count until a
+ *  person saves their own.) */
+export function mergeSettings(team: unknown, mine: unknown): AppSettings {
+  const base = withDefaults(DEFAULT_SETTINGS, team);
+  const own = isObject(mine) ? Object.fromEntries(Object.entries(mine).filter(([k]) => isPersonal(k))) : {};
+  return withDefaults(base, own);
+}
 
 let active: AppSettings = DEFAULT_SETTINGS;
 /** The settings in force right now (defaults until the saved ones load). */

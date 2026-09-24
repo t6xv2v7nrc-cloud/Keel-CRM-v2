@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Card, Field, TierBadge } from '../../components/ui';
+import { Button, Card, Field, Help, TierBadge } from '../../components/ui';
 import { useToast } from '../../components/ui';
 import type { ApplicantStage, Extraction } from '../../types/extraction';
 import type { MatchResult } from '../../lib/matching';
@@ -176,7 +176,7 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
 
           {/* Matching proposal */}
           <div className="rounded-md border border-[var(--line)] p-3">
-            <div className="mb-2 text-[13px] font-medium text-[var(--ink-muted)]">What should happen?</div>
+            <div className="mb-2 flex items-center gap-1.5 text-[13px] font-medium text-[var(--ink-muted)]">What should happen? <Help topic="binChoice" /></div>
 
             <fieldset className="flex flex-col gap-1.5">
               {matches?.applicant.map((m) => (

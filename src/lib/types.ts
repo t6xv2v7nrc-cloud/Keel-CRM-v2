@@ -35,6 +35,8 @@ export interface Applicant {
   // 0005_calls_settings.sql (undefined until that update is run)
   tier_locked?: boolean;      // tier set by hand; rule changes leave it alone
   next_call_at?: string | null; // YYYY-MM-DD
+  // 0006_team.sql
+  assigned_to?: string | null;  // user id of whoever looks after this client
   created_at: string;
   updated_at: string;
 }
@@ -98,6 +100,7 @@ export interface Activity {
   kind: string;
   body: string;
   inbox_item_id: string | null;
+  actor?: string | null; // who did it (0006); empty for website intake
   created_at: string;
 }
 
@@ -109,5 +112,13 @@ export interface Call {
   direction: 'outgoing' | 'incoming';
   outcome: CallOutcome;
   notes: string | null;
+  created_by?: string | null; // who logged it (0006)
   created_at: string;
+}
+
+/** Someone who can sign in (0006). */
+export interface Profile {
+  id: string;
+  email: string | null;
+  display_name: string | null;
 }

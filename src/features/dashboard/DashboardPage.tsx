@@ -1,11 +1,10 @@
 import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Avatar, Button, Card, CardHeader, DayBars, Donut, Empty, Icon, Legend, Meter, Sparkline, StatTile, TierBadge, UrgentChip,
+  Avatar, Button, Card, CardHeader, DayBars, Donut, Empty, Help, Icon, Legend, Meter, Sparkline, StatTile, TierBadge, UrgentChip,
 } from '../../components/ui';
 import type { IconName } from '../../components/ui';
-import { useApplicants, useCalls, useProperties, useRecentActivity } from '../../lib/hooks';
-import { useAuth } from '../auth/useAuth';
+import { useApplicants, useCalls, usePeople, useProperties, useRecentActivity } from '../../lib/hooks';
 import { timeAgo } from '../../lib/format';
 import { effectiveTier, isActive, isUrgent } from '../../lib/search';
 import { matchesForProperty } from '../../lib/propertyMatch';
@@ -21,7 +20,7 @@ const FUNNEL: Array<{ stage: ApplicantStage; label: string }> = [
 const TIER_COLOR: Record<Tier, string> = { 1: 'var(--accent)', 2: 'color-mix(in srgb, var(--accent) 45%, var(--paper-2))', 3: 'var(--ink-faint)' };
 
 export function DashboardPage() {
-  const { displayName } = useAuth();
+  const people = usePeople();
   const navigate = useNavigate();
   const { data: applicants = [] } = useApplicants();
   const { data: properties = [] } = useProperties();
@@ -75,9 +74,12 @@ export function DashboardPage() {
           <p className="m-0 text-[13px] font-medium uppercase tracking-wider text-[var(--ink-muted)]">
             {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
-          <h1 className="m-0 mt-1 text-[30px] font-bold text-[var(--ink)]">
-            {greeting()}{displayName ? `, ${displayName}` : ''}
-          </h1>
+          <div className="mt-1 flex items-center gap-2">
+            <h1 className="m-0 text-[30px] font-bold text-[var(--ink)]">
+              {greeting()}{people.myName ? `, ${people.myName}` : ''}
+            </h1>
+            <Help topic="home" />
+          </div>
           <p className="m-0 mt-1 text-[15px] text-[var(--ink-muted)]">
             {queue.length ? `${queue.length} ${queue.length === 1 ? 'call' : 'calls'} to make` : 'No calls due'}
             {urgent ? ` · ${urgent} urgent ${urgent === 1 ? 'client' : 'clients'}` : ''}
@@ -96,7 +98,8 @@ export function DashboardPage() {
           <Sparkline values={newPerDay} />
         </StatTile></Link>
         <Link to="/calls"><StatTile icon="flag" label="To call now" value={queue.length} accent={queue.length > 0}
-          hint={queue.length ? `${queue.filter((q) => 'overdue' in q.state && q.state.overdue).length} overdue` : 'All caught up'} /></Link>
+          hint={queue.length ? `${queue.filter((q) => 'overdue' in q.state && q.state.overdue).length} overdue${
+            people.ready && people.members.length > 1 ? `, ${queue.filter((q) => q.a.assigned_to === people.meId).length} yours` : ''}` : 'All caught up'} /></Link>
         <Link to="/properties"><StatTile icon="building" label="Available properties" value={available.length}
           hint={`${matchCount} client ${matchCount === 1 ? 'match' : 'matches'}`} /></Link>
         <Link to="/calls"><StatTile icon="phoneOut" label="Calls, last 7 days" value={weekCalls} hint={`${days[days.length - 1]?.total ?? 0} today`}>
@@ -107,7 +110,7 @@ export function DashboardPage() {
       <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
         {/* Triage */}
         <Card>
-          <CardHeader icon="layers" title="Referral triage" sub={`${active.length} active`}>
+          <CardHeader icon="layers" title="Referral triage" sub={`${active.length} active`} help="tiers">
             {urgent > 0 && <Link to="/pipeline?urgency=urgent" className="hover:opacity-80"><UrgentChip /></Link>}
             <Link to="/settings" className="text-[13px] text-[var(--link)] hover:underline">Rules</Link>
           </CardHeader>
@@ -204,7 +207,7 @@ export function DashboardPage() {
                   </span>
                   <div className="min-w-0">
                     <div className="truncate text-[15px] text-[var(--ink)]">{name && act.kind === 'call' ? `${name}: ${act.body}` : act.body}</div>
-                    <div className="text-[13px] text-[var(--ink-muted)]">{timeAgo(act.created_at)}</div>
+                    <div className="text-[13px] text-[var(--ink-muted)]">{timeAgo(act.created_at)}{people.whoOf(act.actor) ? ` · by ${people.whoOf(act.actor)}` : ''}</div>
                   </div>
                 </>
               );

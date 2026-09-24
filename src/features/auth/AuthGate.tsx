@@ -4,8 +4,9 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { Button, Card, Field } from '../../components/ui';
 
-/** Email magic-link gate. Single-operator system: anyone who can receive
- *  mail at the owner address gets in; RLS enforces the rest server-side. */
+/** Sign-in gate (password or email link). Invite only: the email link never
+ *  creates an account, so only people invited from Supabase can get in.
+ *  RLS enforces the rest server-side. */
 export function AuthGate({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -55,10 +56,12 @@ function Login() {
     setError('');
     const { error: err } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.origin },
+      options: { emailRedirectTo: window.location.origin, shouldCreateUser: false },
     });
     setBusy(false);
-    if (err) setError(err.message);
+    if (err) setError(/signups? not allowed|not allowed for otp|user not found/i.test(err.message)
+      ? 'This email has not been invited to Keel yet. Ask whoever runs your Keel account to invite you.'
+      : err.message);
     else setSent(true);
   };
 
@@ -83,7 +86,7 @@ function Login() {
 
         {sent ? (
           <p className="text-[15px] text-[var(--ink)]">
-            Check your email — we sent a sign-in link to <strong>{email}</strong>.
+            Check your email. We sent a sign-in link to <strong>{email}</strong>.
           </p>
         ) : mode === 'password' ? (
           <form onSubmit={signInPassword} className="flex flex-col gap-4">
@@ -122,7 +125,7 @@ function KeelMark() {
       className="grid h-9 w-9 shrink-0 rotate-45 place-items-center rounded-sm"
       style={{ background: 'var(--hull)' }}
     >
-      <span className="h-3.5 w-3.5 rounded-[2px]" style={{ background: 'var(--brass)' }} />
+      <span className="h-3.5 w-3.5 rounded-[2px]" style={{ background: 'var(--surface)' }} />
     </span>
   );
 }

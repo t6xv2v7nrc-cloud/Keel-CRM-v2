@@ -9,3 +9,4 @@ export { Icon } from './Icon';
 export type { IconName } from './Icon';
 export { Avatar, DayBars, Donut, Empty, Legend, Meter, PageHeader, Sparkline, StatTile, UrgentChip } from './Visuals';
 export type { DayBar, Slice } from './Visuals';
+export { Help } from './Help';

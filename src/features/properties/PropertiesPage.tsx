@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Avatar, Button, Card, Icon, PageHeader, TierBadge, UrgentChip, useToast } from '../../components/ui';
+import { Avatar, Button, Card, Help, Icon, PageHeader, TierBadge, UrgentChip, useToast } from '../../components/ui';
 import {
   NeedsDatabaseUpdate, PROPERTY_STATUS_LABEL, useAddProperties, useApplicants, useDeleteProperties, useProperties, useSetPropertyStatus,
 } from '../../lib/hooks';
@@ -121,7 +121,7 @@ export function PropertiesPage() {
 
   return (
     <div className="mx-auto flex max-w-[1100px] flex-col gap-5 p-6 pb-24">
-      <PageHeader icon="building" title="Properties" sub={<>
+      <PageHeader icon="building" title="Properties" help="properties" sub={<>
         {counts.available} available · {counts.under_offer} under offer · {counts.let} let
         {totalMatches > 0 && <> · <strong className="text-[var(--ink)]">{totalMatches}</strong> client matches</>}
       </>}>
@@ -258,7 +258,7 @@ function SavedLists({ properties, onClose, onMove, moving }: {
     <Card className="flex flex-col gap-4 p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="m-0 text-[18px] font-semibold text-[var(--ink)]">Saved lists</h2>
+          <h2 className="m-0 flex items-center gap-2 text-[18px] font-semibold text-[var(--ink)]">Saved lists <Help topic="savedLists" /></h2>
           <p className="m-0 mt-1 max-w-[720px] text-[15px] text-[var(--ink-muted)]">
             Lists are saved to your account, so they show on your phone and any other device you sign in on. Purge them when they go out of date.
           </p>
@@ -370,7 +370,7 @@ function PasteImport({ existing, applicants, canClose, onClose, onAdded, onNeeds
     <Card className="flex flex-col gap-4 p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="m-0 text-[18px] font-semibold text-[var(--ink)]">Paste your available properties</h2>
+          <h2 className="m-0 flex items-center gap-2 text-[18px] font-semibold text-[var(--ink)]">Paste your available properties <Help topic="properties" /></h2>
           <p className="m-0 mt-1 max-w-[720px] text-[15px] text-[var(--ink-muted)]">
             One property per line or per block, or rows copied from a spreadsheet. Notes that apply to every property,
             like "They are all en-suite rooms" or "Rent is 1-bed LHA", are applied to each one. Lines marked let,
@@ -555,7 +555,7 @@ function PropertyCard({ p, matches, isNew, selected, onToggle, onStatus, onDelet
           ) : (
             <>
               <div className="mb-2 text-[13px] font-medium text-[var(--ink-muted)]">
-                {matches.length} matching {matches.length === 1 ? 'client' : 'clients'}
+                <span className="mr-1.5 inline-flex align-middle"><Help topic="matchStrength" /></span>{matches.length} matching {matches.length === 1 ? 'client' : 'clients'}
                 {matches.length > 1 && <span className="font-normal">: {breakdown}</span>}
               </div>
               <ul className="m-0 flex list-none flex-col gap-3 p-0">

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useApplicants, useCalls, useMoveStage, useDeleteApplicant } from '../../lib/hooks';
-import { Avatar, Card, Icon, PageHeader, TierBadge, UrgentChip, useToast } from '../../components/ui';
+import { useApplicants, useCalls, useMoveStage, useDeleteApplicant, usePeople } from '../../lib/hooks';
+import { Avatar, Card, Help, Icon, PageHeader, TierBadge, UrgentChip, useToast } from '../../components/ui';
 import { callState, dayLabel, lastCallMap, OUTCOME_LABEL, todayIso } from '../../lib/calls';
 import type { CallState } from '../../lib/calls';
 import { APPLICANT_STAGES } from '../../types/extraction';
@@ -49,6 +49,7 @@ export function PipelinePage() {
   const { data: applicants = [], isLoading } = useApplicants();
   const { calls } = useCalls();
   const last = useMemo(() => lastCallMap(calls), [calls]);
+  const people = usePeople();
   const moveStage = useMoveStage();
   const deleteApplicant = useDeleteApplicant();
   const { toast } = useToast();
@@ -98,8 +99,11 @@ export function PipelinePage() {
       if (filters.calls === 'scheduled') return st.kind === 'scheduled';
       return st.kind === 'due' || (st.kind === 'first' && st.date <= today);
     };
-    return sortApplicants(applyFilters(applicants, filters, (a) => textIndex.get(a.id) ?? '').filter(byCalls), sortKey, dir);
-  }, [applicants, filters, textIndex, sortKey, dir, last]);
+    const byOwner = (a: Applicant) => filters.owner === 'any' ? true
+      : filters.owner === 'none' ? !a.assigned_to
+      : a.assigned_to === (filters.owner === 'me' ? people.meId : filters.owner);
+    return sortApplicants(applyFilters(applicants, filters, (a) => textIndex.get(a.id) ?? '').filter(byCalls).filter(byOwner), sortKey, dir);
+  }, [applicants, filters, textIndex, sortKey, dir, last, people.meId]);
 
   const stageCounts = useMemo(() => {
     const m = new Map<string, number>();
@@ -125,6 +129,10 @@ export function PipelinePage() {
   if (filters.work !== 'any') pills.push({ label: WORK_STATUS_LABEL[filters.work], remove: (f) => ({ ...f, work: 'any' }) });
   if (filters.councilReg !== 'any') pills.push({ label: filters.councilReg === 'yes' ? 'Council-registered' : 'Not council-registered', remove: (f) => ({ ...f, councilReg: 'any' }) });
   if (filters.urgency !== 'any') pills.push({ label: filters.urgency === 'urgent' ? 'Urgent' : URGENCY_LABEL[filters.urgency], remove: (f) => ({ ...f, urgency: 'any' }) });
+  if (filters.owner !== 'any') pills.push({
+    label: filters.owner === 'me' ? 'Assigned to me' : filters.owner === 'none' ? 'Not assigned' : `Assigned to ${people.nameOf(filters.owner) ?? 'someone'}`,
+    remove: (f) => ({ ...f, owner: 'any' }),
+  });
   if (filters.calls !== 'any') pills.push({ label: CALLS_LABEL[filters.calls], remove: (f) => ({ ...f, calls: 'any' }) });
   for (const b of filters.benefits) {
     pills.push({ label: BENEFITS.find((x) => x.key === b)?.label ?? b, remove: (f) => ({ ...f, benefits: f.benefits.filter((x) => x !== b) }) });
@@ -154,7 +162,7 @@ export function PipelinePage() {
 
   return (
     <div className="mx-auto flex max-w-[1240px] flex-col gap-4 p-6 pb-24">
-      <PageHeader icon="list" title="Pipeline" sub={`${activeCount} active of ${applicants.length} clients`} />
+      <PageHeader icon="list" title="Pipeline" help="pipeline" sub={`${activeCount} active of ${applicants.length} clients`} />
 
       {/* Search + filters */}
       <Card className="flex flex-col gap-4 p-4">
@@ -190,6 +198,11 @@ export function PipelinePage() {
               ['any', 'Any'], ['urgent', 'Urgent (per Settings)'], ['homeless_tonight', 'Homeless tonight'],
               ['at_risk_56', 'At risk within 56 days'], ['temp_accommodation', 'Temporary accommodation'], ['overcrowding', 'Overcrowded or unsafe'],
             ]} />
+          {people.ready && people.members.length > 0 && (
+            <FilterSelect label="Assigned" value={filters.owner} onChange={(v) => update({ owner: v })}
+              options={[['any', 'Anyone'], ['me', 'Me'], ['none', 'Not assigned'],
+                ...people.members.filter((m) => m.id !== people.meId).map((m): [string, string] => [m.id, people.nameOf(m.id) ?? 'Someone'])]} />
+          )}
           <FilterSelect label="Calls" value={filters.calls} onChange={(v) => update({ calls: v as PipelineFilters['calls'] })}
             options={Object.entries(CALLS_LABEL) as Array<[string, string]>} />
           <div className="flex flex-col gap-1">
@@ -248,7 +261,7 @@ export function PipelinePage() {
               <Th k="benefits" sortKey={sortKey} dir={dir} onSort={toggleSort}>Benefits</Th>
               <Th k="area" sortKey={sortKey} dir={dir} onSort={toggleSort}>Area</Th>
               <Th k="budget" sortKey={sortKey} dir={dir} onSort={toggleSort} right>Budget</Th>
-              <th className="px-3 py-2 font-medium">Calls</th>
+              <th className="px-3 py-2 font-medium"><span className="inline-flex items-center gap-1.5">Calls <Help topic="pipelineCalls" /></span></th>
               <Th k="stage" sortKey={sortKey} dir={dir} onSort={toggleSort}>Stage</Th>
               <Th k="updated" sortKey={sortKey} dir={dir} onSort={toggleSort} right>Updated</Th>
               <th className="px-3 py-2"><span className="sr-only">Actions</span></th>
@@ -273,6 +286,11 @@ export function PipelinePage() {
                           <Highlight text={a.full_name} terms={terms} />
                         </button>
                         {a.phone && <div className="font-mono text-[13px] text-[var(--ink-muted)]">{a.phone}</div>}
+                        {a.assigned_to && (
+                          <div className="mt-0.5 inline-flex items-center gap-1 text-[12px] text-[var(--ink-muted)]">
+                            <Icon name="user" size={12} />{people.whoOf(a.assigned_to) === 'you' ? 'You' : people.nameOf(a.assigned_to)}
+                          </div>
+                        )}
                         {preview && (
                           <div className="mt-1 truncate text-[13px] text-[var(--ink-muted)]" title={a.notes || a.requirements || ''}>
                             <Highlight text={preview} terms={terms} />

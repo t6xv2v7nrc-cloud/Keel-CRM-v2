@@ -2,10 +2,11 @@ import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  Avatar, Button, Card, CardHeader, Empty, Field, Icon, KeelLine, StageBadge, TierBadge, UrgentChip, useToast,
+  Avatar, Button, Card, CardHeader, Empty, Field, Help, Icon, KeelLine, StageBadge, TierBadge, UrgentChip, useToast,
 } from '../../components/ui';
 import {
-  useActivities, useApplicant, useCalls, useDeleteApplicant, useProperties, useSetNextCall, useUpdateApplicant, useUpdateTriage,
+  useActivities, useApplicant, useAssign, useCalls, useDeleteApplicant, usePeople, useProperties, useSetNextCall, useUpdateApplicant,
+  useUpdateTriage,
 } from '../../lib/hooks';
 import { matchesForApplicant } from '../../lib/propertyMatch';
 import { money, timeAgo } from '../../lib/format';
@@ -68,7 +69,7 @@ export function ApplicantPage() {
           </div>
 
           <Card>
-            <CardHeader icon="clock" title="Timeline" sub={`${activities.length} events`} />
+            <CardHeader icon="clock" title="Timeline" sub={`${activities.length} events`} help="timeline" />
             <div className="p-5">
               {activities.length === 0 ? (
                 <p className="m-0 text-[15px] text-[var(--ink-muted)]">No activity yet.</p>
@@ -85,7 +86,7 @@ export function ApplicantPage() {
         <div className="flex flex-col gap-6">
           <ReferralCard applicant={applicant} />
           <Card>
-            <CardHeader icon="flag" title="Progress" />
+            <CardHeader icon="flag" title="Progress" help="progress" />
             <div className="p-5"><KeelLine current={applicant.stage} /></div>
           </Card>
         </div>
@@ -95,6 +96,8 @@ export function ApplicantPage() {
 }
 
 function TimelineRow({ act }: { act: Activity }) {
+  const { whoOf } = usePeople();
+  const who = whoOf(act.actor);
   const fromScreenshot = act.body.includes('screenshot') || act.inbox_item_id != null;
   const isCall = act.kind === 'call';
   return (
@@ -107,6 +110,7 @@ function TimelineRow({ act }: { act: Activity }) {
           <span>{isCall ? 'Call' : act.kind.replace('_', ' ')}</span>
           <span>·</span>
           <span>{timeAgo(act.created_at)}</span>
+          {who && <><span>·</span><span>by {who}</span></>}
           {fromScreenshot && <span className="rounded bg-[var(--chip-bg)] px-1.5 py-0.5 text-[12px] text-[var(--chip-fg)]">from the Bin</span>}
         </div>
       </div>
@@ -130,7 +134,7 @@ function CallsCard({ applicant, calls, ready, open, setOpen }: {
 
   return (
     <Card>
-      <CardHeader icon="phone" title="Calls" sub={`${calls.length} logged`}>
+      <CardHeader icon="phone" title="Calls" sub={`${calls.length} logged`} help="logCall">
         {!open && ready && (
           <Button variant="primary" className="min-h-0 px-3 py-1.5 text-[13px]" onClick={() => setOpen(true)}>
             <Icon name="phoneOut" size={14} /> Log a call
@@ -143,9 +147,10 @@ function CallsCard({ applicant, calls, ready, open, setOpen }: {
         {ready && (
           <div className={`flex flex-wrap items-center gap-3 rounded-lg px-4 py-3 ${overdue ? 'bg-[var(--note-bg)]' : 'bg-[var(--surface-2)]'}`}>
             <Icon name="calendar" size={18} className={overdue ? 'text-[var(--note-fg)]' : 'text-[var(--accent)]'} />
-            <div className="min-w-0 flex-1 text-[15px] text-[var(--ink)]">
-              {next ? <>Next call <strong>{dayLabel(next)}</strong>{overdue && <span className="text-[var(--note-fg)]">, overdue</span>}</>
-                : calls.length ? 'No follow-up set' : 'Not called yet'}
+            <div className="flex min-w-0 flex-1 items-center gap-2 text-[15px] text-[var(--ink)]">
+              <span>{next ? <>Next call <strong>{dayLabel(next)}</strong>{overdue && <span className="text-[var(--note-fg)]">, overdue</span>}</>
+                : calls.length ? 'No follow-up set' : 'Not called yet'}</span>
+              <Help topic="nextCall" />
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
               {[1, 3, 7].map((d) => (
@@ -200,7 +205,7 @@ function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
   const matches = showAll ? all : all.slice(0, SHOW_PROPERTIES);
   return (
     <Card>
-      <CardHeader icon="building" title="Suitable properties" sub={available.length ? `${all.length} of ${available.length} available` : undefined} />
+      <CardHeader icon="building" title="Suitable properties" sub={available.length ? `${all.length} of ${available.length} available` : undefined} help="suitable" />
       {available.length === 0 ? (
         <Empty icon="building" title="No properties saved yet">
           <Link to="/properties" className="text-[var(--link)] hover:underline">Paste your list on the Properties tab</Link> to see what suits this client.
@@ -282,7 +287,7 @@ function ReferralCard({ applicant }: { applicant: Applicant }) {
 
   return (
     <Card>
-      <CardHeader icon="layers" title="Referral triage">
+      <CardHeader icon="layers" title="Referral triage" help="triage">
         {isUrgent(applicant) && <UrgentChip />}
         <TierBadge tier={effective} />
       </CardHeader>
@@ -516,7 +521,8 @@ function HeroCard({ applicant, lastCall, onLogCall }: { applicant: Applicant; la
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <AssignPicker applicant={applicant} />
             <Button onClick={start} className="min-h-0 px-3 py-2 text-[13px]"><Icon name="pencil" size={14} />Edit</Button>
             <Button variant="primary" onClick={onLogCall} className="min-h-0 px-3 py-2 text-[13px]"><Icon name="phoneOut" size={14} />Log call</Button>
           </div>
@@ -550,5 +556,33 @@ function Meta({ icon, label, value, mono, strong }: { icon: Parameters<typeof Ic
         <dd className={`m-0 truncate text-[15px] ${strong ? 'font-semibold text-[var(--accent-ink)]' : 'text-[var(--ink)]'} ${mono ? 'font-mono' : ''}`}>{value}</dd>
       </div>
     </div>
+  );
+}
+
+/** Who is looking after this client. */
+function AssignPicker({ applicant }: { applicant: Applicant }) {
+  const people = usePeople();
+  const assign = useAssign();
+  const { toast } = useToast();
+  if (!people.ready || people.members.length === 0) return null;
+  const change = (userId: string | null) => {
+    const name = people.nameOf(userId);
+    assign.mutate({ applicant, userId, name }, {
+      onSuccess: () => toast(userId ? `Assigned to ${userId === people.meId ? 'you' : name}` : 'No longer assigned', 'success'),
+      onError: (e) => toast((e as Error).message, 'danger'),
+    });
+  };
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] py-1 pl-2.5 pr-1.5">
+      <Icon name="user" size={14} className="text-[var(--ink-muted)]" />
+      <select value={applicant.assigned_to ?? ''} onChange={(e) => change(e.target.value || null)} disabled={assign.isPending}
+        aria-label="Assigned to" className="bg-transparent text-[13px] text-[var(--ink)] outline-none">
+        <option value="">Not assigned</option>
+        {people.members.map((m) => (
+          <option key={m.id} value={m.id}>{people.nameOf(m.id)}{m.id === people.meId ? ' (you)' : ''}</option>
+        ))}
+      </select>
+      <Help topic="assign" />
+    </span>
   );
 }
