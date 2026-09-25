@@ -69,6 +69,7 @@ export function PipelinePage() {
   const [params, setParams] = useSearchParams();
   const [filters, setFilters] = useState<PipelineFilters>(() => filtersFromParams(params));
   const [sort, setSort] = useState(() => sortFromParams(params));
+  const [moreOpen, setMoreOpen] = useState(false);
   const written = useRef(params.toString());
 
   useEffect(() => {
@@ -144,6 +145,11 @@ export function PipelinePage() {
     pills.push({ label: BENEFITS.find((x) => x.key === b)?.label ?? b, remove: (f) => ({ ...f, benefits: f.benefits.filter((x) => x !== b) }) });
   }
 
+  // The everyday filters stay in view; the rest open with More filters (already open if one is in use)
+  const extraInUse = [filters.household !== 'any', filters.work !== 'any', filters.councilReg !== 'any', filters.urgency !== 'any', filters.benefits.length > 0]
+    .filter(Boolean).length;
+  const showMore = moreOpen || extraInUse > 0;
+
   const toggleBenefit = (key: BenefitKey) =>
     setFilters((f) => ({ ...f, benefits: f.benefits.includes(key) ? f.benefits.filter((b) => b !== key) : [...f.benefits, key] }));
 
@@ -193,17 +199,6 @@ export function PipelinePage() {
             ]} />
           <FilterSelect label="Tier" value={filters.tier} onChange={(v) => update({ tier: v as PipelineFilters['tier'] })}
             options={[['any', 'Any'], ...tierNumbers().map((t): [string, string] => [String(t), tierLabel(t)])]} />
-          <FilterSelect label="Client type" value={filters.household} onChange={(v) => update({ household: v as PipelineFilters['household'] })}
-            options={[['any', 'Any'], ['single', 'Single'], ['couple', 'Couple'], ['family', 'Family with children'], ['other', 'Other'], ['unknown', 'Not set']]} />
-          <FilterSelect label="Work" value={filters.work} onChange={(v) => update({ work: v as PipelineFilters['work'] })}
-            options={[['any', 'Any'], ['not_working', 'Not working'], ['part_time', 'Part time'], ['full_time', 'Full time']]} />
-          <FilterSelect label="Council-registered" value={filters.councilReg} onChange={(v) => update({ councilReg: v as PipelineFilters['councilReg'] })}
-            options={[['any', 'Any'], ['yes', 'Yes'], ['no', 'No']]} />
-          <FilterSelect label="Urgency" value={filters.urgency} onChange={(v) => update({ urgency: v as PipelineFilters['urgency'] })}
-            options={[
-              ['any', 'Any'], ['urgent', 'Urgent (per Settings)'], ['homeless_tonight', 'Homeless tonight'],
-              ['at_risk_56', 'At risk within 56 days'], ['temp_accommodation', 'Temporary accommodation'], ['overcrowding', 'Overcrowded or unsafe'],
-            ]} />
           {people.ready && people.members.length > 0 && (
             <FilterSelect label="Assigned" value={filters.owner} onChange={(v) => update({ owner: v })}
               options={[['any', 'Anyone'], ['me', 'Me'], ['none', 'Not assigned'],
@@ -211,30 +206,52 @@ export function PipelinePage() {
           )}
           <FilterSelect label="Calls" value={filters.calls} onChange={(v) => update({ calls: v as PipelineFilters['calls'] })}
             options={Object.entries(CALLS_LABEL) as Array<[string, string]>} />
-          <div className="flex flex-col gap-1">
-            <span className="text-[13px] font-medium text-[var(--ink-muted)]">Receives</span>
-            <div className="flex gap-1.5">
-              {BENEFITS.map((b) => {
-                const on = filters.benefits.includes(b.key);
-                return (
-                  <button
-                    key={b.key}
-                    onClick={() => toggleBenefit(b.key)}
-                    aria-pressed={on}
-                    className="min-h-[40px] rounded-md border px-3 text-[13px] font-medium transition-colors"
-                    style={{
-                      borderColor: on ? 'var(--accent)' : 'var(--line-strong)',
-                      background: on ? 'var(--accent)' : 'var(--surface)',
-                      color: on ? 'var(--on-accent)' : 'var(--ink-muted)',
-                    }}
-                  >
-                    {b.label}
-                  </button>
-                );
-              })}
+          {extraInUse === 0 && (
+            <button type="button" onClick={() => setMoreOpen((v) => !v)} aria-expanded={showMore}
+              className="inline-flex min-h-[40px] items-center gap-1.5 rounded-md px-2 text-[13px] font-medium text-[var(--link)] hover:underline">
+              <Icon name="sliders" size={15} /> {showMore ? 'Fewer filters' : 'More filters'}
+            </button>
+          )}
+        </div>
+
+        {showMore && (
+          <div className="flex flex-wrap items-end gap-3 border-t border-[var(--line)] pt-4">
+            <FilterSelect label="Client type" value={filters.household} onChange={(v) => update({ household: v as PipelineFilters['household'] })}
+              options={[['any', 'Any'], ['single', 'Single'], ['couple', 'Couple'], ['family', 'Family with children'], ['other', 'Other'], ['unknown', 'Not set']]} />
+            <FilterSelect label="Work" value={filters.work} onChange={(v) => update({ work: v as PipelineFilters['work'] })}
+              options={[['any', 'Any'], ['not_working', 'Not working'], ['part_time', 'Part time'], ['full_time', 'Full time']]} />
+            <FilterSelect label="Council-registered" value={filters.councilReg} onChange={(v) => update({ councilReg: v as PipelineFilters['councilReg'] })}
+              options={[['any', 'Any'], ['yes', 'Yes'], ['no', 'No']]} />
+            <FilterSelect label="Urgency" value={filters.urgency} onChange={(v) => update({ urgency: v as PipelineFilters['urgency'] })}
+              options={[
+                ['any', 'Any'], ['urgent', 'Urgent (per Settings)'], ['homeless_tonight', 'Homeless tonight'],
+                ['at_risk_56', 'At risk within 56 days'], ['temp_accommodation', 'Temporary accommodation'], ['overcrowding', 'Overcrowded or unsafe'],
+              ]} />
+            <div className="flex flex-col gap-1">
+              <span className="text-[13px] font-medium text-[var(--ink-muted)]">Receives</span>
+              <div className="flex gap-1.5">
+                {BENEFITS.map((b) => {
+                  const on = filters.benefits.includes(b.key);
+                  return (
+                    <button
+                      key={b.key}
+                      onClick={() => toggleBenefit(b.key)}
+                      aria-pressed={on}
+                      className="min-h-[40px] rounded-md border px-3 text-[13px] font-medium transition-colors"
+                      style={{
+                        borderColor: on ? 'var(--accent)' : 'var(--line-strong)',
+                        background: on ? 'var(--accent)' : 'var(--surface)',
+                        color: on ? 'var(--on-accent)' : 'var(--ink-muted)',
+                      }}
+                    >
+                      {b.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </Card>
 
       {/* Result summary */}
@@ -311,10 +328,10 @@ export function PipelinePage() {
                       </div>
                     </div>
                   </td>
-                  <td className="px-3 py-3 text-[var(--ink-muted)]">{household ? TYPE_SHORT[household] : '—'}</td>
+                  <td className="px-3 py-3 text-[var(--ink-muted)]">{household ? TYPE_SHORT[household] : '·'}</td>
                   <td className="px-3 py-3">
                     {benefits.length === 0 ? (
-                      <span className="text-[var(--ink-muted)]">—</span>
+                      <span className="text-[var(--ink-muted)]">·</span>
                     ) : (
                       <div className="flex flex-wrap gap-1">
                         {benefits.map((b) => (
@@ -325,8 +342,8 @@ export function PipelinePage() {
                       </div>
                     )}
                   </td>
-                  <td className="px-3 py-3 text-[var(--ink-muted)]">{areaOf(a) || '—'}</td>
-                  <td className="px-3 py-3 text-right font-mono text-[var(--ink)]">{a.budget_pcm ? money(a.budget_pcm) : '—'}</td>
+                  <td className="px-3 py-3 text-[var(--ink-muted)]">{areaOf(a) || '·'}</td>
+                  <td className="px-3 py-3 text-right font-mono text-[var(--ink)]">{a.budget_pcm ? money(a.budget_pcm) : '·'}</td>
                   <td className="px-3 py-3"><CallCell state={callState(a, last.get(a.id))} lastOutcome={last.get(a.id)?.outcome} lastAt={last.get(a.id)?.created_at} /></td>
                   <td className="px-3 py-3">
                     <select

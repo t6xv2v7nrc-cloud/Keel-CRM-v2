@@ -22,6 +22,10 @@ import DevTokens from './routes/DevTokens';
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
 });
+// Whoever signs in on this device next must not be shown as the last person
+supabase.auth.onAuthStateChange((event) => {
+  if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') void queryClient.invalidateQueries({ queryKey: ['session-user'] });
+});
 
 const NAV: Array<{ to: string; label: string; icon: IconName }> = [
   { to: '/', label: 'Home', icon: 'home' },

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from './supabase';
 import { isLocalProperty, localProperties, useLocalProperties } from './localProperties';
@@ -156,6 +156,49 @@ export function useRecentActivity(limit = 12) {
       return data as Activity[];
     },
   });
+}
+
+// ── WhatsApp ────────────────────────────────────────────────────────
+const SENT = /^Sent (.+) on WhatsApp$/;
+/** Key for "has this client been sent this property": client id and address. */
+export const sentKey = (applicantId: string, address: string) => `${applicantId}|${address.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+
+/** Note on a client's timeline that properties were sent to them on WhatsApp (and by whom). */
+export function useLogWhatsApp() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ applicantId, properties }: { applicantId: string; properties: Pick<Property, 'address_line'>[] }) => {
+      const { error } = await supabase.from('activities').insert(properties.map((p) => ({
+        entity_type: 'applicant', entity_id: applicantId, kind: 'whatsapp', body: `Sent ${p.address_line} on WhatsApp`,
+      })));
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['activities'] }),
+  });
+}
+
+export interface SentOnWhatsApp { at: string; actor: string | null }
+
+/** Every property sent to a client on WhatsApp, by sentKey, most recent send kept. */
+export function useSentOnWhatsApp() {
+  const q = useQuery({
+    queryKey: ['activities', 'whatsapp'],
+    queryFn: async (): Promise<Activity[]> => {
+      const { data, error } = await supabase.from('activities').select('*')
+        .eq('kind', 'whatsapp').order('created_at', { ascending: false }).limit(2000);
+      if (error) throw error;
+      return data as Activity[];
+    },
+  });
+  return useMemo(() => {
+    const sent = new Map<string, SentOnWhatsApp>();
+    for (const r of q.data ?? []) {
+      const address = SENT.exec(r.body)?.[1];
+      const key = address ? sentKey(r.entity_id, address) : null;
+      if (key && !sent.has(key)) sent.set(key, { at: r.created_at, actor: r.actor ?? null });
+    }
+    return sent;
+  }, [q.data]);
 }
 
 // ── Properties ──────────────────────────────────────────────────────
@@ -375,13 +418,15 @@ export const nameFromEmail = (email: string | null | undefined) => {
 /** The signed-in person, the team, and a way to name anyone by id. */
 export function usePeople() {
   const { members, ready } = useTeam();
-  const [session, setSession] = useState<{ id: string; email: string | null } | null>(null);
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      const u = data.session?.user;
-      setSession(u ? { id: u.id, email: u.email ?? null } : null);
-    });
-  }, []);
+  // One look-up shared by every component that names people (rows in long lists use this too)
+  const { data: session = null } = useQuery({
+    queryKey: ['session-user'],
+    staleTime: Infinity,
+    queryFn: async () => {
+      const u = (await supabase.auth.getSession()).data.session?.user;
+      return u ? { id: u.id, email: u.email ?? null } : null;
+    },
+  });
   return useMemo(() => {
     const byId = new Map(members.map((m) => [m.id, m]));
     const nameOf = (id: string | null | undefined): string | null => {

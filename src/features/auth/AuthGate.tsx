@@ -117,12 +117,12 @@ function Login() {
   );
 }
 
-/** Brass diamond brand mark. */
+/** The Keel diamond, as in the header and the favicon. */
 function KeelMark() {
   return (
     <span
       aria-hidden
-      className="grid h-9 w-9 shrink-0 rotate-45 place-items-center rounded-sm"
+      className="grid h-9 w-9 shrink-0 rotate-45 place-items-center rounded-[7px]"
       style={{ background: 'var(--hull)' }}
     >
       <span className="h-3.5 w-3.5 rounded-[2px]" style={{ background: 'var(--surface)' }} />

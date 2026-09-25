@@ -300,7 +300,7 @@ export function BinPage() {
                 <span className="rounded bg-[var(--stage-placed-bg)] px-2 py-0.5 text-[13px] text-[var(--stage-placed-fg)]">
                   {item.detected_type?.replace(/_/g, ' ') ?? 'filed'}
                 </span>
-                <span className="text-[15px] text-[var(--ink)]">{item.extraction?.summary ?? '—'}</span>
+                <span className="text-[15px] text-[var(--ink)]">{item.extraction?.summary ?? '·'}</span>
                 <span className="ml-auto font-mono text-[13px] text-[var(--ink-muted)]">{timeAgo(item.confirmed_at)}</span>
               </li>
             ))}

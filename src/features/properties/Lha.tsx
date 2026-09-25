@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Help, Icon, useToast } from '../../components/ui';
+import { Icon, useToast } from '../../components/ui';
 import { usePeople, useSaveSettings, useSetLhaArea, useSettings } from '../../lib/hooks';
 import { activeSettings } from '../../lib/settings';
 import { brmaNames, districtFor, LHA_DIRECT_URL, lhaCheck, lhaTable, lhaWords, sizeWords } from '../../lib/lha';
@@ -40,23 +40,21 @@ export function LhaLine({ property }: { property: Property }) {
       <div className="flex flex-wrap items-center gap-2 text-[13px] text-[var(--ink-muted)]">
         <Icon name="pound" size={14} /> LHA: {property.postcode || property.borough ? 'size not known' : 'area not known (no postcode)'}
         <button type="button" onClick={() => setEditing(true)} className="text-[var(--link)] hover:underline">Set the LHA area</button>
-        <Help topic="lha" />
         {editing && <AreaEditor property={property} district={district} current={null} onClose={() => setEditing(false)} />}
       </div>
     );
   }
 
   const t = tone(c);
-  const source = c.area.how === 'set' ? 'set by hand' : c.area.how === 'team' ? `team setting for ${c.area.basis}` : `estimated from ${c.area.basis}`;
+  const source = c.area.how === 'set' ? 'Set by hand' : c.area.how === 'team' ? `Team setting for ${c.area.basis}` : `Estimated from ${c.area.basis}: check on LHA Direct if unsure`;
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[var(--ink-muted)]">
         <span className="rounded px-1.5 py-0.5 font-semibold" style={{ background: t.bg, color: t.fg }}>{lhaWords(c)}</span>
-        <span className="text-[var(--ink)]">{sizeWords(c.size)} LHA <strong className="font-mono">{pounds(c.rate)}</strong></span>
-        <span className="text-[var(--ink-muted)]">· {c.area.brma}</span>
-        <span className={c.area.how === 'estimated' ? 'text-[var(--note-fg)]' : 'text-[var(--ink-muted)]'}>({source})</span>
-        {!editing && <button type="button" onClick={() => setEditing(true)} className="text-[var(--link)] hover:underline">Change area</button>}
-        <Help topic="lha" />
+        <span>{sizeWords(c.size)} rate <span className="font-mono text-[var(--ink)]">{pounds(c.rate)}</span></span>
+        <span>·</span>
+        <span title={source} className={c.area.how === 'estimated' ? 'cursor-help underline decoration-dotted underline-offset-2' : undefined}>{c.area.brma}</span>
+        {!editing && <button type="button" onClick={() => setEditing(true)} className="text-[var(--ink-muted)] underline-offset-2 hover:text-[var(--link)] hover:underline">Change</button>}
       </div>
       {editing && <AreaEditor property={property} district={district} current={c.area.brma} onClose={() => setEditing(false)} />}
     </div>

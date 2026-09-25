@@ -87,9 +87,10 @@ export const HELP = {
   suitable: {
     title: 'Suitable properties',
     body: [
-      'Available properties this client could suit, best first, from your saved property lists.',
+      'Available properties this client could suit, from your saved property lists. Only the best few show at first; Show all lists the rest.',
       'Strong: area, size and rent all fit. Good: a solid fit, perhaps in the borough next door. Possible: a looser fit, such as a different area or no area given, so check with the client.',
-      'Reasons are listed under each property. Anything marked ! is worth checking before you call.',
+      'Anything to check shows in amber. Hover over a property for every reason.',
+      'Send them on WhatsApp sends the best few in one message. A tick shows what has already been sent, and by whom.',
     ],
   },
   clientDetails: {
@@ -139,6 +140,14 @@ export const HELP = {
       'When matching, clients on UC or housing benefit with no budget are judged on their own LHA: 1 bed for singles and couples, and by bedrooms needed for families.',
     ],
   },
+  whatsapp: {
+    title: 'Sending on WhatsApp',
+    body: [
+      'The chat button next to a client opens WhatsApp with the property typed in, ready to send to them. Share on a property lets you pick anyone, such as a landlord or a group.',
+      'Nothing is sent until you press send in WhatsApp. Sending to a client goes on their timeline, so you can both see who has been sent what.',
+      'The owner sets the wording in Team settings.',
+    ],
+  },
   savedLists: {
     title: 'Saved lists',
     body: ['Each paste is kept as a list with the date and where it came from. Purging a list removes it for everyone.'],
@@ -146,7 +155,9 @@ export const HELP = {
   matchStrength: {
     title: 'Matching clients',
     body: [
+      'Each property shows only its best few clients: every Strong one, topped up with Good ones, or the top two Possible ones when nothing fits better. Show all lists everyone.',
       'Strong: area, size and rent all fit. Good: a solid fit, perhaps in the borough next door. Possible: a looser fit, so check with the client first.',
+      'Anything to check shows in amber. Hover over a client for every reason.',
       'Properties over the premium rent in Team settings are always offered to clients on PIP or in full-time work.',
     ],
   },

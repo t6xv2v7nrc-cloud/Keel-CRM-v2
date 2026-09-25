@@ -4,9 +4,9 @@ import {
   Avatar, Button, Card, CardHeader, Empty, Help, Icon, KeelLine, StageBadge, TierBadge, UrgentChip, useToast,
 } from '../../components/ui';
 import {
-  useActivities, useApplicant, useAssign, useCalls, useDeleteApplicant, usePeople, useProperties, useSetNextCall,
+  sentKey, useActivities, useApplicant, useAssign, useCalls, useDeleteApplicant, usePeople, useProperties, useSentOnWhatsApp, useSetNextCall,
 } from '../../lib/hooks';
-import { matchesForApplicant } from '../../lib/propertyMatch';
+import { bestFew, brief, matchesForApplicant } from '../../lib/propertyMatch';
 import { money, timeAgo } from '../../lib/format';
 import { effectiveTier, isUrgent } from '../../lib/search';
 import { addDays, dayLabel, OUTCOME_LABEL, todayIso } from '../../lib/calls';
@@ -15,6 +15,7 @@ import { CallHistory, CallLogger } from '../calls/CallLogger';
 import { CallsNeedUpdate } from '../calls/CallsPage';
 import { ClientDetails } from './ClientDetails';
 import { LhaChip } from '../properties/Lha';
+import { SentTag, WhatsAppLink } from '../properties/WhatsApp';
 
 export function ApplicantPage() {
   const { id } = useParams<{ id: string }>();
@@ -105,14 +106,15 @@ function TimelineRow({ act }: { act: Activity }) {
   const who = whoOf(act.actor);
   const fromScreenshot = act.body.includes('screenshot') || act.inbox_item_id != null;
   const isCall = act.kind === 'call';
+  const isWhatsApp = act.kind === 'whatsapp';
   return (
     <li className="relative flex gap-3 pl-5">
       <span aria-hidden className="absolute left-0 top-1.5 h-[9px] w-[9px] rounded-full ring-2 ring-[var(--surface)]"
-        style={{ background: isCall ? 'var(--accent)' : fromScreenshot ? 'var(--ink-muted)' : 'var(--line-strong)' }} />
+        style={{ background: isCall || isWhatsApp ? 'var(--accent)' : fromScreenshot ? 'var(--ink-muted)' : 'var(--line-strong)' }} />
       <div className="flex-1">
         <div className="text-[15px] text-[var(--ink)]">{act.body}</div>
         <div className="mt-0.5 flex items-center gap-2 text-[13px] text-[var(--ink-muted)]">
-          <span>{isCall ? 'Call' : act.kind.replace('_', ' ')}</span>
+          <span>{isCall ? 'Call' : isWhatsApp ? 'WhatsApp' : act.kind.replace('_', ' ')}</span>
           <span>·</span>
           <span>{timeAgo(act.created_at)}</span>
           {who && <><span>·</span><span>by {who}</span></>}
@@ -194,23 +196,29 @@ function CallsCard({ applicant, calls, ready, open, setOpen }: {
 
 // ── Suitable properties ────────────────────────────────────────────
 
-const SHOW_PROPERTIES = 6;
 const STRENGTH = {
   strong: { label: 'Strong', bg: 'var(--strong-bg)', fg: 'var(--strong-fg)' },
   good: { label: 'Good', bg: 'var(--good-bg)', fg: 'var(--good-fg)' },
   possible: { label: 'Possible', bg: 'var(--possible-bg)', fg: 'var(--possible-fg)' },
 } as const;
 
-/** Every available property this client could suit, best first, from the matching engine. */
+/** The available properties this client could suit: the best few first, the rest on request. */
 function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
   const { data: properties = [] } = useProperties();
+  const sent = useSentOnWhatsApp();
   const [showAll, setShowAll] = useState(false);
   const available = properties.filter((p) => p.status === 'void' || p.status === 'under_offer');
   const all = matchesForApplicant(applicant, available);
-  const matches = showAll ? all : all.slice(0, SHOW_PROPERTIES);
+  const best = bestFew(all, (x) => x.match.strength);
+  const matches = showAll ? all : best;
   return (
     <Card>
-      <CardHeader icon="building" title="Suitable properties" sub={available.length ? `${all.length} of ${available.length} available` : undefined} help="suitable" />
+      <CardHeader icon="building" title="Suitable properties" sub={available.length ? `${all.length} of ${available.length} available` : undefined} help="suitable">
+        {best.length > 0 && (
+          <WhatsAppLink to={applicant} properties={best.map((x) => x.property)}
+            label={best.length === 1 ? 'Send it on WhatsApp' : `Send the best ${best.length} on WhatsApp`} />
+        )}
+      </CardHeader>
       {available.length === 0 ? (
         <Empty icon="building" title="No properties saved yet">
           <Link to="/properties" className="text-[var(--link)] hover:underline">Paste your list on the Properties tab</Link> to see what suits this client.
@@ -220,34 +228,33 @@ function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
           None of the {available.length} available {available.length === 1 ? 'property fits' : 'properties fit'}. Check their area, household and budget are filled in.
         </Empty>
       ) : (
-        <div className="p-5">
-          <ul className="m-0 grid list-none gap-3 p-0 md:grid-cols-2">
-            {matches.map(({ property: p, match: m }) => (
-              <li key={p.id} className="flex gap-3 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-3">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-[var(--ink-muted)]" style={{ background: STRENGTH[m.strength].bg, color: STRENGTH[m.strength].fg }}>
-                  <Icon name="building" size={18} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded px-1.5 py-0.5 text-[12px] font-semibold" style={{ background: STRENGTH[m.strength].bg, color: STRENGTH[m.strength].fg }}>
-                      {STRENGTH[m.strength].label}
-                    </span>
-                    <span className="truncate text-[15px] font-medium text-[var(--ink)]">{p.address_line}</span>
+        <div className="px-5 pb-3 pt-1">
+          <ul className="m-0 flex list-none flex-col divide-y divide-[var(--line)] p-0">
+            {matches.map(({ property: p, match: m }) => {
+              const st = STRENGTH[m.strength];
+              return (
+                <li key={p.id} className="flex items-center gap-3 py-2.5">
+                  <span className="w-[68px] shrink-0 rounded px-2 py-0.5 text-center text-[12px] font-semibold" style={{ background: st.bg, color: st.fg }}>{st.label}</span>
+                  <div className="min-w-0 flex-1" title={[...m.reasons, ...m.cautions.map((c) => `Check: ${c}`)].join('\n')}>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="text-[15px] font-medium text-[var(--ink)]">{p.address_line}</span>
+                      <LhaChip property={p} />
+                      <SentTag sent={sent.get(sentKey(applicant.id, p.address_line))} />
+                    </div>
+                    <div className="text-[13px] text-[var(--ink-muted)] sm:truncate">
+                      {[p.property_type, p.rent_text ?? (p.rent_pcm ? `${money(p.rent_pcm)} pcm` : null), p.area && !/^london$/i.test(p.area) ? p.area : p.borough]
+                        .filter(Boolean).join(' · ')}
+                      {m.cautions[0] && <span className="text-[var(--note-fg)]"> · {brief(m.cautions[0])}</span>}
+                    </div>
                   </div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[var(--ink-muted)]">
-                    <span>{[p.property_type, p.rent_text ?? (p.rent_pcm ? `${money(p.rent_pcm)} pcm` : null), p.area, p.borough !== p.area ? p.borough : null,
-                      p.source_tag ? `Source: ${p.source_tag}` : null].filter(Boolean).join(' · ')}</span>
-                    <LhaChip property={p} />
-                  </div>
-                  <div className="mt-1 text-[13px] text-[var(--ink)]">{m.reasons.join(' · ')}</div>
-                  {m.cautions.length > 0 && <div className="mt-0.5 text-[13px] text-[var(--note-fg)]">! {m.cautions.join(' · ')}</div>}
-                </div>
-              </li>
-            ))}
+                  <WhatsAppLink to={applicant} properties={[p]} icon />
+                </li>
+              );
+            })}
           </ul>
-          {all.length > SHOW_PROPERTIES && (
-            <button onClick={() => setShowAll((v) => !v)} className="mt-3 text-[13px] text-[var(--link)] hover:underline">
-              {showAll ? 'Show fewer' : `Show all ${all.length} properties`}
+          {all.length > best.length && (
+            <button onClick={() => setShowAll((v) => !v)} className="mt-1 text-[13px] text-[var(--link)] hover:underline">
+              {showAll ? 'Show only the best' : `Show all ${all.length} properties`}
             </button>
           )}
         </div>

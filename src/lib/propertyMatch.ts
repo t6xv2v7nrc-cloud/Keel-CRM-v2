@@ -325,6 +325,21 @@ const byBest = (x: Match, y: Match) =>
 /** Settings can hide "Possible" matches. */
 const shown = (m: Match) => m.strength !== 'possible' || activeSettings().showPossibleMatches;
 
+/**
+ * The few to act on first, sized to how many qualify: every strong match (up
+ * to 5), topped up with good ones to make 3, or the top 2 possibles when
+ * nothing better fits. The list must already be sorted best first.
+ */
+export function bestFew<T>(sorted: T[], strength: (t: T) => Strength): T[] {
+  const strong = sorted.filter((t) => strength(t) === 'strong').slice(0, 5);
+  const good = sorted.filter((t) => strength(t) === 'good').slice(0, Math.max(0, 3 - strong.length));
+  const best = [...strong, ...good];
+  return best.length ? best : sorted.slice(0, 2);
+}
+
+/** A reason or caution without its detail in brackets, for one-line lists: "£4 under their LHA". */
+export const brief = (s: string) => s.replace(/\s*\([^)]*\)/g, '');
+
 export function matchesForProperty(p: PropertyLike, applicants: Applicant[]): Match[] {
   return applicants.map((a) => scoreMatch(p, a)).filter((m): m is Match => m !== null && shown(m)).sort(byBest);
 }

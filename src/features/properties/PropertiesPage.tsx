@@ -1,21 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Avatar, Button, Card, Help, Icon, PageHeader, TierBadge, UrgentChip, useToast } from '../../components/ui';
+import { Button, Card, Help, Icon, PageHeader, TierBadge, UrgentChip, useToast } from '../../components/ui';
 import {
-  NeedsDatabaseUpdate, PROPERTY_STATUS_LABEL, useAddProperties, useApplicants, useDeleteProperties, useProperties, useSetPropertyStatus,
+  NeedsDatabaseUpdate, PROPERTY_STATUS_LABEL, sentKey, useAddProperties, useApplicants, useDeleteProperties, useProperties,
+  useSentOnWhatsApp, useSetPropertyStatus,
 } from '../../lib/hooks';
 import { isLocalProperty, localProperties } from '../../lib/localProperties';
-import type { NewProperty, SavedProperty } from '../../lib/hooks';
+import type { NewProperty, SavedProperty, SentOnWhatsApp } from '../../lib/hooks';
 import type { Applicant, Property } from '../../lib/types';
 import { parsePropertyList } from '../../lib/parseProperties';
 import type { ParsedProperty } from '../../lib/parseProperties';
-import { matchesForProperty } from '../../lib/propertyMatch';
+import { bestFew, brief, matchesForProperty } from '../../lib/propertyMatch';
 import type { Match, Strength } from '../../lib/propertyMatch';
 import { BOROUGHS } from '../../lib/london';
 import { activeSettings } from '../../lib/settings';
 import { lhaCheck } from '../../lib/lha';
 import { LhaChip, LhaLine } from './Lha';
+import { SentTag, WhatsAppLink } from './WhatsApp';
 import { effectiveTier, isUrgent } from '../../lib/search';
+import { tierLabel } from '../../lib/tiering';
 import { money, shortDate } from '../../lib/format';
 
 const TYPE_OPTIONS = ['Room', 'En-suite Room', 'Studio', 'En-suite Studio', 'Self-Contained Studio', '1-Bed Flat', '2-Bed Flat', '3-Bed Flat', '3-Bed House', '4-Bed House'];
@@ -45,6 +48,7 @@ export function PropertiesPage() {
   const setStatus = useSetPropertyStatus();
   const del = useDeleteProperties();
   const add = useAddProperties();
+  const sent = useSentOnWhatsApp();
   const { toast } = useToast();
   const [needsUpdate, setNeedsUpdate] = useState(false);
 
@@ -133,7 +137,7 @@ export function PropertiesPage() {
     <div className="mx-auto flex max-w-[1100px] flex-col gap-5 p-6 pb-24">
       <PageHeader icon="building" title="Properties" help="properties" sub={<>
         {counts.available} available · {counts.under_offer} under offer · {counts.let} let
-        {totalMatches > 0 && <> · <strong className="text-[var(--ink)]">{totalMatches}</strong> client matches</>}
+        {totalMatches > 0 && <> · <strong className="text-[var(--ink)]">{totalMatches}</strong> client matches <span className="ml-0.5 inline-flex align-middle"><Help topic="matchStrength" /></span></>}
       </>}>
           {properties.length > 0 && (
             <Button onClick={() => setListsOpen((v) => !v)}>{listsOpen ? 'Hide saved lists' : 'Saved lists'}</Button>
@@ -213,6 +217,7 @@ export function PropertiesPage() {
           {selectedRows.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-4 py-2">
               <span className="text-[15px] text-[var(--ink)]">{selectedRows.length} selected</span>
+              <WhatsAppLink properties={selectedRows} label={`Share ${selectedRows.length === 1 ? 'it' : `all ${selectedRows.length}`} on WhatsApp`} />
               <Button className="min-h-0 px-3 py-1.5 text-[13px]" onClick={bulkLet}>Mark as let</Button>
               <Button variant="danger" className="min-h-0 px-3 py-1.5 text-[13px]" onClick={bulkDelete}>Delete</Button>
               <button onClick={() => setSelected(new Set())} className="ml-auto text-[13px] text-[var(--link)] hover:underline">Clear selection</button>
@@ -225,6 +230,7 @@ export function PropertiesPage() {
                 key={p.id}
                 p={p}
                 matches={matches.get(p.id) ?? []}
+                sent={sent}
                 isNew={justAdded.has(p.id)}
                 selected={selected.has(p.id)}
                 onToggle={() => toggle(p.id)}
@@ -527,65 +533,68 @@ function PasteImport({ existing, applicants, canClose, onClose, onAdded, onNeeds
 
 // ── Property card with its matches ────────────────────────────────
 
-const SHOW_MATCHES = 8;
-
-function PropertyCard({ p, matches, isNew, selected, onToggle, onStatus, onDelete }: {
-  p: Property; matches: Match[]; isNew: boolean; selected: boolean;
+function PropertyCard({ p, matches, sent, isNew, selected, onToggle, onStatus, onDelete }: {
+  p: Property; matches: Match[]; sent: Map<string, SentOnWhatsApp>; isNew: boolean; selected: boolean;
   onToggle: () => void; onStatus: (s: Property['status']) => void; onDelete: () => void;
 }) {
   const [showAll, setShowAll] = useState(false);
-  const shown = showAll ? matches : matches.slice(0, SHOW_MATCHES);
-  const breakdown = (['strong', 'good', 'possible'] as const)
+  const best = bestFew(matches, (m) => m.strength);
+  const shown = showAll ? matches : best;
+  const hidden = matches.length - best.length;
+  const counts = (['strong', 'good', 'possible'] as const)
     .map((st) => [st, matches.filter((m) => m.strength === st).length] as const)
     .filter(([, c]) => c > 0)
     .map(([st, c]) => `${c} ${st}`)
-    .join(', ');
+    .join(' · ');
   const facts = [
-    p.area, p.borough && p.borough.toLowerCase() !== p.area?.toLowerCase() ? p.borough : null, p.property_type,
+    p.property_type,
     p.rent_text ?? (p.rent_pcm ? `${money(p.rent_pcm)} pcm` : null),
+    p.area && !/^london$/i.test(p.area) ? p.area : null,
+    p.borough && p.borough.toLowerCase() !== p.area?.toLowerCase() ? p.borough : null,
     p.bills ? `Bills: ${p.bills}` : null, p.furnished,
     p.available_from ? `From ${shortDate(p.available_from)}` : null,
     p.source_tag ? `Source: ${p.source_tag}` : null,
   ].filter(Boolean);
 
   return (
-    <Card className={`overflow-hidden ${isNew ? 'ring-2 ring-[var(--brass)]' : ''}`}>
-      <div className="flex flex-wrap items-start gap-3 border-b border-[var(--line)] px-5 py-4">
+    <Card className={`overflow-hidden ${isNew ? 'ring-2 ring-[var(--accent)]' : ''}`}>
+      <div className="flex items-start gap-3 px-5 py-4">
         <input type="checkbox" checked={selected} onChange={onToggle} aria-label={`Select ${p.address_line}`}
-          className="mt-1 h-5 w-5 accent-[var(--hull)]" />
+          className="mt-1 h-4 w-4 shrink-0 accent-[var(--accent)]" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="m-0 text-[18px] font-semibold text-[var(--ink)]">{p.address_line}</h3>
-            {isNew && <span className="rounded bg-[var(--brass)] px-2 py-0.5 text-[13px] font-semibold text-[var(--brass-text)]">New</span>}
+            <h3 className="m-0 text-[17px] font-semibold text-[var(--ink)]">{p.address_line}</h3>
+            {isNew && <span className="rounded bg-[var(--accent)] px-1.5 py-0.5 text-[12px] font-semibold text-[var(--on-accent)]">New</span>}
             {isLocalProperty(p.id) && <DeviceOnlyTag />}
           </div>
-          <div className="mt-1 text-[15px] text-[var(--ink-muted)]">{facts.join(' · ') || 'No details'}</div>
-          <div className="mt-2"><LhaLine property={p} /></div>
+          <div className="mt-0.5 text-[14px] text-[var(--ink-muted)]">{facts.join(' · ') || 'No details'}</div>
+          <div className="mt-1.5"><LhaLine property={p} /></div>
         </div>
-        <select value={p.status} onChange={(e) => onStatus(e.target.value as Property['status'])} aria-label={`Status of ${p.address_line}`}
-          className="min-h-[36px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[13px] text-[var(--ink)]">
-          {(Object.keys(PROPERTY_STATUS_LABEL) as Property['status'][]).map((s) => <option key={s} value={s}>{PROPERTY_STATUS_LABEL[s]}</option>)}
-        </select>
-        <button onClick={onDelete} aria-label={`Delete ${p.address_line}`} title="Delete property"
-          className="rounded px-2 py-1 text-[15px] text-[var(--ink-muted)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]">✕</button>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <WhatsAppLink properties={[p]} />
+          <select value={p.status} onChange={(e) => onStatus(e.target.value as Property['status'])} aria-label={`Status of ${p.address_line}`}
+            className="min-h-[36px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[13px] text-[var(--ink)]">
+            {(Object.keys(PROPERTY_STATUS_LABEL) as Property['status'][]).map((s) => <option key={s} value={s}>{PROPERTY_STATUS_LABEL[s]}</option>)}
+          </select>
+          <button onClick={onDelete} aria-label={`Delete ${p.address_line}`} title="Delete property"
+            className="grid h-8 w-8 place-items-center rounded-md text-[var(--ink-muted)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]">
+            <Icon name="x" size={16} />
+          </button>
+        </div>
       </div>
 
       {isAvailable(p) && (
-        <div className="px-5 py-3">
+        <div className="border-t border-[var(--line)] px-5 pb-3 pt-2">
           {matches.length === 0 ? (
-            <p className="m-0 text-[15px] text-[var(--ink-muted)]">No matching clients yet.</p>
+            <p className="m-0 py-1 text-[14px] text-[var(--ink-muted)]">No matching clients yet.</p>
           ) : (
             <>
-              <div className="mb-2 text-[13px] font-medium text-[var(--ink-muted)]">
-                <span className="mr-1.5 inline-flex align-middle"><Help topic="matchStrength" /></span>{matches.length} matching {matches.length === 1 ? 'client' : 'clients'}
-                {matches.length > 1 && <span className="font-normal">: {breakdown}</span>}
-              </div>
-              <ul className="m-0 flex list-none flex-col gap-3 p-0">
-                {shown.map((m) => <MatchRow key={m.applicant.id} m={m} />)}
+              <ul className="m-0 flex list-none flex-col divide-y divide-[var(--line)] p-0">
+                {shown.map((m) => <MatchRow key={m.applicant.id} m={m} p={p} sent={sent.get(sentKey(m.applicant.id, p.address_line))} />)}
               </ul>
-              {matches.length > SHOW_MATCHES && (
-                <button onClick={() => setShowAll((v) => !v)} className="mt-3 text-[13px] text-[var(--link)] hover:underline">
-                  {showAll ? 'Show fewer' : `Show all ${matches.length} clients`}
+              {hidden > 0 && (
+                <button onClick={() => setShowAll((v) => !v)} className="mt-1 text-[13px] text-[var(--link)] hover:underline">
+                  {showAll ? 'Show only the best' : `Show all ${matches.length} (${counts})`}
                 </button>
               )}
             </>
@@ -596,34 +605,51 @@ function PropertyCard({ p, matches, isNew, selected, onToggle, onStatus, onDelet
   );
 }
 
-function MatchRow({ m }: { m: Match }) {
+/** One client: strength, who, the reasons in brief (all of them on hover), and ways to reach them. */
+function MatchRow({ m, p, sent }: { m: Match; p: Property; sent: SentOnWhatsApp | undefined }) {
   const a = m.applicant;
+  const tier = effectiveTier(a);
+  // tier and urgency already show as badges
+  const reasons = m.reasons.filter((r) => r !== tierLabel(1) && !r.startsWith('Urgent:')).map(brief);
+  const urgentWhy = m.reasons.find((r) => r.startsWith('Urgent:'));
+  const detail = [...m.reasons, ...m.cautions.map((c) => `Check: ${c}`)].join('\n');
   return (
-    <li className="flex gap-3">
-      <Avatar name={a.full_name} size={32} accent={effectiveTier(a) === 1} />
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-      <div className="flex flex-wrap items-center gap-2">
-        <StrengthBadge s={m.strength} />
-        <Link to={`/applicants/${a.id}`} className="text-[15px] font-medium text-[var(--ink)] hover:underline">{a.full_name}</Link>
-        <TierBadge tier={effectiveTier(a)} />
-        {isUrgent(a) && <UrgentChip />}
-        {a.phone && <a href={`tel:${a.phone}`} className="font-mono text-[13px] text-[var(--link)] hover:underline">{a.phone}</a>}
+    <li className="flex items-center gap-3 py-2.5">
+      <StrengthBadge s={m.strength} />
+      <div className="min-w-0 flex-1" title={detail}>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <Link to={`/applicants/${a.id}`} className="text-[15px] font-medium text-[var(--ink)] hover:underline">{a.full_name}</Link>
+          <TierBadge tier={tier} />
+          {isUrgent(a) && <span title={urgentWhy}><UrgentChip /></span>}
+          <SentTag sent={sent} />
+        </div>
+        <div className="text-[13px] text-[var(--ink-muted)] sm:truncate">
+          {reasons.join(' · ')}
+          {m.cautions[0] && <span className="text-[var(--note-fg)]">{reasons.length ? ' · ' : ''}{brief(m.cautions[0])}</span>}
+        </div>
       </div>
-      <div className="text-[13px] text-[var(--ink)]">{m.reasons.join(' · ')}</div>
-      {m.cautions.length > 0 && (
-        <div className="text-[13px] text-[var(--note-fg)]">! {m.cautions.join(' · ')}</div>
+      <WhatsAppLink to={a} properties={[p]} icon />
+      {a.phone && (
+        <a href={`tel:${a.phone}`} title={`Call ${a.full_name} (${a.phone})`} aria-label={`Call ${a.full_name}`}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-[var(--line)] text-[var(--ink-muted)] transition-colors hover:border-[var(--line-strong)] hover:text-[var(--ink)]">
+          <Icon name="phone" size={15} />
+        </a>
       )}
-      </div>
     </li>
   );
 }
 
 function DeviceOnlyTag() {
-  return <span className="rounded bg-[var(--note-bg)] px-2 py-0.5 text-[13px] font-normal text-[var(--note-fg)]">Only on this device</span>;
+  return (
+    <span className="inline-flex items-center gap-1 text-[12px] text-[var(--note-fg)]" title="Saved only in this browser, so it is not on your phone yet. See the note at the top of the page.">
+      <Icon name="monitor" size={13} /> This device only
+    </span>
+  );
 }
 
 function StrengthBadge({ s }: { s: Strength }) {
   const x = STRENGTH[s];
-  return <span className="rounded px-2 py-0.5 text-[13px] font-semibold" style={{ background: x.bg, color: x.fg }}>{x.label}</span>;
+  return (
+    <span className="w-[68px] shrink-0 rounded px-2 py-0.5 text-center text-[12px] font-semibold" style={{ background: x.bg, color: x.fg }}>{x.label}</span>
+  );
 }
-

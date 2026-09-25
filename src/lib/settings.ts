@@ -100,11 +100,22 @@ export interface AppSettings {
   lhaAreaOverrides: Record<string, string>;
   /** How far over LHA (pcm) a client might top up before a property counts as unaffordable. */
   lhaLeeway: number;
+  /** Wording when sending properties to a client on WhatsApp ({first name}, {a property}, {properties}, {my name}). */
+  whatsappMessage: string;
   /** Page to open after signing in. */
   startPage: '/' | '/calls' | '/pipeline' | '/bin' | '/properties';
   /** Which clients the Calls page shows first. */
   callsView: 'everyone' | 'mine';
 }
+
+export const DEFAULT_WHATSAPP_MESSAGE = [
+  'Hi {first name}, I have {a property} that could suit you:',
+  '',
+  '{properties}',
+  '',
+  'Would you like to view? Reply here and I will arrange it.',
+  '{my name}, Keel Lettings',
+].join('\n');
 
 export const DEFAULT_SETTINGS: AppSettings = {
   tierLogic: DEFAULT_TIER_LOGIC,
@@ -120,6 +131,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lhaRates: null,
   lhaAreaOverrides: {},
   lhaLeeway: 50,
+  whatsappMessage: DEFAULT_WHATSAPP_MESSAGE,
   startPage: '/',
   callsView: 'everyone',
 };

@@ -201,11 +201,11 @@ export function DashboardPage() {
               const name = act.entity_type === 'applicant' ? nameOf(act.entity_id) : null;
               const inner = (
                 <>
-                  <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${act.kind === 'call' ? 'bg-[var(--accent-soft)] text-[var(--accent-ink)]' : 'bg-[var(--paper-2)] text-[var(--ink-muted)]'}`}>
+                  <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${act.kind === 'call' || act.kind === 'whatsapp' ? 'bg-[var(--accent-soft)] text-[var(--accent-ink)]' : 'bg-[var(--paper-2)] text-[var(--ink-muted)]'}`}>
                     <Icon name={activityIcon(act)} size={15} />
                   </span>
                   <div className="min-w-0">
-                    <div className="truncate text-[15px] text-[var(--ink)]">{name && act.kind === 'call' ? `${name}: ${act.body}` : act.body}</div>
+                    <div className="truncate text-[15px] text-[var(--ink)]">{name && (act.kind === 'call' || act.kind === 'whatsapp') ? `${name}: ${act.body}` : act.body}</div>
                     <div className="text-[13px] text-[var(--ink-muted)]">{timeAgo(act.created_at)}{people.whoOf(act.actor) ? ` · by ${people.whoOf(act.actor)}` : ''}</div>
                   </div>
                 </>
@@ -229,6 +229,7 @@ export function DashboardPage() {
 
 function activityIcon(a: Activity): IconName {
   if (a.kind === 'call') return 'phone';
+  if (a.kind === 'whatsapp') return 'chat';
   if (a.kind === 'stage_change') return 'arrowRight';
   if (a.entity_type === 'property') return 'building';
   if (a.kind === 'created') return a.body.includes('screenshot') ? 'inbox' : 'plus';
