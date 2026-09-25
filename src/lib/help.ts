@@ -130,6 +130,15 @@ export const HELP = {
       'Lists are saved to the account, so you both see them on every device. Mark a property as let when it goes, or purge old lists under Saved lists.',
     ],
   },
+  lha: {
+    title: 'LHA check',
+    body: [
+      'Compares the rent with the Local Housing Allowance for the property\'s size in its area (Broad Rental Market Area), using the rates loaded in Team settings.',
+      'Studios and en-suite rooms count as 1 bed. Other rooms use the shared rate. LHA stops at 4 bed. A rent written as "1-Bed LHA" counts as exactly that rate.',
+      'The area is estimated from the postcode, which is usually right but not always. Check an address on the VOA\'s LHA Direct and use Change area if it differs; the owner can apply it to every property in that postcode district.',
+      'When matching, clients on UC or housing benefit with no budget are judged on their own LHA: 1 bed for singles and couples, and by bedrooms needed for families.',
+    ],
+  },
   savedLists: {
     title: 'Saved lists',
     body: ['Each paste is kept as a list with the date and where it came from. Purging a list removes it for everyone.'],

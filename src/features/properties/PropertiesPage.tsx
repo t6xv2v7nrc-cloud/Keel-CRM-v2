@@ -13,6 +13,8 @@ import { matchesForProperty } from '../../lib/propertyMatch';
 import type { Match, Strength } from '../../lib/propertyMatch';
 import { BOROUGHS } from '../../lib/london';
 import { activeSettings } from '../../lib/settings';
+import { lhaCheck } from '../../lib/lha';
+import { LhaChip, LhaLine } from './Lha';
 import { effectiveTier, isUrgent } from '../../lib/search';
 import { money, shortDate } from '../../lib/format';
 
@@ -72,6 +74,7 @@ export function PropertiesPage() {
   const [status, setStatusFilter] = useState<'available' | Property['status'] | 'all'>('available');
   const [borough, setBorough] = useState('all');
   const [q, setQ] = useState('');
+  const [lhaFilter, setLhaFilter] = useState<'any' | 'within' | 'over' | 'unknown'>('any');
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const matches = useMemo(
@@ -92,12 +95,19 @@ export function PropertiesPage() {
     return properties
       .filter((p) => status === 'all' || (status === 'available' ? isAvailable(p) : p.status === status))
       .filter((p) => borough === 'all' || p.borough === borough)
+      .filter((p) => {
+        if (lhaFilter === 'any') return true;
+        const c = lhaCheck(p);
+        if (lhaFilter === 'unknown') return !c || c.status === 'unknown';
+        if (!c || c.status === 'unknown') return false;
+        return lhaFilter === 'over' ? c.status === 'over' : c.status !== 'over';
+      })
       .filter((p) => !needle || [p.address_line, p.area, p.borough, p.postcode, p.property_type, p.source_tag]
         .some((x) => x?.toLowerCase().includes(needle)))
       .sort((a, b) => Number(justAdded.has(b.id)) - Number(justAdded.has(a.id))
         || (matches.get(b.id)?.length ?? 0) - (matches.get(a.id)?.length ?? 0)
         || b.created_at.localeCompare(a.created_at));
-  }, [properties, status, borough, q, justAdded, matches]);
+  }, [properties, status, borough, q, justAdded, matches, lhaFilter]);
 
   const toggle = (id: string) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const selectedRows = rows.filter((p) => selected.has(p.id));
@@ -181,6 +191,16 @@ export function PropertiesPage() {
                 className="min-h-[40px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]">
                 <option value="all">All boroughs</option>
                 {boroughs.map((b) => <option key={b} value={b}>{b}</option>)}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="flex items-center gap-1.5 text-[13px] font-medium text-[var(--ink-muted)]">LHA <Help topic="lha" /></span>
+              <select value={lhaFilter} onChange={(e) => setLhaFilter(e.target.value as typeof lhaFilter)}
+                className="min-h-[40px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]">
+                <option value="any">Any rent</option>
+                <option value="within">At or under LHA</option>
+                <option value="over">Over LHA</option>
+                <option value="unknown">LHA not worked out</option>
               </select>
             </label>
             <label className="flex min-w-[220px] flex-1 flex-col gap-1">
@@ -454,6 +474,7 @@ function PasteImport({ existing, applicants, canClose, onClose, onAdded, onNeeds
                       }}
                       className="min-h-[32px] w-[190px] rounded-md border border-[var(--line)] bg-[var(--surface)] px-2 font-mono text-[13px] text-[var(--ink)]"
                     />
+                    <LhaChip property={d} />
                     <select value={d.borough ?? ''} aria-label="Borough" onChange={(e) => edit(d.key, { borough: e.target.value || null })}
                       className="min-h-[32px] rounded-md border border-[var(--line)] bg-[var(--surface)] px-1.5 text-[13px] text-[var(--ink)]">
                       <option value="">Borough not found</option>
@@ -539,6 +560,7 @@ function PropertyCard({ p, matches, isNew, selected, onToggle, onStatus, onDelet
             {isLocalProperty(p.id) && <DeviceOnlyTag />}
           </div>
           <div className="mt-1 text-[15px] text-[var(--ink-muted)]">{facts.join(' · ') || 'No details'}</div>
+          <div className="mt-2"><LhaLine property={p} /></div>
         </div>
         <select value={p.status} onChange={(e) => onStatus(e.target.value as Property['status'])} aria-label={`Status of ${p.address_line}`}
           className="min-h-[36px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[13px] text-[var(--ink)]">

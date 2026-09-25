@@ -14,6 +14,7 @@ import type { Activity, Applicant, Call } from '../../lib/types';
 import { CallHistory, CallLogger } from '../calls/CallLogger';
 import { CallsNeedUpdate } from '../calls/CallsPage';
 import { ClientDetails } from './ClientDetails';
+import { LhaChip } from '../properties/Lha';
 
 export function ApplicantPage() {
   const { id } = useParams<{ id: string }>();
@@ -233,9 +234,10 @@ function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
                     </span>
                     <span className="truncate text-[15px] font-medium text-[var(--ink)]">{p.address_line}</span>
                   </div>
-                  <div className="mt-0.5 text-[13px] text-[var(--ink-muted)]">
-                    {[p.property_type, p.rent_text ?? (p.rent_pcm ? `${money(p.rent_pcm)} pcm` : null), p.area, p.borough !== p.area ? p.borough : null,
-                      p.source_tag ? `Source: ${p.source_tag}` : null].filter(Boolean).join(' · ')}
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[var(--ink-muted)]">
+                    <span>{[p.property_type, p.rent_text ?? (p.rent_pcm ? `${money(p.rent_pcm)} pcm` : null), p.area, p.borough !== p.area ? p.borough : null,
+                      p.source_tag ? `Source: ${p.source_tag}` : null].filter(Boolean).join(' · ')}</span>
+                    <LhaChip property={p} />
                   </div>
                   <div className="mt-1 text-[13px] text-[var(--ink)]">{m.reasons.join(' · ')}</div>
                   {m.cautions.length > 0 && <div className="mt-0.5 text-[13px] text-[var(--note-fg)]">! {m.cautions.join(' · ')}</div>}

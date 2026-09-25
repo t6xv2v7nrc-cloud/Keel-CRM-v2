@@ -59,6 +59,10 @@ export const localProperties = {
     const now = new Date().toISOString();
     return write(read().map((p) => (ids.includes(p.id) ? { ...p, status, updated_at: now } : p)));
   },
+  update(ids: string[], patch: Partial<Property>): boolean {
+    const now = new Date().toISOString();
+    return write(read().map((p) => (ids.includes(p.id) ? { ...p, ...patch, updated_at: now } : p)));
+  },
   remove(ids: string[]): boolean {
     return write(read().filter((p) => !ids.includes(p.id)));
   },

@@ -9,6 +9,7 @@ src/
   lib/        supabase.ts, matching.ts, format.ts (phone/E.164, money, dates),
               settings.ts (team rules + my settings, tier logic types), tiering.ts (tier engine),
               calls.ts, propertyMatch.ts, readNotes.ts (form answers from free text),
+              lha.ts (LHA area, size rules and rent-vs-LHA check; rates in src/data/lha-rates.ts),
               help.ts (words behind the "?" help buttons)
   components/ ui primitives on tokens (Button, Badge, Card, Field, Toast, KeelLine,
               Icon, Visuals: avatars, page headers, stat tiles, SVG charts)

@@ -19,6 +19,7 @@ import { benefitsOf, effectiveTier, householdOf, isUrgent } from './search';
 import type { HouseholdKey } from './search';
 import { tierCount, tierLabel, URGENCY_LABEL } from './tiering';
 import { activeSettings } from './settings';
+import { clientLhaSize, lhaCheck, rateFor, sizeWords } from './lha';
 import {
   areNeighbours, areasIn, boroughFromDistrict, boroughOfArea, boroughsIn, canonicalBorough, districtOf, districtsIn,
   boroughsOfRegion, regionsIn, titleCase,
@@ -35,6 +36,7 @@ export interface PropertyLike {
   rent_text: string | null;
   furnished: string | null;
   notes: string | null;
+  lha_area?: string | null;
 }
 
 export type Strength = 'strong' | 'good' | 'possible';
@@ -225,20 +227,33 @@ export function scoreMatch(p: PropertyLike, a: Applicant): Match | null {
     }
   }
 
-  // Rent
+  // Rent: against their budget if they gave one, otherwise against their LHA
+  const lha = lhaCheck(p);
+  const rent = p.rent_pcm ?? lha?.rent ?? null;
+  let judgedOnLha = false;
   if (premiumFit) {
     score += 15;
     reasons.push(`Over ${money(premiumRent)}, open to ${need.premiumOk} clients`);
-  } else if (p.rent_pcm != null && need.budget) {
-    const over = p.rent_pcm - need.budget;
-    if (over <= 0) { score += 15; reasons.push(`${money(p.rent_pcm)} within ${money(need.budget)} budget`); }
+  } else if (rent != null && need.budget) {
+    const over = rent - need.budget;
+    if (over <= 0) { score += 15; reasons.push(`${money(rent)} within ${money(need.budget)} budget`); }
     else if (over <= need.budget * 0.1) { score += 3; cautions.push(`${money(over)} over budget`); }
     else { score -= 20; cautions.push(`${money(over)} over budget`); }
+  } else if (need.onBenefits && lha && rent != null) {
+    // what they are entitled to (by household), in this property's LHA area
+    const size = clientLhaSize(need.household, need.beds?.min ?? null) ?? lha.size;
+    const entitled = rateFor(lha.area.brma, size) ?? lha.rate;
+    const diff = Math.round(rent - entitled);
+    const where = `${sizeWords(size)} LHA, ${lha.area.brma}`;
+    judgedOnLha = true;
+    if (diff <= 0) { score += 15; reasons.push(diff === 0 ? `At their LHA (${where})` : `${money(-diff)} under their LHA (${where})`); }
+    else if (diff <= activeSettings().lhaLeeway) { score += 5; cautions.push(`${money(diff)} over their LHA (${where}): a small top-up`); }
+    else { score -= 15; cautions.push(`${money(diff)} over their LHA (${where})`); }
   } else if (f.lha) {
     if (need.onBenefits) { score += 15; reasons.push(`${p.rent_text} rent, on benefits`); }
     else score += 5;
   }
-  if (premium && !premiumFit && !(need.budget && p.rent_pcm! <= need.budget)) {
+  if (premium && !premiumFit && !judgedOnLha && !(need.budget && p.rent_pcm! <= need.budget)) {
     score -= 5;
     cautions.push(`Over ${money(premiumRent)}: check they can afford it`);
   }
@@ -292,7 +307,7 @@ export function scoreMatch(p: PropertyLike, a: Applicant): Match | null {
   if (tier === 1) { score += 10; reasons.push(tierLabel(1)); } else if (tier === 2 && tierCount() > 2) { score += 4; }
   if (isUrgent(a)) { score += 10; reasons.push(`Urgent: ${URGENCY_LABEL[a.urgency ?? ''] ?? a.urgency}`); }
 
-  const rentFit = reasons.some((r) => /within|rent, on benefits/.test(r));
+  const rentFit = reasons.some((r) => /within|rent, on benefits|under their LHA|At their LHA/.test(r));
   if (!premiumFit) { // the premium rule always offers it
     if (!areaFit && !rentFit && !isUrgent(a)) return null;
     if (score < 30) return null;

@@ -72,6 +72,7 @@ export interface Property {
   rent_text: string | null;
   area: string | null;
   source_tag: string | null;
+  lha_area?: string | null; // 0008: LHA area (BRMA) chosen by hand
   created_at: string;
   updated_at: string;
 }

@@ -94,6 +94,12 @@ export interface AppSettings {
   firstCallWithinDays: number;
   /** Saved property lists older than this can be purged in one click. */
   purgeAfterDays: number;
+  /** LHA rates loaded from a CSV (a newer year); null uses the built-in rates. */
+  lhaRates: { year: string; rates: Record<string, number[]> } | null;
+  /** Corrections to which LHA area (BRMA) a postcode district or borough is in. */
+  lhaAreaOverrides: Record<string, string>;
+  /** How far over LHA (pcm) a client might top up before a property counts as unaffordable. */
+  lhaLeeway: number;
   /** Page to open after signing in. */
   startPage: '/' | '/calls' | '/pipeline' | '/bin' | '/properties';
   /** Which clients the Calls page shows first. */
@@ -111,6 +117,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   callAgainAfterAnswered: 7,
   firstCallWithinDays: 1,
   purgeAfterDays: 14,
+  lhaRates: null,
+  lhaAreaOverrides: {},
+  lhaLeeway: 50,
   startPage: '/',
   callsView: 'everyone',
 };
@@ -147,6 +156,8 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 
 /** Saved values over the defaults, so a setting added later still has a value. */
 export function withDefaults<T>(base: T, saved: unknown): T {
+  // an open-ended map (empty by default) keeps whatever was saved
+  if (isObject(base) && Object.keys(base).length === 0 && isObject(saved)) return saved as T;
   if (!isObject(base) || !isObject(saved)) {
     if (saved === undefined || saved === null) return base;
     return typeof saved === typeof base && Array.isArray(saved) === Array.isArray(base) ? (saved as T) : base;

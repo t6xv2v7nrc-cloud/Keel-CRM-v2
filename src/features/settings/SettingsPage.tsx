@@ -8,6 +8,7 @@ import { DEFAULT_SETTINGS, myPart, teamPart } from '../../lib/settings';
 import type { AppSettings } from '../../lib/settings';
 import { URGENCY_LABEL } from '../../lib/tiering';
 import { TierLogicEditor } from './TierLogicEditor';
+import { LhaSettings } from './LhaSettings';
 import { isActive } from '../../lib/search';
 import { addDays, isoDay } from '../../lib/calls';
 import { money } from '../../lib/format';
@@ -235,6 +236,8 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
           </Row>
         </div>
       </Card>
+
+      <LhaSettings draft={draft} set={set} />
 
       <Card>
         <CardHeader icon="phone" title="Calls" help="calls" />

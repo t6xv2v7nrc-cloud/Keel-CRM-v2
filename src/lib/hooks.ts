@@ -243,6 +243,32 @@ export function useSetPropertyStatus() {
   });
 }
 
+/** Set (or clear) the LHA area of some properties by hand, and note it on each. */
+export function useSetLhaArea() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ properties, area }: { properties: Property[]; area: string | null }) => {
+      const local = properties.filter((p) => isLocalProperty(p.id)).map((p) => p.id);
+      if (local.length) localProperties.update(local, { lha_area: area });
+      const ids = properties.filter((p) => !isLocalProperty(p.id)).map((p) => p.id);
+      for (const part of chunks(ids)) {
+        const { error } = await supabase.from('properties').update({ lha_area: area }).in('id', part);
+        if (error) {
+          throw /lha_area|schema cache/i.test(error.message)
+            ? new Error('Setting a property\'s LHA area needs a one-off database update: run supabase/migrations/0008_lha_area.sql in the Supabase SQL Editor.')
+            : error;
+        }
+      }
+      if (ids.length) {
+        await supabase.from('activities').insert(properties.filter((p) => !isLocalProperty(p.id)).map((p) => ({
+          entity_type: 'property', entity_id: p.id, kind: 'updated', body: area ? `LHA area set to ${area}` : 'LHA area back to the estimate',
+        })));
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['properties'] }),
+  });
+}
+
 /** Delete properties (and their activity, for database ones). A linked placement keeps its record. */
 export function useDeleteProperties() {
   const qc = useQueryClient();
