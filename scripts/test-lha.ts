@@ -1,6 +1,6 @@
 // Checks for the LHA calculations. Run with: npx tsx scripts/test-lha.ts
 import { existsSync, readFileSync } from 'node:fs';
-import { lhaAreaFor, lhaCheck, lhaSizeOf, lhaWords, parseLhaCsv, rateFor } from '../src/lib/lha';
+import { brmaGroups, lhaAreaFor, lhaCheck, lhaSizeOf, lhaWords, lookupPostcode, parseDistrict, parseLhaCsv, rateFor, searchPlaces } from '../src/lib/lha';
 import { LHA_RATES } from '../src/data/lha-rates';
 import { matchesForProperty } from '../src/lib/propertyMatch';
 import type { Applicant } from '../src/lib/types';
@@ -33,6 +33,24 @@ check('N12 is estimated as Outer North London', lhaAreaFor(P({ postcode: 'N12 0D
 check('a property with no postcode falls back to its borough', lhaAreaFor(P({ borough: 'Croydon' }))?.brma === 'Outer South London');
 check('an area set by hand wins', lhaAreaFor(P({ postcode: 'N12 0DA', lha_area: 'Inner North London' }))?.brma === 'Inner North London');
 check('RG1 is Reading', lhaAreaFor(P({ postcode: 'RG1 7LH' }))?.brma === 'Reading');
+
+// Postcode lookup
+check('"nw11" is NW11', parseDistrict('nw11') === 'NW11');
+check('a full postcode with no space gives its district', parseDistrict('ha87ab') === 'HA8' && parseDistrict('NW11 9LJ') === 'NW11');
+check('N1 1AA is N1, not N11', parseDistrict('N1 1AA') === 'N1');
+check('SW1A 1AA is SW1', parseDistrict('SW1A 1AA') === 'SW1');
+check('a name is not a postcode', parseDistrict('Anna') === null && parseDistrict('Barnet') === null);
+const nw11 = lookupPostcode('nw11');
+check('NW11 is Golders Green, Barnet, Inner North London', !!nw11?.places?.includes('Golders Green') && nw11?.borough === 'Barnet' && nw11?.area?.brma === 'Inner North London',
+  JSON.stringify(nw11));
+check('Watford WD17 is South West Herts', lookupPostcode('WD17 1AA')?.area?.brma === 'South West Herts');
+check('"golders" finds NW11', searchPlaces('golders').some((l) => l.district === 'NW11'));
+check('a home-county property gets its area', lhaAreaFor(P({ postcode: 'SS1 1AA' }))?.brma === 'Southend');
+const groups = brmaGroups(false).map(([g]) => g).join(',');
+check('area lists show London and the home counties only', groups === 'London,Home counties' && !brmaGroups(false).some(([, n]) => n.includes('Leeds')), groups);
+check('the rest of England is there when asked for', brmaGroups(true).some(([, n]) => n.includes('Leeds')));
+check('a saved area outside the region still shows', brmaGroups(false, 'Leeds').some(([, n]) => n.includes('Leeds')));
+check('14 London and 28 home-county areas, all in the rates file', brmaGroups(false).map(([, n]) => n.length).join('+') === '14+28');
 
 // Comparisons
 const studio = lhaCheck(P({ postcode: 'N12 0DA', property_type: 'Studio', bedrooms: 0, rent_pcm: 1186 }));

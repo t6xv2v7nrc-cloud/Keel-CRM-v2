@@ -138,6 +138,8 @@ export const HELP = {
       'Studios and en-suite rooms count as 1 bed. Other rooms use the shared rate. LHA stops at 4 bed. A rent written as "1-Bed LHA" counts as exactly that rate.',
       'The area is estimated from the postcode, which is usually right but not always. Check an address on the VOA\'s LHA Direct and use Change area if it differs; the owner can apply it to every property in that postcode district.',
       'When matching, clients on UC or housing benefit with no budget are judged on their own LHA: 1 bed for singles and couples, and by bedrooms needed for families.',
+      'To look up a postcode, type it (NW11, or HA8 7AB) or a place (Golders Green) in the search box, or in LHA rates in Team settings. It shows where it is, its LHA area and the rates.',
+      'Area lists show London and the home counties. Pick Show the rest of England for anywhere else.',
     ],
   },
   whatsapp: {

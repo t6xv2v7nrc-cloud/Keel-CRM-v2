@@ -1,17 +1,15 @@
 import { useRef, useState } from 'react';
 import { Card, CardHeader, Icon, useToast } from '../../components/ui';
 import type { AppSettings } from '../../lib/settings';
-import { LHA_DIRECT_URL, parseLhaCsv } from '../../lib/lha';
+import { areaSource, lookupPostcode, parseDistrict, parseLhaCsv } from '../../lib/lha';
+import { canonicalBorough } from '../../lib/london';
 import { LHA_RATES, LHA_YEAR } from '../../data/lha-rates';
-
-const pounds = (n: number) => `£${n.toLocaleString('en-GB', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
-const SIZES = ['Shared room', '1 bed', '2 bed', '3 bed', '4 bed'];
+import { BrmaSelect, LhaLookup, whereWords } from '../properties/Lha';
 
 /** Team settings: which LHA rates are in use, a rate finder, the top-up leeway and area corrections. */
 export function LhaSettings({ draft, set }: { draft: AppSettings; set: <K extends keyof AppSettings>(k: K, v: AppSettings[K]) => void }) {
   const table = draft.lhaRates ?? { year: LHA_YEAR, rates: LHA_RATES };
-  const names = Object.keys(table.rates).sort((a, b) => a.localeCompare(b));
-  const [look, setLook] = useState(names.includes('Outer North London') ? 'Outer North London' : names[0]);
+  const names = Object.keys(table.rates);
   const [district, setDistrict] = useState('');
   const [area, setArea] = useState('');
   const file = useRef<HTMLInputElement>(null);
@@ -28,12 +26,13 @@ export function LhaSettings({ draft, set }: { draft: AppSettings; set: <K extend
     }
   };
   const addOverride = () => {
-    const key = district.trim().toUpperCase();
+    // a postcode is kept as its district ("NW11 9LJ" becomes NW11), a borough by its proper name
+    const key = parseDistrict(district) ?? canonicalBorough(district) ?? district.trim();
     if (!key || !area) return;
     set('lhaAreaOverrides', { ...draft.lhaAreaOverrides, [key]: area });
     setDistrict(''); setArea('');
   };
-  const rates = table.rates[look] ?? [];
+  const typed = district.trim() ? lookupPostcode(district) : null;
 
   return (
     <Card>
@@ -60,27 +59,9 @@ export function LhaSettings({ draft, set }: { draft: AppSettings; set: <K extend
           )}
         </div>
 
-        {/* Rate finder */}
+        {/* Postcode and area lookup */}
         <div className="rounded-lg bg-[var(--surface-2)] p-4">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <span className="text-[13px] font-medium text-[var(--ink-muted)]">Look up an area</span>
-            <select value={look} onChange={(e) => setLook(e.target.value)} aria-label="LHA area"
-              className="h-9 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]">
-              {names.map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-            <a href={LHA_DIRECT_URL} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 text-[13px] text-[var(--link)] hover:underline">
-              Find an address's area on LHA Direct <Icon name="arrowRight" size={12} className="-rotate-45" />
-            </a>
-          </div>
-          <div className="grid grid-cols-5 gap-2 text-center">
-            {SIZES.map((label, i) => (
-              <div key={label} className="rounded-md bg-[var(--surface)] px-2 py-2">
-                <div className="text-[12px] text-[var(--ink-muted)]">{label}</div>
-                <div className="font-mono text-[15px] font-semibold text-[var(--ink)]">{rates[i] != null ? pounds(rates[i]) : '·'}</div>
-              </div>
-            ))}
-          </div>
-          <p className="m-0 mt-2 text-[12px] text-[var(--ink-muted)]">Monthly. Studios and en-suite rooms are checked against the 1 bed rate; other rooms against the shared rate.</p>
+          <LhaLookup />
         </div>
 
         {/* Leeway */}
@@ -121,19 +102,21 @@ export function LhaSettings({ draft, set }: { draft: AppSettings; set: <K extend
             </ul>
           )}
           <div className="flex flex-wrap items-center gap-2">
-            <input value={district} onChange={(e) => setDistrict(e.target.value)} placeholder="e.g. N17" aria-label="Postcode district or borough" maxLength={24}
-              className="h-9 w-32 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2.5 font-mono text-[15px] uppercase text-[var(--ink)] outline-none focus:border-[var(--accent)]" />
+            <input value={district} onChange={(e) => setDistrict(e.target.value)} placeholder="e.g. N17 or Barnet" aria-label="Postcode district or borough" maxLength={24}
+              className="h-9 w-32 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2.5 font-mono text-[15px] text-[var(--ink)] outline-none focus:border-[var(--accent)]" />
             <Icon name="arrowRight" size={14} className="text-[var(--ink-muted)]" />
-            <select value={area} onChange={(e) => setArea(e.target.value)} aria-label="Correct area"
-              className="h-9 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]">
-              <option value="">Choose the area…</option>
-              {names.map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
+            <BrmaSelect value={area} onChange={setArea} placeholder="Choose the area…" label="Correct area"
+              className="h-9 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]" />
             <button type="button" onClick={addOverride} disabled={!district.trim() || !area}
               className="rounded-md border border-[var(--line-strong)] px-3 py-1.5 text-[13px] font-medium text-[var(--ink)] hover:border-[var(--accent)] disabled:opacity-40">
               Add correction
             </button>
           </div>
+          {typed && (
+            <p className="m-0 text-[13px] text-[var(--ink-muted)]">
+              {typed.district}{whereWords(typed) ? ` (${whereWords(typed)})` : ''} is {typed.area ? `now ${typed.area.brma}, ${areaSource(typed.area)}.` : 'not known to Keel yet.'}
+            </p>
+          )}
         </div>
       </div>
     </Card>

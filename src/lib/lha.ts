@@ -13,6 +13,7 @@
 // VOA's LHA Direct and correct it (it is remembered).
 
 import { LHA_RATES, LHA_YEAR } from '../data/lha-rates';
+import { POSTCODE_PLACES } from '../data/postcode-places';
 import { activeSettings } from './settings';
 import { boroughFromDistrict, canonicalBorough, districtOf } from './london';
 
@@ -26,6 +27,32 @@ export interface LhaTable { year: string; rates: Record<string, number[]> }
 /** The rates in use: a year loaded in Team settings, or the built-in one. */
 export const lhaTable = (): LhaTable => activeSettings().lhaRates ?? { year: LHA_YEAR, rates: LHA_RATES };
 export const brmaNames = () => Object.keys(lhaTable().rates).sort((a, b) => a.localeCompare(b));
+
+// Keel works London and the home counties, so lists show those first; the rest of England is one click away.
+const LONDON_BRMAS = new Set([
+  'Central London', 'Inner East London', 'Inner North London', 'Inner South East London', 'Inner South West London', 'Inner West London',
+  'North West London', 'Outer East London', 'Outer North East London', 'Outer North London', 'Outer South East London',
+  'Outer South London', 'Outer South West London', 'Outer West London',
+]);
+const HOME_COUNTIES_BRMAS = new Set([
+  'Ashford', 'Aylesbury', 'Bedford', 'Blackwater Valley', 'Canterbury', 'Chelmsford', 'Chilterns', 'Colchester', 'Crawley and Reigate',
+  'Dover-Shepway', 'East Thames Valley', 'Guildford', 'Harlow and Stortford', 'High Weald', 'Luton', 'Maidstone', 'Medway and Swale',
+  'Milton Keynes', 'Newbury', 'North West Kent', 'Reading', 'South East Herts', 'South West Essex', 'South West Herts', 'Southend',
+  'Stevenage and North Herts', 'Thanet', 'Walton',
+]);
+
+/** Areas grouped for a picker: London, the home counties, and (when asked for) the rest of England.
+ *  An area already chosen elsewhere always shows, so a saved choice never looks blank. */
+export function brmaGroups(showAll: boolean, keep?: string | null): Array<[string, string[]]> {
+  const names = brmaNames();
+  const london = names.filter((n) => LONDON_BRMAS.has(n));
+  const home = names.filter((n) => HOME_COUNTIES_BRMAS.has(n));
+  const rest = names.filter((n) => !LONDON_BRMAS.has(n) && !HOME_COUNTIES_BRMAS.has(n));
+  const groups: Array<[string, string[]]> = [['London', london], ['Home counties', home]];
+  if (showAll) groups.push(['Rest of England', rest]);
+  else if (keep && rest.includes(keep)) groups.push(['Elsewhere', [keep]]);
+  return groups.filter(([, xs]) => xs.length > 0);
+}
 
 export function rateFor(brma: string, size: LhaSize): number | null {
   const r = lhaTable().rates[brma];
@@ -55,9 +82,35 @@ const DISTRICT_BRMA: Record<string, string> = Object.fromEntries([
   ...group('Outer South London', 'CR0 CR2 CR4 CR5 CR7 CR8 SE19 SE25 SM1 SM2 SM3 SM4 SM5 SM6'),
   ...group('Inner West London', 'W3 W4 W5 W6 W10 W12 W14'),
   ...group('Outer West London', 'W7 W13 UB1 UB2 UB3 UB4 UB5 UB6 UB7 UB8 UB9 UB10 UB11 TW3 TW4 TW5 TW6 TW7 TW8 TW13 TW14 HA4 HA6'),
-  ...group('East Thames Valley', 'SL1 SL2 SL3'),
-  ...group('Reading', 'RG1 RG2 RG4 RG30 RG31'),
-  ...group('South West Essex', 'RM17'),
+  // Home counties: rougher estimates, as these areas follow council boundaries that districts cross
+  ...group('South West Herts', 'WD3 WD4 WD5 WD6 WD7 WD17 WD18 WD19 WD23 WD24 WD25 HP1 HP2 HP3 HP4 HP23 AL1 AL2 AL3 AL4 AL5 EN6'),
+  ...group('South East Herts', 'EN7 EN8 EN10 EN11 SG12 SG13 SG14 AL6 AL7 AL8 AL9 AL10'),
+  ...group('Stevenage and North Herts', 'SG1 SG2 SG4 SG5 SG6 SG7 SG8'),
+  ...group('Harlow and Stortford', 'CM17 CM18 CM19 CM20 CM21 CM22 CM23'),
+  ...group('Luton', 'LU1 LU2 LU3 LU4 LU5 LU6 LU7'),
+  ...group('Bedford', 'MK40 MK41 MK42'),
+  ...group('Chelmsford', 'CM1 CM2 CM3 CM4 CM9'),
+  ...group('South West Essex', 'RM15 RM16 RM17 RM18 RM19 RM20 SS13 SS14 SS15 SS16 SS17 CM11 CM12 CM13 CM14 CM15'),
+  ...group('Southend', 'SS0 SS1 SS2 SS3 SS4 SS5 SS6 SS7 SS8 SS9 SS11 SS12'),
+  ...group('Colchester', 'CO1 CO2 CO3 CO4 CO15 CO16'),
+  ...group('North West Kent', 'DA1 DA2 DA3 DA4 DA9 DA10 DA11 DA12 DA13 BR8 TN13 TN14 TN15'),
+  ...group('Medway and Swale', 'ME1 ME2 ME3 ME4 ME5 ME7 ME8 ME10 ME12 ME13'),
+  ...group('Maidstone', 'ME14 ME15 ME16 ME19 ME20'),
+  ...group('High Weald', 'TN1 TN2 TN4 TN9 TN10'),
+  ...group('Ashford', 'TN23 TN24'),
+  ...group('Canterbury', 'CT1 CT2 CT5 CT6'),
+  ...group('Thanet', 'CT9 CT10 CT11'),
+  ...group('Dover-Shepway', 'CT16 CT17 CT19 CT20'),
+  ...group('Walton', 'KT7 KT8 KT10 KT11 KT12 KT13 KT14 KT15 KT16 KT17 KT18 KT19 KT21 KT22 KT23 TW15 TW16 TW17 TW18 TW19 TW20'),
+  ...group('Guildford', 'GU1 GU2 GU4 GU7 GU21 GU22 KT24'),
+  ...group('Blackwater Valley', 'GU9 GU11 GU14 GU15'),
+  ...group('Crawley and Reigate', 'RH1 RH2 RH6 RH10 RH11 RH12 RH13 SM7 KT20'),
+  ...group('East Thames Valley', 'SL0 SL1 SL2 SL3 SL4 SL5 SL6'),
+  ...group('Reading', 'RG1 RG2 RG4 RG5 RG6 RG10 RG30 RG31 RG40 RG41'),
+  ...group('Newbury', 'RG14'),
+  ...group('Chilterns', 'HP5 HP6 HP7 HP9 HP10 HP11 HP12 HP13 SL7 SL9'),
+  ...group('Aylesbury', 'HP19 HP20 HP21'),
+  ...group('Milton Keynes', 'MK1 MK2 MK3 MK6 MK9'),
 ]);
 
 /** Fallback by borough when there is no postcode. */
@@ -101,15 +154,61 @@ export interface LhaArea {
 export function lhaAreaFor(p: PropertyForLha): LhaArea | null {
   const known = lhaTable().rates;
   if (p.lha_area && known[p.lha_area]) return { brma: p.lha_area, how: 'set', basis: null };
-  const district = districtOf(p.postcode ?? '') ?? districtOf(p.address_line);
+  return areaFor(districtOf(p.postcode ?? '') ?? districtOf(p.address_line), p.borough);
+}
+
+/** A postcode district's area: a team correction, then our estimate, then the borough's. */
+function areaFor(district: string | null, boroughText: string | null): LhaArea | null {
+  const known = lhaTable().rates;
   const team = activeSettings().lhaAreaOverrides ?? {};
   if (district && team[district] && known[team[district]]) return { brma: team[district], how: 'team', basis: district };
   if (district && DISTRICT_BRMA[district] && known[DISTRICT_BRMA[district]]) return { brma: DISTRICT_BRMA[district], how: 'estimated', basis: district };
-  const borough = canonicalBorough(p.borough) ?? boroughFromDistrict(district);
+  const borough = canonicalBorough(boroughText) ?? boroughFromDistrict(district);
   if (borough && team[borough] && known[team[borough]]) return { brma: team[borough], how: 'team', basis: borough };
   if (borough && BOROUGH_BRMA[borough] && known[BOROUGH_BRMA[borough]]) return { brma: BOROUGH_BRMA[borough], how: 'estimated', basis: borough };
   return null;
 }
+
+// ── Postcode lookup ────────────────────────────────────────────────
+
+/** "nw11", "NW11 9LJ", "ha87ab", "SW1A 1AA" → the district Keel keys on ("NW11", "HA8", "SW1"). */
+export function parseDistrict(input: string): string | null {
+  const s = input.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const full = /^([A-Z]{1,2}\d[A-Z\d]?)(\d[A-Z]{2})$/.exec(s);
+  const d = full ? full[1] : /^[A-Z]{1,2}\d[A-Z\d]?$/.test(s) ? s : null;
+  return d ? d.replace(/^([A-Z]+\d)[A-Z]$/, '$1') : null;
+}
+
+export interface PostcodeLookup {
+  district: string;
+  /** the places people know it by: "Golders Green, Hampstead Garden Suburb" */
+  places: string | null;
+  borough: string | null;
+  area: LhaArea | null;
+}
+
+/** Where a postcode is and which LHA area it is in (as Keel would judge a property there). */
+export function lookupPostcode(input: string): PostcodeLookup | null {
+  const district = parseDistrict(input);
+  if (!district) return null;
+  return { district, places: POSTCODE_PLACES[district] ?? null, borough: boroughFromDistrict(district), area: areaFor(district, null) };
+}
+
+/** Districts whose places match some text: "golders" → NW11. */
+export function searchPlaces(text: string, limit = 6): PostcodeLookup[] {
+  const t = text.trim().toLowerCase();
+  if (t.length < 3 || parseDistrict(t)) return [];
+  const starts = new RegExp(`(^|[ ,(])${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`);
+  return Object.entries(POSTCODE_PLACES)
+    .filter(([, places]) => starts.test(places.toLowerCase()))
+    .slice(0, limit)
+    .map(([district]) => lookupPostcode(district)!)
+    .filter(Boolean);
+}
+
+/** "Estimated from NW11", "Team setting for NW11", "Set by hand". */
+export const areaSource = (a: LhaArea) =>
+  a.how === 'set' ? 'set by hand' : a.how === 'team' ? `team setting for ${a.basis}` : `estimated from ${a.basis}`;
 
 /** The postcode district a team correction would apply to. */
 export const districtFor = (p: PropertyForLha) => districtOf(p.postcode ?? '') ?? districtOf(p.address_line);

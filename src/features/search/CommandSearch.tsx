@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useApplicants, useProperties } from '../../lib/hooks';
 import { Avatar, Icon } from '../../components/ui';
 import { areaOf, matchesTerms, parseQuery, searchText } from '../../lib/search';
+import { areaSource, lhaTable, lookupPostcode, searchPlaces } from '../../lib/lha';
+import type { PostcodeLookup } from '../../lib/lha';
+import { whereWords } from '../properties/Lha';
 
 interface Hit {
   id: string;
@@ -68,6 +71,14 @@ export function CommandSearch() {
     return out.slice(0, 12);
   }, [q, applicants, properties]);
 
+  // A postcode ("NW11", "HA8 7AB") or a place ("Golders Green"): where it is and its LHA area
+  const postcode = useMemo(() => {
+    const l = lookupPostcode(q);
+    // "A1" could be anything; show it when Keel knows the district or it is a whole postcode
+    return l && (l.places || l.area || /\d[a-z]{2}$/i.test(q.replace(/\s/g, ''))) ? l : null;
+  }, [q]);
+  const places = useMemo(() => (postcode ? [] : searchPlaces(q, 3)), [q, postcode]);
+
   const go = (hit: Hit) => {
     setOpen(false);
     navigate(hit.to);
@@ -92,12 +103,24 @@ export function CommandSearch() {
             if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
             if (e.key === 'Enter' && hits[active]) go(hits[active]);
           }}
-          placeholder="Search clients and properties…"
+          placeholder="Search clients, properties or a postcode…"
           className="min-w-0 flex-1 bg-transparent py-3.5 text-[18px] text-[var(--ink)] outline-none"
         />
         </div>
         <div className="max-h-[60vh] overflow-y-auto py-1">
-          {q && hits.length === 0 && (
+          {postcode && <PostcodeCard l={postcode} />}
+          {places.length > 0 && (
+            <div className="border-b border-[var(--line)] px-4 py-2">
+              <div className="mb-1 text-[12px] font-medium text-[var(--ink-muted)]">Places</div>
+              {places.map((l) => (
+                <button key={l.district} onClick={() => setQ(l.district)} className="block w-full truncate py-1 text-left text-[15px] hover:underline">
+                  <strong className="font-mono text-[var(--ink)]">{l.district}</strong>
+                  <span className="text-[var(--ink-muted)]"> · {whereWords(l)}{l.area ? ` · ${l.area.brma}` : ''}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {q && hits.length === 0 && !postcode && places.length === 0 && (
             <div className="px-4 py-6 text-center text-[15px] text-[var(--ink-muted)]">No matches.</div>
           )}
           {hits.map((hit, i) => (
@@ -123,6 +146,38 @@ export function CommandSearch() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+const pounds = (n: number) => `£${n.toLocaleString('en-GB', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
+
+/** "NW11 · Golders Green, Hampstead Garden Suburb · Barnet" and its LHA area with the rates. */
+function PostcodeCard({ l }: { l: PostcodeLookup }) {
+  const rates = l.area ? lhaTable().rates[l.area.brma] ?? [] : [];
+  return (
+    <div className="border-b border-[var(--line)] px-4 py-3">
+      <div className="flex items-center gap-2 text-[15px] text-[var(--ink)]">
+        <span className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-[var(--accent-soft)] text-[var(--accent-ink)]"><Icon name="pin" size={16} /></span>
+        <span className="min-w-0">
+          <strong className="font-mono">{l.district}</strong>
+          <span className="text-[var(--ink-muted)]">{whereWords(l) ? ` · ${whereWords(l)}` : ''}</span>
+        </span>
+      </div>
+      {l.area ? (
+        <div className="mt-2 pl-[38px]">
+          <div className="text-[15px] text-[var(--ink)]">
+            <strong>{l.area.brma}</strong> LHA <span className="text-[13px] text-[var(--ink-muted)]">({areaSource(l.area)})</span>
+          </div>
+          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[13px] text-[var(--ink-muted)]">
+            {['Shared', '1 bed', '2 bed', '3 bed', '4 bed'].map((label, i) => (
+              <span key={label}>{label} <span className="text-[var(--ink)]">{rates[i] != null ? pounds(rates[i]) : '·'}</span></span>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="mt-1 pl-[38px] text-[13px] text-[var(--note-fg)]">LHA area not known for {l.district}. Check it on LHA Direct.</div>
+      )}
     </div>
   );
 }
