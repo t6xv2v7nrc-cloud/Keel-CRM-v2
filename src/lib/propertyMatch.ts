@@ -21,7 +21,7 @@ import { tierCount, tierLabel, URGENCY_LABEL } from './tiering';
 import { activeSettings } from './settings';
 import { clientLhaSize, lhaCheck, rateFor, sizeWords } from './lha';
 import {
-  areNeighbours, areasIn, boroughFromDistrict, boroughOfArea, boroughsIn, canonicalBorough, districtOf, districtsIn,
+  areNeighbours, areasIn, boroughFromDistrict, boroughOfArea, boroughsIn, canonicalBorough, CENTRAL_DISTRICTS, districtOf, districtsIn,
   boroughsOfRegion, regionsIn, titleCase,
 } from './london';
 
@@ -124,7 +124,11 @@ export function clientNeeds(a: Applicant): Needs {
   let beds: Needs['beds'] = null;
   const range = text.match(/\b(\d|one|two|three|four)\s*(?:-|–|to|or)\s*(\d|one|two|three|four)\s*[- ]?\s*bed/i);
   const single = text.match(/\b(\d|one|two|three|four|five)\s*[- ]?\s*bed(?:room)?s?\b/i);
+  // "studio or 1 bed", "a studio/one bed", "1 bed or a studio"
+  const studioOr = text.match(/\b(?:studio|bedsit)\s*(?:or|\/|to|-)\s*(?:an?\s+)?(\d|one|two)\s*[- ]?\s*bed/i)
+    ?? text.match(/\b(\d|one|two)\s*[- ]?\s*bed(?:room)?(?:\s+(?:flat|place))?\s*(?:or|\/)\s*(?:an?\s+)?(?:studio|bedsit)\b/i);
   if (range) beds = { min: n(range[1]), max: n(range[2]), asked: true };
+  else if (studioOr) beds = { min: 0, max: n(studioOr[1]), asked: true };
   else if (single) beds = { min: n(single[1]), max: n(single[1]), asked: true };
   else if (/\bstudio|bedsit\b/i.test(text)) beds = { min: 0, max: 1, asked: true };
   else if (household === 'family' || children > 0) {
@@ -261,7 +265,10 @@ export function scoreMatch(p: PropertyLike, a: Applicant): Match | null {
   // Area, best fit first
   const askedArea = need.wantedAreas.find((x) => f.areas.has(x));
   const askedDistrict = f.district && need.wantedDistricts.includes(f.district) ? f.district : null;
-  const boroughWant = f.borough ? need.wantedBoroughs.get(f.borough) : undefined;
+  let boroughWant = f.borough ? need.wantedBoroughs.get(f.borough) : undefined;
+  // "Central" covers central districts, not all of Lambeth or Camden: outside them it is only next door
+  const offCentre = boroughWant?.ask === 'Wants Central London' && f.district !== null && !CENTRAL_DISTRICTS.has(f.district) ? boroughWant : undefined;
+  if (offCentre) boroughWant = undefined;
   const ownCouncil = Boolean(f.borough && need.councilBorough === f.borough);
   const nextToWant = f.borough && !need.strictArea ? [...need.wantedBoroughs].find(([b]) => areNeighbours(b, f.borough!))?.[1] : undefined;
   const hasWants = need.wantedAreas.length > 0 || need.wantedDistricts.length > 0 || need.wantedBoroughs.size > 0;
@@ -272,6 +279,7 @@ export function scoreMatch(p: PropertyLike, a: Applicant): Match | null {
   else if (askedDistrict) { score += 40; reasons.push(`Asked for ${askedDistrict}`); }
   else if (boroughWant) { score += 32; reasons.push(boroughWant.why); }
   else if (ownCouncil) { score += 22; reasons.push(`Registered with ${f.borough} council`); }
+  else if (offCentre) { score += 15; reasons.push(`Wants Central London, ${f.district} is just outside`); }
   else if (nextToWant) { score += 15; reasons.push(`${nextToWant.ask}, ${f.borough} is next door`); }
   else if (nextToCouncil && !hasWants) { score += 12; reasons.push(`${f.borough} is next door to their council (${need.councilBorough})`); }
   else if (need.flexible && !hasWants) { score += 8; reasons.push('Open to any area'); }

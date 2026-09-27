@@ -158,6 +158,9 @@ export function districtsIn(text: string): string[] {
 
 export const boroughFromDistrict = (d: string | null) => (d ? DISTRICT[d] ?? null : null);
 
+/** Every postcode district Keel knows in a borough: "Barnet" → N2, N3, N12, NW4... */
+export const districtsOfBorough = (borough: string) => Object.keys(DISTRICT).filter((d) => DISTRICT[d] === borough);
+
 /** Finds a borough named in text: "Ealing Council", "RBKC", "LB of Harrow" → canonical name. */
 export function canonicalBorough(text: string | null | undefined): string | null {
   if (!text) return null;
@@ -232,8 +235,22 @@ export function regionsIn(text: string | null | undefined): string[] {
       if (w[j] === 'or' || w[j] === 'and') j--; else break;
     }
   });
+  // "somewhere central", "central locations", "zone 1": central London, but not
+  // "central heating", "the Central line" or the place "Finchley Central"
+  w.forEach((word, i) => {
+    if ((word === 'central' || word === 'centrally') && !['heating', 'line', 'station', 'park'].includes(w[i + 1] ?? '') && w[i - 1] !== 'finchley') {
+      found.add('central london');
+    }
+    if (word === 'zone' && (w[i + 1] === '1' || w[i + 1] === 'one')) found.add('central london');
+  });
   return [...found].filter((r) => REGIONS[r]);
 }
+
+/** What "central" means: zone 1 and its edges, by postcode district. Central boroughs like
+ *  Lambeth or Camden stretch well beyond it (Streatham, West Hampstead), so districts decide. */
+export const CENTRAL_DISTRICTS = new Set(
+  'WC1 WC2 EC1 EC2 EC3 EC4 W1 W2 W8 W9 W11 SW1 SW3 SW5 SW7 SW8 SW10 NW1 NW8 SE1 SE11 SE17 N1 E1'.split(' '),
+);
 
 /** Boroughs in a region from regionsIn(), e.g. "north london". */
 export const boroughsOfRegion = (region: string) => REGIONS[region] ?? [];

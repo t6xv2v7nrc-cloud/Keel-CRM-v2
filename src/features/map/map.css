@@ -1,0 +1,30 @@
+/* The property map: greyed OpenStreetMap tiles so the one green accent stands out. */
+.keel-map { background: var(--paper-2); border-radius: 10px; font-family: var(--font-body); z-index: 0; }
+.keel-map .leaflet-tile-pane { filter: grayscale(1) sepia(0.12) brightness(1.04) contrast(0.92); }
+[data-theme='dark'] .keel-map .leaflet-tile-pane { filter: grayscale(1) invert(1) brightness(0.78) contrast(0.9); }
+.keel-map .leaflet-control-attribution { background: color-mix(in srgb, var(--surface) 85%, transparent); color: var(--ink-muted); font-size: 11px; }
+.keel-map .leaflet-control-attribution a { color: var(--link); }
+.keel-map .leaflet-bar a { background: var(--surface); color: var(--ink); border-color: var(--line); }
+
+/* Pins: a dot per address, with a count when several properties share it */
+.keel-pin {
+  display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px;
+  font: 600 11px/1 var(--font-body); cursor: pointer;
+  background: var(--accent); color: var(--on-accent); border: 2px solid var(--surface);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+.keel-pin-good { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent); }
+.keel-pin-possible { background: var(--surface); color: var(--ink-muted); border-color: var(--ink-muted); }
+.keel-pin-none { background: var(--paper-2); color: var(--ink-muted); border-color: var(--line-strong); opacity: 0.75; transform: scale(0.8); }
+.keel-pin.is-selected { outline: 3px solid var(--ink); outline-offset: 1px; transform: scale(1.15); }
+
+/* A client's areas: the places they named, and the wider boroughs or regions */
+.keel-area { stroke: none; fill: var(--accent); }
+.keel-area-exact { fill-opacity: 0.22; }
+.keel-area-broad { fill-opacity: 0.08; }
+
+.keel-map .leaflet-tooltip {
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-pop); border-radius: 6px; font-size: 13px; padding: 6px 8px;
+}
+.keel-map .leaflet-tooltip-top::before { border-top-color: var(--line-strong); }

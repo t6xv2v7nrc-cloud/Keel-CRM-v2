@@ -16,6 +16,8 @@ import { CallsNeedUpdate } from '../calls/CallsPage';
 import { ClientDetails } from './ClientDetails';
 import { LhaChip } from '../properties/Lha';
 import { SentTag, WhatsAppLink } from '../properties/WhatsApp';
+import { LazyMap, MapKey } from '../map/MapView';
+import { clientAreas, placeKey } from '../../lib/geo';
 
 export function ApplicantPage() {
   const { id } = useParams<{ id: string }>();
@@ -207,22 +209,51 @@ function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
   const { data: properties = [] } = useProperties();
   const sent = useSentOnWhatsApp();
   const [showAll, setShowAll] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
+  const [pinned, setPinned] = useState<string | null>(null);
   const available = properties.filter((p) => p.status === 'void' || p.status === 'under_offer');
   const all = matchesForApplicant(applicant, available);
   const best = bestFew(all, (x) => x.match.strength);
-  const matches = showAll ? all : best;
+  const atPin = pinned ? available.filter((p) => placeKey(p) === pinned) : [];
+  const matches = pinned ? all.filter((x) => placeKey(x.property) === pinned) : showAll ? all : best;
+  const first = applicant.full_name.split(' ')[0];
   return (
     <Card>
       <CardHeader icon="building" title="Suitable properties" sub={available.length ? `${all.length} of ${available.length} available` : undefined} help="suitable">
+        {available.length > 0 && (
+          <button type="button" onClick={() => { setMapOpen((v) => !v); setPinned(null); }} aria-pressed={mapOpen}
+            className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-md border px-3 text-[13px] font-medium transition-colors ${
+              mapOpen ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-ink)]' : 'border-[var(--line-strong)] text-[var(--ink)] hover:border-[var(--accent)]'}`}>
+            <Icon name="pin" size={15} />{mapOpen ? 'Hide the map' : 'Map'}
+          </button>
+        )}
         {best.length > 0 && (
           <WhatsAppLink to={applicant} properties={best.map((x) => x.property)}
             label={best.length === 1 ? 'Send it on WhatsApp' : `Send the best ${best.length} on WhatsApp`} />
         )}
       </CardHeader>
+      {mapOpen && available.length > 0 && (
+        <div className="flex flex-col gap-2 px-5 pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
+            <span className="text-[var(--accent-ink)]">{clientAreas(applicant).label}</span>
+            <MapKey client />
+          </div>
+          <LazyMap properties={available} focus={applicant} selected={pinned} onSelect={setPinned} height={380} />
+          {pinned && (
+            <div className="flex flex-wrap items-center gap-2 text-[13px] text-[var(--ink-muted)]">
+              <span>{atPin.map((p) => p.address_line).join(' · ')}</span>
+              {matches.length === 0 && <span className="text-[var(--note-fg)]">Not a fit for {first}.</span>}
+              <button type="button" onClick={() => setPinned(null)} className="text-[var(--link)] hover:underline">Show the list again</button>
+            </div>
+          )}
+        </div>
+      )}
       {available.length === 0 ? (
         <Empty icon="building" title="No properties saved yet">
           <Link to="/properties" className="text-[var(--link)] hover:underline">Paste your list on the Properties tab</Link> to see what suits this client.
         </Empty>
+      ) : pinned && matches.length === 0 ? (
+        <div className="pb-2" />
       ) : matches.length === 0 ? (
         <Empty icon="search" title="Nothing fits yet">
           None of the {available.length} available {available.length === 1 ? 'property fits' : 'properties fit'}. Check their area, household and budget are filled in.
@@ -252,7 +283,7 @@ function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
               );
             })}
           </ul>
-          {all.length > best.length && (
+          {!pinned && all.length > best.length && (
             <button onClick={() => setShowAll((v) => !v)} className="mt-1 text-[13px] text-[var(--link)] hover:underline">
               {showAll ? 'Show only the best' : `Show all ${all.length} properties`}
             </button>

@@ -17,6 +17,7 @@ import { activeSettings } from '../../lib/settings';
 import { lhaCheck } from '../../lib/lha';
 import { LhaChip, LhaLine } from './Lha';
 import { SentTag, WhatsAppLink } from './WhatsApp';
+import { MapView } from '../map/MapView';
 import { effectiveTier, isUrgent } from '../../lib/search';
 import { tierLabel } from '../../lib/tiering';
 import { money, shortDate } from '../../lib/format';
@@ -80,6 +81,11 @@ export function PropertiesPage() {
   const [q, setQ] = useState('');
   const [lhaFilter, setLhaFilter] = useState<'any' | 'within' | 'over' | 'unknown'>('any');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // List or map; remembered on this device
+  const [view, setViewState] = useState<'list' | 'map'>(() => {
+    try { return localStorage.getItem('keel-properties-view') === 'map' ? 'map' : 'list'; } catch { return 'list'; }
+  });
+  const setView = (v: 'list' | 'map') => { setViewState(v); try { localStorage.setItem('keel-properties-view', v); } catch { /* fine */ } };
 
   const matches = useMemo(
     () => new Map(properties.map((p) => [p.id, isAvailable(p) ? matchesForProperty(p, applicants) : []])),
@@ -132,6 +138,21 @@ export function PropertiesPage() {
   if (isLoading) return <div className="grid min-h-[50vh] place-items-center text-[var(--ink-muted)]">Loading…</div>;
 
   const showPaste = pasteOpen || properties.length === 0;
+  const card = (p: Property) => (
+    <PropertyCard
+      p={p}
+      matches={matches.get(p.id) ?? []}
+      sent={sent}
+      isNew={justAdded.has(p.id)}
+      selected={selected.has(p.id)}
+      onToggle={() => toggle(p.id)}
+      onStatus={(s) => setStatus.mutate({ p, status: s }, { onSuccess: () => toast(`${PROPERTY_STATUS_LABEL[s]}: ${p.address_line}`, 'success') })}
+      onDelete={() => {
+        if (!window.confirm(`Delete ${p.address_line}? This cannot be undone.`)) return;
+        del.mutate([p.id], { onSuccess: () => toast('Property deleted', 'success') });
+      }}
+    />
+  );
 
   return (
     <div className="mx-auto flex max-w-[1100px] flex-col gap-5 p-6 pb-24">
@@ -212,6 +233,18 @@ export function PropertiesPage() {
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Address, area, postcode, source"
                 className="min-h-[40px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-3 text-[15px] text-[var(--ink)] outline-none focus:border-[var(--hull)]" />
             </label>
+            <div className="flex flex-col gap-1">
+              <span className="text-[13px] font-medium text-[var(--ink-muted)]">View</span>
+              <div className="flex min-h-[40px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] p-0.5" role="group" aria-label="View">
+                {([['list', 'list', 'List'], ['map', 'pin', 'Map']] as const).map(([v, icon, label]) => (
+                  <button key={v} type="button" onClick={() => setView(v)} aria-pressed={view === v}
+                    className={`inline-flex items-center gap-1.5 rounded px-3 text-[13px] font-medium transition-colors ${
+                      view === v ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'text-[var(--ink-muted)] hover:text-[var(--ink)]'}`}>
+                    <Icon name={icon} size={14} />{label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           {selectedRows.length > 0 && (
@@ -224,25 +257,14 @@ export function PropertiesPage() {
             </div>
           )}
 
-          <div className="flex flex-col gap-4">
-            {rows.map((p) => (
-              <PropertyCard
-                key={p.id}
-                p={p}
-                matches={matches.get(p.id) ?? []}
-                sent={sent}
-                isNew={justAdded.has(p.id)}
-                selected={selected.has(p.id)}
-                onToggle={() => toggle(p.id)}
-                onStatus={(s) => setStatus.mutate({ p, status: s }, { onSuccess: () => toast(`${PROPERTY_STATUS_LABEL[s]}: ${p.address_line}`, 'success') })}
-                onDelete={() => {
-                  if (!window.confirm(`Delete ${p.address_line}? This cannot be undone.`)) return;
-                  del.mutate([p.id], { onSuccess: () => toast('Property deleted', 'success') });
-                }}
-              />
-            ))}
-            {rows.length === 0 && <p className="m-0 text-[15px] text-[var(--ink-muted)]">No properties in this view.</p>}
-          </div>
+          {view === 'map' ? (
+            <MapView properties={rows} matches={matches} applicants={applicants} renderCard={card} />
+          ) : (
+            <div className="flex flex-col gap-4">
+              {rows.map((p) => <div key={p.id}>{card(p)}</div>)}
+              {rows.length === 0 && <p className="m-0 text-[15px] text-[var(--ink-muted)]">No properties in this view.</p>}
+            </div>
+          )}
         </>
       )}
     </div>

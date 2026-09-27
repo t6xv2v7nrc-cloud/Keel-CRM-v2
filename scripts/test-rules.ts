@@ -4,6 +4,7 @@
 import { parsePropertyList } from '../src/lib/parseProperties';
 import { matchesForApplicant, matchesForProperty } from '../src/lib/propertyMatch';
 import { regionsIn } from '../src/lib/london';
+import { clientAreas } from '../src/lib/geo';
 import type { Applicant } from '../src/lib/types';
 
 let id = 0;
@@ -91,5 +92,26 @@ check('email: Reading heading and RG postcodes give Reading', email.properties.s
 check('email: signature not in notes', !email.properties.some((p) => /Ridwan|Keel Lettings|Kind regards/.test(p.notes)));
 
 for (const m of rob) console.log(`   ${m.match.strength.padEnd(8)} ${m.property.address_line}: ${m.match.reasons.join('; ')}${m.match.cautions.length ? `  [! ${m.match.cautions.join('; ')}]` : ''}`);
+// "Central": said however they say it, and only the central districts count
+check('"somewhere central" is central London', eq(regionsIn('Somewhere central please'), ['central london']));
+check('"central heating" and "Finchley Central" are not', regionsIn('needs central heating, near Finchley Central').length === 0);
+const maya = make({ full_name: 'Maya', work_status: 'full_time', household_type: 'single', budget_pcm: 1700, notes: 'Somewhere central please, studio or 1 bed' });
+const flat = (address_line: string, postcode: string, borough: string) => ({
+  address_line, postcode, area: null, borough, property_type: '1-Bed Flat', bedrooms: 1, rent_pcm: 1600, rent_text: '£1,600 pcm', furnished: null, notes: null,
+});
+const kennington = matchesForProperty(flat('3 Kennington Road, London SE1 7BL', 'SE1 7BL', 'Lambeth'), [maya])[0];
+const streatham = matchesForProperty(flat('1 High Road, London SW16 1AA', 'SW16 1AA', 'Lambeth'), [maya])[0];
+check('SE1 fits "central"', !!kennington?.reasons.some((r) => /Wants Central London/.test(r)) && !/just outside/.test(kennington.reasons.join()), kennington?.reasons.join('; '));
+check('Streatham (Lambeth, SW16) is only just outside', !!streatham?.reasons.some((r) => /SW16 is just outside/.test(r)) && (streatham?.score ?? 0) < (kennington?.score ?? 0),
+  streatham ? streatham.reasons.join('; ') : 'not matched');
+check('"studio or 1 bed" takes a studio', /Studio suits their ask \(studio or 1 bed\)/.test(
+  matchesForProperty({ ...flat('Flat 2, 10 Marchmont Street, London WC1N 1AB', 'WC1N 1AB', 'Camden'), property_type: 'Studio', bedrooms: 0 }, [maya])[0]?.reasons.join() ?? ''));
+check('"1 bed flat or a studio" takes a studio too', /Studio suits their ask/.test(
+  matchesForProperty({ ...flat('Flat 2, 10 Marchmont Street, London WC1N 1AB', 'WC1N 1AB', 'Camden'), property_type: 'Studio', bedrooms: 0 },
+    [{ ...maya, id: 'm2', notes: 'central, a 1 bed flat or a studio' }])[0]?.reasons.join() ?? ''));
+const areas = clientAreas(maya);
+check('the map shades central districts for "central"', areas.exact.includes('WC1') && areas.exact.includes('SE1') && !areas.exact.includes('SW16') && areas.broad.length === 0,
+  JSON.stringify(areas));
+
 console.log(failed ? `\n${failed} failed` : '\nAll passed');
 process.exit(failed ? 1 : 0);

@@ -142,6 +142,14 @@ export const HELP = {
       'Area lists show London and the home counties. Pick Show the rest of England for anywhere else.',
     ],
   },
+  map: {
+    title: 'Map',
+    body: [
+      'Every property in the list, placed by its postcode. Filters above still apply. Click a pin for the property and its best clients.',
+      'Type a client\'s name to shade the places they asked for (darker) and the wider borough or region (lighter), and to colour each pin by how well it fits them. "Somewhere central" counts as central London.',
+      'Postcodes are placed using postcodes.io, a free public lookup; only property postcodes are sent, never anything about a client. The map is from OpenStreetMap.',
+    ],
+  },
   whatsapp: {
     title: 'Sending on WhatsApp',
     body: [
