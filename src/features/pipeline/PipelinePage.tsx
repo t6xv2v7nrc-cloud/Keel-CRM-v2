@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useApplicants, useCalls, useMoveStage, useDeleteApplicant, usePeople } from '../../lib/hooks';
+import { useApplicants, useCalls, useDeals, useMoveStage, useDeleteApplicant, usePeople } from '../../lib/hooks';
 import { Avatar, Card, Help, Icon, PageHeader, TierBadge, UrgentChip, useToast } from '../../components/ui';
-import { callState, dayLabel, lastCallMap, OUTCOME_LABEL, todayIso } from '../../lib/calls';
+import { callState, dayLabel, dayWord, lastCallMap, OUTCOME_LABEL, todayIso } from '../../lib/calls';
 import { readNotes } from '../../lib/readNotes';
 import type { CallState } from '../../lib/calls';
 import { APPLICANT_STAGES } from '../../types/extraction';
 import type { ApplicantStage } from '../../types/extraction';
-import type { Applicant, Call } from '../../lib/types';
+import type { Applicant, Call, Deal } from '../../lib/types';
+import { DEAL_STEPS, isLive, stuckDays } from '../../lib/progress';
+import { DealChip, StuckChip } from '../progress/Progress';
 import { money, timeAgo } from '../../lib/format';
 import { HOUSEHOLD_LABEL, tierLabel, tierNumbers, URGENCY_LABEL, WORK_STATUS_LABEL } from '../../lib/tiering';
 import {
@@ -23,6 +25,10 @@ const STAGE_LABEL: Record<ApplicantStage, string> = {
 
 // Fee stages are no longer used; clients left at one still show it in their row.
 const PICKABLE_STAGES: ApplicantStage[] = APPLICANT_STAGES.filter((s) => s !== 'fee_invoiced' && s !== 'fee_paid');
+
+const PROGRESS_LABEL: Record<PipelineFilters['progress'], string> = {
+  any: 'Any', stuck: 'Stuck', viewing: 'Viewing booked', offer: 'Offer made or accepted', nothing: 'No properties sent yet',
+};
 
 const CALLS_LABEL: Record<PipelineFilters['calls'], string> = {
   any: 'Any', due: 'Due a call now', never: 'Never called', scheduled: 'Call booked',
@@ -50,6 +56,18 @@ export function PipelinePage() {
   const { data: applicants = [], isLoading } = useApplicants();
   const { calls } = useCalls();
   const last = useMemo(() => lastCallMap(calls), [calls]);
+  const { deals, ready: progressReady } = useDeals();
+  // per client: days stuck (or null), and their furthest live deal
+  const progressOf = useMemo(() => {
+    const byClient = new Map<string, Deal[]>();
+    for (const d of deals) byClient.set(d.applicant_id, [...(byClient.get(d.applicant_id) ?? []), d]);
+    const step = (d: Deal) => DEAL_STEPS.findIndex((s) => s.key === d.status);
+    return (a: Applicant) => {
+      const mine = byClient.get(a.id) ?? [];
+      const lead = mine.filter(isLive).sort((x, y) => step(y) - step(x))[0] ?? null;
+      return { stuck: progressReady ? stuckDays(a, mine) : null, lead, any: mine.length > 0 };
+    };
+  }, [deals, progressReady]);
   const people = usePeople();
   // How many form answers each client's own notes could fill in
   const fromNotes = useMemo(() => new Map(applicants.map((a) => {
@@ -109,8 +127,16 @@ export function PipelinePage() {
     const byOwner = (a: Applicant) => filters.owner === 'any' ? true
       : filters.owner === 'none' ? !a.assigned_to
       : a.assigned_to === (filters.owner === 'me' ? people.meId : filters.owner);
-    return sortApplicants(applyFilters(applicants, filters, (a) => textIndex.get(a.id) ?? '').filter(byCalls).filter(byOwner), sortKey, dir);
-  }, [applicants, filters, textIndex, sortKey, dir, last, people.meId]);
+    const byProgress = (a: Applicant) => {
+      if (filters.progress === 'any') return true;
+      const pr = progressOf(a);
+      if (filters.progress === 'stuck') return pr.stuck !== null;
+      if (filters.progress === 'nothing') return !pr.any;
+      if (filters.progress === 'viewing') return pr.lead?.status === 'viewing';
+      return pr.lead?.status === 'offered' || pr.lead?.status === 'accepted';
+    };
+    return sortApplicants(applyFilters(applicants, filters, (a) => textIndex.get(a.id) ?? '').filter(byCalls).filter(byOwner).filter(byProgress), sortKey, dir);
+  }, [applicants, filters, textIndex, sortKey, dir, last, people.meId, progressOf]);
 
   const stageCounts = useMemo(() => {
     const m = new Map<string, number>();
@@ -141,6 +167,7 @@ export function PipelinePage() {
     remove: (f) => ({ ...f, owner: 'any' }),
   });
   if (filters.calls !== 'any') pills.push({ label: CALLS_LABEL[filters.calls], remove: (f) => ({ ...f, calls: 'any' }) });
+  if (filters.progress !== 'any') pills.push({ label: PROGRESS_LABEL[filters.progress], remove: (f) => ({ ...f, progress: 'any' }) });
   for (const b of filters.benefits) {
     pills.push({ label: BENEFITS.find((x) => x.key === b)?.label ?? b, remove: (f) => ({ ...f, benefits: f.benefits.filter((x) => x !== b) }) });
   }
@@ -206,6 +233,10 @@ export function PipelinePage() {
           )}
           <FilterSelect label="Calls" value={filters.calls} onChange={(v) => update({ calls: v as PipelineFilters['calls'] })}
             options={Object.entries(CALLS_LABEL) as Array<[string, string]>} />
+          {progressReady && (
+            <FilterSelect label="Progress" value={filters.progress} onChange={(v) => update({ progress: v as PipelineFilters['progress'] })}
+              options={Object.entries(PROGRESS_LABEL) as Array<[string, string]>} />
+          )}
           {extraInUse === 0 && (
             <button type="button" onClick={() => setMoreOpen((v) => !v)} aria-expanded={showMore}
               className="inline-flex min-h-[40px] items-center gap-1.5 rounded-md px-2 text-[13px] font-medium text-[var(--link)] hover:underline">
@@ -309,6 +340,16 @@ export function PipelinePage() {
                           <Highlight text={a.full_name} terms={terms} />
                         </button>
                         {a.phone && <div className="font-mono text-[13px] text-[var(--ink-muted)]">{a.phone}</div>}
+                        {(() => {
+                          const pr = progressOf(a);
+                          if (pr.stuck === null && !pr.lead) return null;
+                          return (
+                            <div className="mt-1 flex flex-wrap items-center gap-1">
+                              {pr.stuck !== null && <StuckChip days={pr.stuck} />}
+                              {pr.lead && pr.lead.status !== 'sent' && <span title={pr.lead.address}><DealChip deal={pr.lead} /></span>}
+                            </div>
+                          );
+                        })()}
                         {(fromNotes.get(a.id) ?? 0) > 0 && (
                           <Link to={`/applicants/${a.id}#details`} title="Answers Keel found in their notes"
                             className="mt-1 inline-flex items-center gap-1 rounded bg-[var(--accent-soft)] px-1.5 py-0.5 text-[12px] font-medium text-[var(--accent-ink)] hover:underline">
@@ -448,7 +489,7 @@ function CallCell({ state, lastOutcome, lastAt }: { state: CallState; lastOutcom
         </span>
       ) : next ? (
         <span className={`inline-flex items-center gap-1 ${dueNow ? 'font-semibold text-[var(--accent-ink)]' : 'text-[var(--ink)]'}`}>
-          <Icon name="calendar" size={13} /> {next < today ? `Overdue, ${dayLabel(next).toLowerCase()}` : dayLabel(next)}
+          <Icon name="calendar" size={13} /> {next < today ? `Overdue, ${dayWord(next)}` : dayLabel(next)}
         </span>
       ) : null}
       {lastOutcome && lastAt && (

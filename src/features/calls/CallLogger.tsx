@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Button, Icon, useToast } from '../../components/ui';
 import type { IconName } from '../../components/ui';
 import { useLogCall, usePeople } from '../../lib/hooks';
-import { addDays, dayLabel, OUTCOMES, OUTCOME_LABEL, suggestedGap } from '../../lib/calls';
+import { addDays, dayLabel, dayWord, OUTCOME_LABEL, OUTCOMES, suggestedGap } from '../../lib/calls';
 import { timeAgo } from '../../lib/format';
 import type { Applicant, Call, CallOutcome } from '../../lib/types';
 
@@ -40,7 +40,7 @@ export function CallLogger({ applicant, onDone, autoFocus = false }: { applicant
     if (!outcome) return;
     log.mutate({ applicant, outcome, direction, notes, nextCallAt: next }, {
       onSuccess: () => {
-        toast(`Call logged${next ? `. Next call ${dayLabel(next).toLowerCase()}` : ''}`, 'success');
+        toast(`Call logged${next ? `. Next call ${dayWord(next)}` : ''}`, 'success');
         setOutcome(null); setNotes(''); setNext(null); setNextTouched(false);
         onDone?.();
       },

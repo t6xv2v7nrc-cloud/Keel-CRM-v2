@@ -243,6 +243,25 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
       <WhatsAppSettings draft={draft} set={set} />
 
       <Card>
+        <CardHeader icon="flag" title="Client progress" help="progress" />
+        <div className="flex flex-col gap-4 p-5">
+          <p className="m-0 text-[15px] text-[var(--ink-muted)]">
+            A client is flagged as stuck when nothing has moved for this many days: not their stage, and not any property they are going for.
+            A viewing coming up always counts as moving. 0 turns the flag off for that stage.
+          </p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {(['lead', 'referred', 'viewing', 'offer'] as const).map((st) => (
+              <div key={st} className="flex flex-col gap-1.5 rounded-lg bg-[var(--surface-2)] p-3">
+                <span className="text-[15px] font-medium text-[var(--ink)]">{({ lead: 'Lead', referred: 'Referred', viewing: 'Viewing', offer: 'Offer' })[st]}</span>
+                <NumberField label="Days" value={draft.stuckAfterDays[st]} min={0}
+                  onChange={(v) => set('stuckAfterDays', { ...draft.stuckAfterDays, [st]: v })} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </Card>
+
+      <Card>
         <CardHeader icon="phone" title="Calls" help="calls" />
         <div className="flex flex-col gap-5 p-5">
           <Row icon="user" title="First call for new clients" text="A new client not called within this many days of arriving shows as overdue on the Calls page for both of you.">

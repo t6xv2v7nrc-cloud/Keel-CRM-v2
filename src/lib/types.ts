@@ -37,6 +37,9 @@ export interface Applicant {
   next_call_at?: string | null; // YYYY-MM-DD
   // 0006_team.sql
   assigned_to?: string | null;  // user id of whoever looks after this client
+  // 0009_progress.sql
+  next_step?: string | null;        // what to do next; its date is next_call_at
+  stage_changed_at?: string | null; // when the stage last moved
   created_at: string;
   updated_at: string;
 }
@@ -115,6 +118,23 @@ export interface Call {
   notes: string | null;
   created_by?: string | null; // who logged it (0006)
   created_at: string;
+}
+
+/** A property a client is going for, and how far it has got (0009). */
+export type DealStatus = 'sent' | 'interested' | 'viewing' | 'viewed' | 'offered' | 'accepted' | 'moved_in' | 'fell_through';
+export interface Deal {
+  id: string;
+  applicant_id: string;
+  property_id: string | null;
+  address: string;
+  status: DealStatus;
+  viewing_at: string | null;
+  move_in_on: string | null;
+  fell_through_reason: string | null;
+  notes: string | null;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 /** Someone who can sign in (0006). */

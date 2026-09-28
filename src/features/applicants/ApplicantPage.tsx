@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
-  Avatar, Button, Card, CardHeader, Empty, Help, Icon, KeelLine, StageBadge, TierBadge, UrgentChip, useToast,
+  Avatar, Button, Card, CardHeader, Empty, Help, Icon, StageBadge, TierBadge, UrgentChip, useToast,
 } from '../../components/ui';
 import {
-  sentKey, useActivities, useApplicant, useAssign, useCalls, useDeleteApplicant, usePeople, useProperties, useSentOnWhatsApp, useSetNextCall,
+  sentKey, useActivities, useApplicant, useAssign, useCalls, useDeals, useDeleteApplicant, usePeople, useProperties, useSentOnWhatsApp,
 } from '../../lib/hooks';
 import { bestFew, brief, matchesForApplicant } from '../../lib/propertyMatch';
 import { money, timeAgo } from '../../lib/format';
 import { effectiveTier, isUrgent } from '../../lib/search';
-import { addDays, dayLabel, OUTCOME_LABEL, todayIso } from '../../lib/calls';
+import { dayWord, OUTCOME_LABEL, todayIso } from '../../lib/calls';
 import type { Activity, Applicant, Call } from '../../lib/types';
 import { CallHistory, CallLogger } from '../calls/CallLogger';
 import { CallsNeedUpdate } from '../calls/CallsPage';
@@ -17,6 +17,8 @@ import { ClientDetails } from './ClientDetails';
 import { LhaChip } from '../properties/Lha';
 import { SentTag, WhatsAppLink } from '../properties/WhatsApp';
 import { LazyMap, MapKey } from '../map/MapView';
+import { NextStepRow, ProgressCard, StuckChip } from '../progress/Progress';
+import { stuckDays } from '../../lib/progress';
 import { clientAreas, placeKey } from '../../lib/geo';
 
 export function ApplicantPage() {
@@ -67,15 +69,16 @@ export function ApplicantPage() {
 
       <HeroCard applicant={applicant} lastCall={mine[0]} onLogCall={startCall} />
 
-      <ClientDetails applicant={applicant} />
+      <ProgressCard applicant={applicant} />
 
       <SuitablePropertiesCard applicant={applicant} />
 
-      <div className="grid gap-6 md:grid-cols-[1fr_360px]">
-        <div className="flex min-w-0 flex-col gap-6">
-          <div ref={callsRef} className="scroll-mt-20">
-            <CallsCard applicant={applicant} calls={mine} ready={callsReady} open={logging} setOpen={setLogging} />
-          </div>
+      <ClientDetails applicant={applicant} />
+
+      <div className="grid items-start gap-6 lg:grid-cols-2">
+        <div ref={callsRef} className="min-w-0 scroll-mt-20">
+          <CallsCard applicant={applicant} calls={mine} ready={callsReady} open={logging} setOpen={setLogging} />
+        </div>
 
           <Card>
             <CardHeader icon="clock" title="Timeline" sub={`${activities.length} events`} help="timeline" />
@@ -90,14 +93,6 @@ export function ApplicantPage() {
               )}
             </div>
           </Card>
-        </div>
-
-        <div className="flex flex-col gap-6">
-          <Card>
-            <CardHeader icon="flag" title="Progress" help="progress" />
-            <div className="p-5"><KeelLine current={applicant.stage} /></div>
-          </Card>
-        </div>
       </div>
     </div>
   );
@@ -109,14 +104,15 @@ function TimelineRow({ act }: { act: Activity }) {
   const fromScreenshot = act.body.includes('screenshot') || act.inbox_item_id != null;
   const isCall = act.kind === 'call';
   const isWhatsApp = act.kind === 'whatsapp';
+  const isProgress = act.kind === 'progress';
   return (
     <li className="relative flex gap-3 pl-5">
       <span aria-hidden className="absolute left-0 top-1.5 h-[9px] w-[9px] rounded-full ring-2 ring-[var(--surface)]"
-        style={{ background: isCall || isWhatsApp ? 'var(--accent)' : fromScreenshot ? 'var(--ink-muted)' : 'var(--line-strong)' }} />
+        style={{ background: isCall || isWhatsApp || isProgress ? 'var(--accent)' : fromScreenshot ? 'var(--ink-muted)' : 'var(--line-strong)' }} />
       <div className="flex-1">
         <div className="text-[15px] text-[var(--ink)]">{act.body}</div>
         <div className="mt-0.5 flex items-center gap-2 text-[13px] text-[var(--ink-muted)]">
-          <span>{isCall ? 'Call' : isWhatsApp ? 'WhatsApp' : act.kind.replace('_', ' ')}</span>
+          <span>{isCall ? 'Call' : isWhatsApp ? 'WhatsApp' : isProgress ? 'Progress' : act.kind.replace('_', ' ')}</span>
           <span>·</span>
           <span>{timeAgo(act.created_at)}</span>
           {who && <><span>·</span><span>by {who}</span></>}
@@ -132,15 +128,6 @@ function TimelineRow({ act }: { act: Activity }) {
 function CallsCard({ applicant, calls, ready, open, setOpen }: {
   applicant: Applicant; calls: Call[]; ready: boolean; open: boolean; setOpen: (v: boolean) => void;
 }) {
-  const setNext = useSetNextCall();
-  const { toast } = useToast();
-  const next = applicant.next_call_at ?? null;
-  const overdue = next !== null && next < todayIso();
-  const changeNext = (date: string | null) => setNext.mutate({ applicant, date }, {
-    onSuccess: () => toast(date ? `Next call ${dayLabel(date).toLowerCase()}` : 'Next call cleared', 'success'),
-    onError: (e) => toast((e as Error).message, 'danger'),
-  });
-
   return (
     <Card>
       <CardHeader icon="phone" title="Calls" sub={`${calls.length} logged`} help="logCall">
@@ -153,32 +140,7 @@ function CallsCard({ applicant, calls, ready, open, setOpen }: {
       <div className="flex flex-col gap-4 p-5">
         {!ready && <CallsNeedUpdate />}
 
-        {ready && (
-          <div className={`flex flex-wrap items-center gap-3 rounded-lg px-4 py-3 ${overdue ? 'bg-[var(--note-bg)]' : 'bg-[var(--surface-2)]'}`}>
-            <Icon name="calendar" size={18} className={overdue ? 'text-[var(--note-fg)]' : 'text-[var(--accent)]'} />
-            <div className="flex min-w-0 flex-1 items-center gap-2 text-[15px] text-[var(--ink)]">
-              <span>{next ? <>Next call <strong>{dayLabel(next)}</strong>{overdue && <span className="text-[var(--note-fg)]">, overdue</span>}</>
-                : calls.length ? 'No follow-up set' : 'Not called yet'}</span>
-              <Help topic="nextCall" />
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {[1, 3, 7].map((d) => (
-                <button key={d} onClick={() => changeNext(addDays(d))} disabled={setNext.isPending}
-                  className="rounded-full border border-[var(--line-strong)] px-2.5 py-0.5 text-[13px] text-[var(--ink-muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]">
-                  {d === 1 ? 'Tomorrow' : d === 7 ? 'Next week' : `In ${d} days`}
-                </button>
-              ))}
-              <input type="date" value={next ?? ''} min={todayIso()} aria-label="Next call date" onChange={(e) => changeNext(e.target.value || null)}
-                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 py-0.5 text-[13px] text-[var(--ink)]" />
-              {next && (
-                <button onClick={() => changeNext(null)} title="Clear next call" aria-label="Clear next call"
-                  className="grid h-6 w-6 place-items-center rounded text-[var(--ink-muted)] hover:bg-[var(--paper-2)] hover:text-[var(--ink)]">
-                  <Icon name="x" size={14} />
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+        {ready && <NextStepRow key={`${applicant.next_step ?? ''}|${applicant.next_call_at ?? ''}`} applicant={applicant} hasCalls={calls.length > 0} />}
 
         {open && ready && (
           <div className="rounded-lg border border-[var(--accent)] bg-[var(--surface)] p-4 shadow-[0_0_0_4px_var(--accent-soft)]">
@@ -305,6 +267,8 @@ function HeroCard({ applicant, lastCall, onLogCall }: { applicant: Applicant; la
   ].filter(Boolean).join(', ');
 
   const next = applicant.next_call_at;
+  const { deals } = useDeals();
+  const stuck = stuckDays(applicant, deals);
   return (
     <Card className="overflow-hidden">
       <div className="h-1.5 w-full" style={{ background: tier === 1 ? 'var(--accent)' : tier === 2 ? 'var(--accent-soft)' : 'var(--paper-2)' }} />
@@ -318,6 +282,7 @@ function HeroCard({ applicant, lastCall, onLogCall }: { applicant: Applicant; la
                 <TierBadge tier={tier} />
                 {isUrgent(applicant) && <UrgentChip />}
                 <StageBadge stage={applicant.stage} />
+                {stuck !== null && <StuckChip days={stuck} />}
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[15px] text-[var(--ink-muted)]">
                 {applicant.phone && <a href={`tel:${applicant.phone}`} className="inline-flex items-center gap-1.5 font-mono hover:text-[var(--link)]"><Icon name="phone" size={15} />{applicant.phone}</a>}
@@ -337,7 +302,8 @@ function HeroCard({ applicant, lastCall, onLogCall }: { applicant: Applicant; la
           <Meta icon="users" label="Household" value={household || 'Not known'} />
           <Meta icon="flag" label="Budget" value={applicant.budget_pcm ? money(applicant.budget_pcm) : 'Not given'} mono />
           <Meta icon="phone" label="Last call" value={lastCall ? `${OUTCOME_LABEL[lastCall.outcome]}, ${timeAgo(lastCall.created_at)}` : 'Not called yet'} />
-          <Meta icon="calendar" label="Next call" value={next ? dayLabel(next) : 'Not set'} strong={!!next && next <= todayIso()} />
+          <Meta icon="calendar" label="Next step" value={next ? `${applicant.next_step ? `${applicant.next_step}, ` : ''}${dayWord(next)}` : 'Not set'}
+            strong={!!next && next <= todayIso()} />
         </dl>
 
       </div>

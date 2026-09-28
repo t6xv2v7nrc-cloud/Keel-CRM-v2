@@ -12,6 +12,7 @@ import { addDays, callQueue, callsPerDay, isoDay, lastCallMap, OUTCOME_LABEL, qu
 import { tierColor, tierCount, tierLabel, tierNumbers } from '../../lib/tiering';
 import type { ApplicantStage } from '../../types/extraction';
 import type { Activity } from '../../lib/types';
+import { ThisWeek } from './ThisWeek';
 
 const FUNNEL: Array<{ stage: ApplicantStage; label: string }> = [
   { stage: 'lead', label: 'Lead' }, { stage: 'referred', label: 'Referred' }, { stage: 'viewing', label: 'Viewing' },
@@ -106,6 +107,8 @@ export function DashboardPage() {
         </StatTile></Link>
       </div>
 
+      <ThisWeek applicants={applicants} />
+
       <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
         {/* Triage */}
         <Card>
@@ -161,7 +164,7 @@ export function DashboardPage() {
                         {isUrgent(a) && <UrgentChip />}
                       </div>
                       <div className="text-[13px] text-[var(--ink-muted)]">
-                        {queueLabel(state)}
+                        {queueLabel(state, a.next_step)}
                         {lc ? ` · last: ${OUTCOME_LABEL[lc.outcome].toLowerCase()}` : ''}
                       </div>
                     </div>
@@ -230,6 +233,7 @@ export function DashboardPage() {
 function activityIcon(a: Activity): IconName {
   if (a.kind === 'call') return 'phone';
   if (a.kind === 'whatsapp') return 'chat';
+  if (a.kind === 'progress') return 'flag';
   if (a.kind === 'stage_change') return 'arrowRight';
   if (a.entity_type === 'property') return 'building';
   if (a.kind === 'created') return a.body.includes('screenshot') ? 'inbox' : 'plus';

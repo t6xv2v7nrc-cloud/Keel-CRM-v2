@@ -118,10 +118,11 @@ export interface PipelineFilters {
   benefits: BenefitKey[]; // must have all of these
   calls: 'any' | 'due' | 'never' | 'scheduled'; // applied by the Pipeline, which has the call log
   owner: string; // 'any' | 'me' | 'none' | a team member's id; applied by the Pipeline, which knows who is signed in
+  progress: 'any' | 'stuck' | 'viewing' | 'offer' | 'nothing'; // applied by the Pipeline, which has the deals
 }
 
 export const DEFAULT_FILTERS: PipelineFilters = {
-  q: '', stage: 'active', tier: 'any', household: 'any', work: 'any', councilReg: 'any', urgency: 'any', benefits: [], calls: 'any', owner: 'any',
+  q: '', stage: 'active', tier: 'any', household: 'any', work: 'any', councilReg: 'any', urgency: 'any', benefits: [], calls: 'any', owner: 'any', progress: 'any',
 };
 
 export function applyFilters(
@@ -162,6 +163,7 @@ export function filtersFromParams(p: URLSearchParams): PipelineFilters {
     benefits: (p.get('benefits') ?? '').split(',').filter((b): b is BenefitKey => BENEFITS.some((x) => x.key === b)),
     calls: oneOf(p.get('calls'), ['any', 'due', 'never', 'scheduled'] as const, 'any'),
     owner: p.get('owner') || 'any',
+    progress: oneOf(p.get('progress'), ['any', 'stuck', 'viewing', 'offer', 'nothing'] as const, 'any'),
   };
 }
 
@@ -178,6 +180,7 @@ export function filtersToParams(f: PipelineFilters, base = new URLSearchParams()
   set('benefits', f.benefits.join(','), '');
   set('calls', f.calls, 'any');
   set('owner', f.owner, 'any');
+  set('progress', f.progress, 'any');
   return p;
 }
 

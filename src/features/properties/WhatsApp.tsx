@@ -1,5 +1,5 @@
 import { Icon } from '../../components/ui';
-import { useLogWhatsApp, usePeople } from '../../lib/hooks';
+import { useAddDeals, useLogWhatsApp, usePeople } from '../../lib/hooks';
 import type { SentOnWhatsApp } from '../../lib/hooks';
 import { timeAgo } from '../../lib/format';
 import { clientMessage, firstName, propertiesText, waLink, waNumber } from '../../lib/whatsapp';
@@ -19,6 +19,7 @@ export function WhatsAppLink({ to, properties, label, icon = false }: {
 }) {
   const { myName } = usePeople();
   const log = useLogWhatsApp();
+  const track = useAddDeals();
   if (properties.length === 0) return null;
   const number = to ? waNumber(to.phone) : null;
   const text = to ? clientMessage(to.full_name, properties, myName) : propertiesText(properties);
@@ -30,7 +31,12 @@ export function WhatsAppLink({ to, properties, label, icon = false }: {
 
   return (
     <a href={waLink(number, text)} target="_blank" rel="noreferrer" title={title} aria-label={title}
-      onClick={() => { if (to) log.mutate({ applicantId: to.id, properties }); }}
+      onClick={() => {
+        if (!to) return;
+        log.mutate({ applicantId: to.id, properties });
+        // sending it starts tracking it on their Progress (quietly: the send is already on their timeline)
+        track.mutate({ applicantId: to.id, properties, status: 'sent', quiet: true });
+      }}
       className={icon
         ? 'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-[var(--line)] px-2 text-[13px] font-medium text-[var(--accent-ink)] transition-colors hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]'
         : 'inline-flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-md border border-[var(--line-strong)] px-3 text-[13px] font-medium text-[var(--accent-ink)] transition-colors hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]'}>

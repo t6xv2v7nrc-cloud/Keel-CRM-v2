@@ -101,7 +101,7 @@ export function CallsPage() {
             <ul className="m-0 list-none p-0">
               {queue.map(({ a, state, last: lastCall }) => (
                 <QueueRow key={a.id} a={a} lastCall={lastCall} owner={people.nameOf(a.assigned_to)} canClaim={people.ready && !a.assigned_to}
-                  label={queueLabel(state)}
+                  label={queueLabel(state, a.next_step)}
                   overdue={'overdue' in state && state.overdue} />
               ))}
             </ul>

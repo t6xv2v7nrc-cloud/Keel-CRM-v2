@@ -3,11 +3,11 @@ import { Link } from 'react-router-dom';
 import { Button, Card, Help, Icon, PageHeader, TierBadge, UrgentChip, useToast } from '../../components/ui';
 import {
   NeedsDatabaseUpdate, PROPERTY_STATUS_LABEL, sentKey, useAddProperties, useApplicants, useDeleteProperties, useProperties,
-  useSentOnWhatsApp, useSetPropertyStatus,
+  useDeals, useSentOnWhatsApp, useSetPropertyStatus,
 } from '../../lib/hooks';
 import { isLocalProperty, localProperties } from '../../lib/localProperties';
 import type { NewProperty, SavedProperty, SentOnWhatsApp } from '../../lib/hooks';
-import type { Applicant, Property } from '../../lib/types';
+import type { Applicant, Deal, Property } from '../../lib/types';
 import { parsePropertyList } from '../../lib/parseProperties';
 import type { ParsedProperty } from '../../lib/parseProperties';
 import { bestFew, brief, matchesForProperty } from '../../lib/propertyMatch';
@@ -18,6 +18,7 @@ import { lhaCheck } from '../../lib/lha';
 import { LhaChip, LhaLine } from './Lha';
 import { SentTag, WhatsAppLink } from './WhatsApp';
 import { MapView } from '../map/MapView';
+import { DealChip } from '../progress/Progress';
 import { effectiveTier, isUrgent } from '../../lib/search';
 import { tierLabel } from '../../lib/tiering';
 import { money, shortDate } from '../../lib/format';
@@ -50,6 +51,17 @@ export function PropertiesPage() {
   const del = useDeleteProperties();
   const add = useAddProperties();
   const sent = useSentOnWhatsApp();
+  const { deals } = useDeals();
+  const names = useMemo(() => new Map(applicants.map((a) => [a.id, a.full_name])), [applicants]);
+  // each property's deals, by id (or address for properties only on this device)
+  const dealsOf = useMemo(() => {
+    const m = new Map<string, Deal[]>();
+    for (const d of deals) {
+      const k = d.property_id ?? `addr:${d.address}`;
+      m.set(k, [...(m.get(k) ?? []), d]);
+    }
+    return (p: Property) => [...(m.get(p.id) ?? []), ...(m.get(`addr:${p.address_line}`) ?? [])];
+  }, [deals]);
   const { toast } = useToast();
   const [needsUpdate, setNeedsUpdate] = useState(false);
 
@@ -142,6 +154,8 @@ export function PropertiesPage() {
     <PropertyCard
       p={p}
       matches={matches.get(p.id) ?? []}
+      deals={dealsOf(p)}
+      names={names}
       sent={sent}
       isNew={justAdded.has(p.id)}
       selected={selected.has(p.id)}
@@ -555,8 +569,8 @@ function PasteImport({ existing, applicants, canClose, onClose, onAdded, onNeeds
 
 // ── Property card with its matches ────────────────────────────────
 
-function PropertyCard({ p, matches, sent, isNew, selected, onToggle, onStatus, onDelete }: {
-  p: Property; matches: Match[]; sent: Map<string, SentOnWhatsApp>; isNew: boolean; selected: boolean;
+function PropertyCard({ p, matches, deals, names, sent, isNew, selected, onToggle, onStatus, onDelete }: {
+  p: Property; matches: Match[]; deals: Deal[]; names: Map<string, string>; sent: Map<string, SentOnWhatsApp>; isNew: boolean; selected: boolean;
   onToggle: () => void; onStatus: (s: Property['status']) => void; onDelete: () => void;
 }) {
   const [showAll, setShowAll] = useState(false);
@@ -591,6 +605,7 @@ function PropertyCard({ p, matches, sent, isNew, selected, onToggle, onStatus, o
           </div>
           <div className="mt-0.5 text-[14px] text-[var(--ink-muted)]">{facts.join(' · ') || 'No details'}</div>
           <div className="mt-1.5"><LhaLine property={p} /></div>
+          <InPlay deals={deals} names={names} />
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           <WhatsAppLink properties={[p]} />
@@ -612,7 +627,8 @@ function PropertyCard({ p, matches, sent, isNew, selected, onToggle, onStatus, o
           ) : (
             <>
               <ul className="m-0 flex list-none flex-col divide-y divide-[var(--line)] p-0">
-                {shown.map((m) => <MatchRow key={m.applicant.id} m={m} p={p} sent={sent.get(sentKey(m.applicant.id, p.address_line))} />)}
+                {shown.map((m) => <MatchRow key={m.applicant.id} m={m} p={p} sent={sent.get(sentKey(m.applicant.id, p.address_line))}
+                  deal={deals.find((d) => d.applicant_id === m.applicant.id)} />)}
               </ul>
               {hidden > 0 && (
                 <button onClick={() => setShowAll((v) => !v)} className="mt-1 text-[13px] text-[var(--link)] hover:underline">
@@ -628,7 +644,24 @@ function PropertyCard({ p, matches, sent, isNew, selected, onToggle, onStatus, o
 }
 
 /** One client: strength, who, the reasons in brief (all of them on hover), and ways to reach them. */
-function MatchRow({ m, p, sent }: { m: Match; p: Property; sent: SentOnWhatsApp | undefined }) {
+/** Who is going for this property beyond being sent it: "Anna (viewing Thu 2 Oct, 2pm) · Diana (offer made)". */
+function InPlay({ deals, names }: { deals: Deal[]; names: Map<string, string> }) {
+  const going = deals.filter((d) => d.status !== 'sent' && d.status !== 'fell_through');
+  if (going.length === 0) return null;
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
+      <span className="text-[var(--ink-muted)]">In play:</span>
+      {going.map((d) => (
+        <Link key={d.id} to={`/applicants/${d.applicant_id}`} className="inline-flex items-center gap-1.5 hover:underline">
+          <span className="text-[var(--ink)]">{(names.get(d.applicant_id) ?? 'A client').split(' ')[0]}</span>
+          <DealChip deal={d} />
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function MatchRow({ m, p, sent, deal }: { m: Match; p: Property; sent: SentOnWhatsApp | undefined; deal: Deal | undefined }) {
   const a = m.applicant;
   const tier = effectiveTier(a);
   // tier and urgency already show as badges
@@ -643,7 +676,7 @@ function MatchRow({ m, p, sent }: { m: Match; p: Property; sent: SentOnWhatsApp 
           <Link to={`/applicants/${a.id}`} className="text-[15px] font-medium text-[var(--ink)] hover:underline">{a.full_name}</Link>
           <TierBadge tier={tier} />
           {isUrgent(a) && <span title={urgentWhy}><UrgentChip /></span>}
-          <SentTag sent={sent} />
+          {deal && deal.status !== 'sent' ? <DealChip deal={deal} /> : <SentTag sent={sent} />}
         </div>
         <div className="text-[13px] text-[var(--ink-muted)] sm:truncate">
           {reasons.join(' · ')}

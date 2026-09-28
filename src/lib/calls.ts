@@ -38,6 +38,12 @@ export function dayLabel(iso: string): string {
   return diff > 0 ? `in ${diff} days` : `${-diff} days ago`;
 }
 
+/** dayLabel for the middle of a sentence: "today", "tomorrow", but "Thursday" keeps its capital. */
+export const dayWord = (iso: string) => {
+  const l = dayLabel(iso);
+  return /^(Today|Tomorrow|Yesterday)$/.test(l) ? l.toLowerCase() : l;
+};
+
 /** Days until the next call suggested after an outcome (Settings), or null for none. */
 export function suggestedGap(outcome: CallOutcome): number | null {
   const s = activeSettings();
@@ -75,12 +81,12 @@ export function callState(a: Applicant, last: Call | undefined): CallState {
   return { kind: 'none' };
 }
 
-/** Plain words for a client's place in the call queue. */
-export function queueLabel(state: CallState): string {
+/** Plain words for a client's place in the queue, with their next step if one is set: "Due today: Chase documents". */
+export function queueLabel(state: CallState, step?: string | null): string {
   const today = todayIso();
-  if (state.kind === 'first') return state.date < today ? `New, not called yet (was due ${dayLabel(state.date).toLowerCase()})` : 'New, not called yet';
-  if (state.kind === 'due') return state.date < today ? `Overdue, was due ${dayLabel(state.date).toLowerCase()}` : 'Due today';
-  if (state.kind === 'scheduled') return `Next call ${dayLabel(state.date).toLowerCase()}`;
+  if (state.kind === 'first') return state.date < today ? `New, not called yet (was due ${dayWord(state.date)})` : 'New, not called yet';
+  if (state.kind === 'due') return `${state.date < today ? `Overdue, was due ${dayWord(state.date)}` : 'Due today'}${step ? `: ${step}` : ''}`;
+  if (state.kind === 'scheduled') return step ? `${step}, ${dayWord(state.date)}` : `Next call ${dayWord(state.date)}`;
   return 'No call set';
 }
 

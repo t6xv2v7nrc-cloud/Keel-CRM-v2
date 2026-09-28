@@ -71,10 +71,11 @@ export const HELP = {
     ],
   },
   nextCall: {
-    title: 'Next call',
+    title: 'Next step',
     body: [
-      'When this client should be rung next. On the day, they appear in To call now for both of you.',
-      'Logging a call sets this for you. You can also change or clear it here without logging a call.',
+      'What to do next for this client and when: Call, Chase documents, Book a viewing. Leave it blank to mean a call.',
+      'On the day, they appear in To call now for both of you, with the step written next to their name.',
+      'Keel sets it for you as things move: logging a call sets the follow-up, booking a viewing sets the viewing day, an offer sets a chase two days later. It only replaces your own step if its date is sooner.',
     ],
   },
   assign: {
@@ -118,7 +119,12 @@ export const HELP = {
   },
   progress: {
     title: 'Progress',
-    body: ['Where the client is: lead, referred, viewing, offer or placed. Change it with Stage in Client details, or from the Pipeline.'],
+    body: [
+      'Each property the client is going for, and how far it has got: sent, interested, viewing booked, viewed, offer made, accepted, moved in. Sending a property on WhatsApp adds it; Add a property adds one by hand.',
+      'The client\'s stage follows their furthest property, forwards only: a viewing booked makes them Viewing, an offer makes them Offer, a move-in makes them Placed. You can still change the stage by hand in Client details.',
+      'When an offer is accepted the property goes under offer; when they move in it is marked as let, and anyone else going for it is told it was let to someone else.',
+      'Stuck means nothing has moved for longer than Team settings allow at that stage. A viewing coming up always counts as moving.',
+    ],
   },
   timeline: {
     title: 'Timeline',

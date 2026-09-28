@@ -4,10 +4,11 @@ import { supabase } from './supabase';
 import { isLocalProperty, localProperties, useLocalProperties } from './localProperties';
 import { DEFAULT_SETTINGS, mergeSettings, myPart, teamPart } from './settings';
 import type { AppSettings } from './settings';
-import { OUTCOME_LABEL } from './calls';
+import { addDays, OUTCOME_LABEL, todayIso } from './calls';
+import { DEAL_LABEL, isLive, shouldAdvance, stageFromDeals, stepAfter, takesOver, viewingWords } from './progress';
 import { computeTier } from './tiering';
 import { shortDate } from './format';
-import type { Activity, Applicant, Call, CallOutcome, Profile, Property } from './types';
+import type { Activity, Applicant, Call, CallOutcome, Deal, DealStatus, Profile, Property } from './types';
 import type { ApplicantStage } from '../types/extraction';
 
 // ── Applicants ──────────────────────────────────────────────────────
@@ -107,8 +108,7 @@ export function useMoveStage() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, from, to }: { id: string; from: ApplicantStage; to: ApplicantStage }) => {
-      const { error } = await supabase.from('applicants').update({ stage: to }).eq('id', id);
-      if (error) throw error;
+      await updateApplicant(id, { stage: to, stage_changed_at: new Date().toISOString() });
       await supabase.from('activities').insert({
         entity_type: 'applicant',
         entity_id: id,
@@ -556,8 +556,7 @@ export function useLogCall() {
     }) => {
       const { error } = await supabase.from('calls').insert({ applicant_id: applicant.id, outcome, direction, notes: notes.trim() || null });
       if (error) throw missingTable(error) ? new Error(CALLS_UPDATE) : error;
-      const { error: nextError } = await supabase.from('applicants').update({ next_call_at: nextCallAt }).eq('id', applicant.id);
-      if (nextError) throw nextError;
+      await updateApplicant(applicant.id, { next_call_at: nextCallAt, next_step: null });
       await supabase.from('activities').insert({
         entity_type: 'applicant', entity_id: applicant.id, kind: 'call', body: callBody(direction, outcome, notes, nextCallAt),
       });
@@ -587,6 +586,180 @@ export function useSetNextCall() {
       qc.invalidateQueries({ queryKey: ['applicants'] });
       qc.invalidateQueries({ queryKey: ['activities'] });
       qc.invalidateQueries({ queryKey: ['applicants', applicant.id] });
+    },
+  });
+}
+
+// ── Client progress (0009) ──────────────────────────────────────────
+const PROGRESS_UPDATE =
+  'Tracking properties for each client needs a one-off database update: run supabase/migrations/0009_progress.sql in the Supabase SQL Editor.';
+const PROGRESS_COLUMNS = ['next_step', 'stage_changed_at'];
+
+/** Update a client. Before the 0009 update the progress columns are left out, so the rest still saves. */
+async function updateApplicant(id: string, patch: Record<string, unknown>) {
+  const { error } = await supabase.from('applicants').update(patch).eq('id', id);
+  if (!error) return;
+  if (!isMissingColumn(error)) throw error;
+  const rest = Object.fromEntries(Object.entries(patch).filter(([k]) => !PROGRESS_COLUMNS.includes(k)));
+  if (Object.keys(rest).length === 0) return;
+  const retry = await supabase.from('applicants').update(rest).eq('id', id);
+  if (retry.error) throw retry.error;
+}
+
+/** Every deal (a client going for a property), most recently moved first. `ready` is false until 0009 is run. */
+export function useDeals() {
+  const q = useQuery({
+    queryKey: ['deals'],
+    queryFn: async (): Promise<{ deals: Deal[]; ready: boolean }> => {
+      const { data, error } = await supabase.from('deals').select('*').order('updated_at', { ascending: false });
+      if (error) {
+        if (missingTable(error)) return { deals: [], ready: false };
+        throw error;
+      }
+      return { deals: data as Deal[], ready: true };
+    },
+  });
+  return { deals: q.data?.deals ?? [], ready: q.data?.ready ?? true, isLoading: q.isLoading };
+}
+
+type DealProperty = { id?: string; address_line: string };
+const dealPropertyId = (p: DealProperty) => (p.id && !isLocalProperty(p.id) ? p.id : null);
+
+/** Start tracking properties for a client; ones already tracked are left as they are. */
+export function useAddDeals() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ applicantId, properties, status = 'sent', quiet = false }: {
+      applicantId: string; properties: DealProperty[]; status?: DealStatus; quiet?: boolean;
+    }): Promise<Deal[]> => {
+      const rows = properties.map((p) => ({ applicant_id: applicantId, property_id: dealPropertyId(p), address: p.address_line, status }));
+      const { data, error } = await supabase.from('deals').upsert(rows, { onConflict: 'applicant_id,address', ignoreDuplicates: true }).select();
+      if (error) throw missingTable(error) ? new Error(PROGRESS_UPDATE) : error;
+      const added = (data ?? []) as Deal[];
+      if (added.length && !quiet) {
+        await supabase.from('activities').insert({
+          entity_type: 'applicant', entity_id: applicantId, kind: 'progress',
+          body: added.length === 1 ? `Tracking ${added[0].address} (${DEAL_LABEL[status].toLowerCase()})` : `Tracking ${added.length} properties`,
+        });
+      }
+      return added;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['deals'] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+/**
+ * Move a deal on. The client's stage follows (forwards only), their next step
+ * is set when the new one is sooner, and the property follows too: under offer
+ * when accepted, let when they move in (and anyone else going for it is told
+ * it was let to someone else).
+ */
+export function useMoveDeal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ applicant, deal, to, viewingAt, moveInOn, reason, allDeals, property }: {
+      applicant: Applicant; deal: Deal; to: DealStatus; allDeals: Deal[];
+      viewingAt?: string | null; moveInOn?: string | null; reason?: string | null;
+      property?: Pick<Property, 'id' | 'status' | 'address_line'> | null;
+    }): Promise<{ stage: ApplicantStage | null; step: string | null }> => {
+      const patch: Partial<Deal> = { status: to };
+      if (to === 'viewing') patch.viewing_at = viewingAt ?? deal.viewing_at;
+      if (to === 'moved_in') patch.move_in_on = moveInOn ?? todayIso();
+      if (to === 'fell_through') patch.fell_through_reason = reason ?? null;
+      const { error } = await supabase.from('deals').update(patch).eq('id', deal.id);
+      if (error) throw missingTable(error) ? new Error(PROGRESS_UPDATE) : error;
+
+      const body = to === 'viewing' && patch.viewing_at ? `Viewing booked at ${deal.address}: ${viewingWords(patch.viewing_at)}`
+        : to === 'fell_through' ? `${deal.address} fell through${reason ? `: ${reason}` : ''}`
+        : to === 'moved_in' ? `Moved in to ${deal.address}${patch.move_in_on ? ` on ${shortDate(patch.move_in_on)}` : ''}`
+        : `${deal.address}: ${DEAL_LABEL[to].toLowerCase()}`;
+      await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: applicant.id, kind: 'progress', body });
+
+      // The client's stage and next step
+      const theirs = allDeals.filter((d) => d.applicant_id === applicant.id).map((d) => (d.id === deal.id ? { ...d, ...patch } : d));
+      const target = stageFromDeals(theirs);
+      const client: Record<string, unknown> = {};
+      const stage = shouldAdvance(applicant.stage, target) ? target : null;
+      if (stage) { client.stage = stage; client.stage_changed_at = new Date().toISOString(); }
+      let next = stepAfter(to, deal.address, patch.viewing_at);
+      if (to === 'fell_through' && !theirs.some(isLive)) next = { step: 'Send more properties', on: addDays(1) };
+      const stepTakesOver = next !== null && takesOver(applicant, next, deal.address);
+      if (next && stepTakesOver) { client.next_step = next.step; client.next_call_at = next.on; }
+      if (Object.keys(client).length) await updateApplicant(applicant.id, client);
+      if (stage) {
+        await supabase.from('activities').insert({
+          entity_type: 'applicant', entity_id: applicant.id, kind: 'stage_change', body: `Stage ${applicant.stage} → ${stage} (${DEAL_LABEL[to].toLowerCase()})`,
+        });
+      }
+
+      // The property
+      const isProperty = property && !isLocalProperty(property.id);
+      const setProperty = async (status: Property['status'], why: string) => {
+        if (!property || !isProperty || property.status === status) return;
+        await supabase.from('properties').update({ status }).eq('id', property.id);
+        await supabase.from('activities').insert({ entity_type: 'property', entity_id: property.id, kind: 'updated', body: `${PROPERTY_STATUS_LABEL[status]}: ${why}` });
+      };
+      if (to === 'accepted' && property?.status === 'void') await setProperty('under_offer', `accepted for ${applicant.full_name}`);
+      if (to === 'moved_in') {
+        await setProperty('let', `${applicant.full_name} moved in`);
+        const others = allDeals.filter((d) => d.id !== deal.id && d.applicant_id !== applicant.id && isLive(d)
+          && ((deal.property_id && d.property_id === deal.property_id) || d.address === deal.address));
+        for (const o of others) {
+          await supabase.from('deals').update({ status: 'fell_through', fell_through_reason: 'Let to someone else' }).eq('id', o.id);
+          await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: o.applicant_id, kind: 'progress', body: `${o.address} fell through: Let to someone else` });
+        }
+        // and this client no longer needs their other properties
+        for (const o of theirs.filter((d) => d.id !== deal.id && isLive(d))) {
+          await supabase.from('deals').update({ status: 'fell_through', fell_through_reason: 'Client found somewhere else' }).eq('id', o.id);
+        }
+      }
+      return { stage, step: stepTakesOver ? next?.step ?? null : null };
+    },
+    onSuccess: (_d, { applicant }) => {
+      qc.invalidateQueries({ queryKey: ['deals'] });
+      qc.invalidateQueries({ queryKey: ['applicants'] });
+      qc.invalidateQueries({ queryKey: ['applicants', applicant.id] });
+      qc.invalidateQueries({ queryKey: ['properties'] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+/** Stop tracking a property for a client (added by mistake). */
+export function useRemoveDeal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (deal: Deal) => {
+      const { error } = await supabase.from('deals').delete().eq('id', deal.id);
+      if (error) throw error;
+      await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: deal.applicant_id, kind: 'progress', body: `Stopped tracking ${deal.address}` });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['deals'] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+/** Set what to do next for a client and when ("Chase documents", Thursday). */
+export function useSetNextStep() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ applicant, step, date }: { applicant: Applicant; step: string | null; date: string | null }) => {
+      const text = step?.trim() || null;
+      await updateApplicant(applicant.id, { next_step: text, next_call_at: date });
+      await supabase.from('activities').insert({
+        entity_type: 'applicant', entity_id: applicant.id, kind: 'updated',
+        body: date ? `Next step: ${text ?? 'Call'}, ${shortDate(date)}` : 'Next step cleared',
+      });
+    },
+    onSuccess: (_d, { applicant }) => {
+      qc.invalidateQueries({ queryKey: ['applicants'] });
+      qc.invalidateQueries({ queryKey: ['applicants', applicant.id] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
     },
   });
 }

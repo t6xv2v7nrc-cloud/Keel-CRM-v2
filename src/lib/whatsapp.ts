@@ -11,6 +11,7 @@ import { activeSettings } from './settings';
 import { money, shortDate, toE164 } from './format';
 
 export interface PropertyForMessage extends PropertyForLha {
+  id?: string;
   area?: string | null;
   bills?: string | null;
   furnished?: string | null;
@@ -55,6 +56,16 @@ export function clientMessage(clientName: string, ps: PropertyForMessage[], myNa
     .replace(/\{properties\}/gi, propertiesText(ps))
     .replace(/\{my name\}/gi, myName ?? '')
     .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/** A viewing reminder for a client, from the team's wording in Settings. */
+export function reminderMessage(clientName: string, address: string, when: string, myName: string | null, template = activeSettings().whatsappReminder): string {
+  return template
+    .replace(/\{first name\}/gi, firstName(clientName))
+    .replace(/\{address\}/gi, address)
+    .replace(/\{when\}/gi, when)
+    .replace(/\{my name\}/gi, myName ?? '')
     .trim();
 }
 

@@ -92,6 +92,8 @@ export interface AppSettings {
   callAgainAfterAnswered: number;
   /** A new client not called within this many days shows as overdue. */
   firstCallWithinDays: number;
+  /** A client counts as stuck after this many days at a stage with nothing moving (0 = never). */
+  stuckAfterDays: { lead: number; referred: number; viewing: number; offer: number };
   /** Saved property lists older than this can be purged in one click. */
   purgeAfterDays: number;
   /** LHA rates loaded from a CSV (a newer year); null uses the built-in rates. */
@@ -102,6 +104,8 @@ export interface AppSettings {
   lhaLeeway: number;
   /** Wording when sending properties to a client on WhatsApp ({first name}, {a property}, {properties}, {my name}). */
   whatsappMessage: string;
+  /** Wording for a viewing reminder ({first name}, {address}, {when}, {my name}). */
+  whatsappReminder: string;
   /** Page to open after signing in. */
   startPage: '/' | '/calls' | '/pipeline' | '/bin' | '/properties';
   /** Which clients the Calls page shows first. */
@@ -117,6 +121,12 @@ export const DEFAULT_WHATSAPP_MESSAGE = [
   '{my name}, Keel Lettings',
 ].join('\n');
 
+export const DEFAULT_WHATSAPP_REMINDER = [
+  'Hi {first name}, a reminder of your viewing at {address} on {when}.',
+  'Reply here if you need to change it.',
+  '{my name}, Keel Lettings',
+].join('\n');
+
 export const DEFAULT_SETTINGS: AppSettings = {
   tierLogic: DEFAULT_TIER_LOGIC,
   membersCanSetTier: true,
@@ -127,11 +137,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
   callAgainAfterNoAnswer: 2,
   callAgainAfterAnswered: 7,
   firstCallWithinDays: 1,
+  stuckAfterDays: { lead: 3, referred: 7, viewing: 7, offer: 10 },
   purgeAfterDays: 14,
   lhaRates: null,
   lhaAreaOverrides: {},
   lhaLeeway: 50,
   whatsappMessage: DEFAULT_WHATSAPP_MESSAGE,
+  whatsappReminder: DEFAULT_WHATSAPP_REMINDER,
   startPage: '/',
   callsView: 'everyone',
 };

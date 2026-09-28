@@ -12,10 +12,11 @@ src/
               lha.ts (LHA area, size rules and rent-vs-LHA check; rates in src/data/lha-rates.ts),
               whatsapp.ts (wa.me links and message wording for sending properties),
               geo.ts (placing postcodes via postcodes.io, cached per device; a client's areas as districts),
+              progress.ts (deals: each property a client is going for; stage follows deals, next steps, stuck),
               help.ts (words behind the "?" help buttons)
   components/ ui primitives on tokens (Button, Badge, Card, Field, Toast, KeelLine,
               Icon, Visuals: avatars, page headers, stat tiles, SVG charts)
-  features/   dashboard/ bin/ pipeline/ calls/ applicants/ properties/ settings/ map/ (Leaflet, lazy-loaded)
+  features/   dashboard/ bin/ pipeline/ calls/ applicants/ properties/ settings/ map/ (Leaflet, lazy-loaded) progress/
   types/      extraction.ts (shared contract, imported by netlify functions)
 netlify/functions/ extract.ts, lib/prompt.ts, lib/claude.ts
 supabase/migrations/
