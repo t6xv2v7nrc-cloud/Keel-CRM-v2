@@ -11,6 +11,7 @@ import {
   DEAL_LABEL, DEAL_STEPS, FELL_THROUGH_REASONS, isLive, nextMove, shortAddress, stuckDays, viewingShort, viewingWords,
 } from '../../lib/progress';
 import { reminderMessage, waLink, waNumber } from '../../lib/whatsapp';
+import { openViewingChange } from './ViewingChange';
 import type { ApplicantStage } from '../../types/extraction';
 import type { Applicant, Deal, DealStatus, Property } from '../../lib/types';
 
@@ -221,6 +222,12 @@ function DealRow({ applicant, deal, all, property }: { applicant: Applicant; dea
           </div>
         </div>
         {deal.status === 'viewing' && <ReminderLink applicant={applicant} deal={deal} label />}
+        {deal.status === 'viewing' && deal.viewing_at && (
+          <button type="button" onClick={() => openViewingChange(deal.id)}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--line)] px-2 text-[13px] font-medium text-[var(--ink)] hover:border-[var(--accent)]">
+            <Icon name="calendar" size={14} /><span className="hidden sm:inline">Move or cancel</span>
+          </button>
+        )}
         {next && deal.status !== 'moved_in' && (
           <Button variant="primary" className="min-h-0 px-3 py-1.5 text-[13px]" onClick={onNext} disabled={busy}>{next.label}</Button>
         )}

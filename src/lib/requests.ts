@@ -33,6 +33,8 @@ export const REQUEST_PLACEHOLDERS: ReadonlyArray<[string, string]> = [
   ['{client_benefits}', 'UC and PIP, working full time'],
   ['{slots}', 'the viewing times you offer'],
   ['{my_name}', 'whoever sends it'],
+  ['{old_time}', 'the viewing time before it moved or was cancelled'],
+  ['{new_time}', 'the new viewing time'],
 ];
 
 // ── Providers ──────────────────────────────────────────────────────
@@ -148,13 +150,16 @@ const rentWords = (p: { rent_pcm: number | null; rent_text: string | null }) =>
 const fill = (s: string, vars: Record<string, string>) => s.replace(/\{([a-z_]+)\}/gi, (m, k: string) => vars[k.toLowerCase()] ?? m);
 
 export interface MessageInput {
-  type: RequestType | 'chase';
+  type: RequestType | 'chase' | 'reschedule' | 'cancel';
   provider: Pick<Provider, 'name' | 'contact_first_name'>;
   property: { address_line: string; rent_pcm: number | null; rent_text: string | null };
   clients: Applicant[];
   slots?: string[];
   myName: string | null;
   template?: string;
+  /** a viewing that moved or was cancelled: when it was, and when it is now (ISO) */
+  oldTime?: string | null;
+  newTime?: string | null;
 }
 
 /**
@@ -170,6 +175,8 @@ export function requestMessage(i: MessageInput): string {
     property_rent: rentWords(i.property),
     slots: slotsWords(i.slots ?? []),
     my_name: i.myName ?? '',
+    old_time: i.oldTime ? slotWords(i.oldTime) : 'the time we agreed',
+    new_time: i.newTime ? slotWords(i.newTime) : 'a time that suits you',
   };
   const lines: string[] = [];
   for (const line of template.replace(/\r/g, '').split('\n')) {
@@ -186,8 +193,8 @@ export function requestMessage(i: MessageInput): string {
 
 // ── Following up ───────────────────────────────────────────────────
 
-export const FOLLOW_UP_HOURS = 24;
-export const followUpFrom = (sent: Date) => new Date(sent.getTime() + FOLLOW_UP_HOURS * 3_600_000);
+/** When a request is due a chase: the hours in Team settings (24 as standard) after it was sent. */
+export const followUpFrom = (sent: Date) => new Date(sent.getTime() + (activeSettings().requestFollowUpHours || 24) * 3_600_000);
 
 /** Requests still waiting on a provider: chases that are due first (oldest first), then the rest by when they fall due. */
 export function awaitingProviders(requests: ProviderRequest[], now = new Date()): Array<{ request: ProviderRequest; overdue: boolean }> {

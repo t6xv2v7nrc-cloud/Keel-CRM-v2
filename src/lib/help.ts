@@ -163,7 +163,8 @@ export const HELP = {
       'Messages only ever carry a client\'s first name, household and benefits: never their phone, surname or anything medical. Several clients go in one message, one line each.',
       'If a client does not meet the provider\'s rules (say they need PIP or LCWRA), Keel warns you. You can still send it with a reason, which is kept on the client\'s timeline.',
       'Sending details needs the client to have agreed: OK to share with landlords, in their details. Checking availability does not.',
-      'Every request is logged. If the provider has not replied after 24 hours it moves to the top of Awaiting providers on Home, with one tap to confirm, decline or chase.',
+      'Every request is logged. If the provider has not replied in time (24 hours as standard, set in Team settings) it moves to the top of Awaiting providers on Home, with one tap to confirm, decline or chase.',
+      'If a booked viewing moves or is cancelled, use Move or cancel on the client\'s Progress (or the calendar button on Home). Keel saves it, then writes the message for the client and for the provider.',
     ],
   },
   providers: {
@@ -172,6 +173,7 @@ export const HELP = {
       'Who supplies your properties, by the tag on their stock lists (BP, SR, ZUB...). Properties from a list with that tag belong to them.',
       'Rules are what they will take: benefits (any of those ticked), household, the councils they take clients from, a maximum rent and furnished or not. Requests warn you when a client does not fit.',
       'Switching a provider off keeps their history but stops new requests. Only the owner can change providers.',
+      'A property belongs to the provider whose tag is on its list. To change it, pick the provider on the property card, or tick several properties and use Set provider. The Provider filter on Properties shows who supplies what.',
     ],
   },
   whatsapp: {

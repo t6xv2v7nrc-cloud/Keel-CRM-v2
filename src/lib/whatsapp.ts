@@ -59,14 +59,20 @@ export function clientMessage(clientName: string, ps: PropertyForMessage[], myNa
     .trim();
 }
 
+/** A message to a client about their viewing, from the team's wording in Settings. */
+export function viewingMessage(template: string, v: { clientName: string; address: string; when?: string; oldWhen?: string; myName: string | null }): string {
+  return template
+    .replace(/\{first name\}/gi, firstName(v.clientName))
+    .replace(/\{address\}/gi, v.address)
+    .replace(/\{old when\}/gi, v.oldWhen ?? 'the time we agreed')
+    .replace(/\{when\}/gi, v.when ?? 'a new time')
+    .replace(/\{my name\}/gi, v.myName ?? '')
+    .trim();
+}
+
 /** A viewing reminder for a client, from the team's wording in Settings. */
 export function reminderMessage(clientName: string, address: string, when: string, myName: string | null, template = activeSettings().whatsappReminder): string {
-  return template
-    .replace(/\{first name\}/gi, firstName(clientName))
-    .replace(/\{address\}/gi, address)
-    .replace(/\{when\}/gi, when)
-    .replace(/\{my name\}/gi, myName ?? '')
-    .trim();
+  return viewingMessage(template, { clientName, address, when, myName });
 }
 
 /** wa.me link: to a number when there is one, otherwise "choose who to send it to". */

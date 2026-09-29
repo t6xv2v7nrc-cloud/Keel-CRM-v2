@@ -3,7 +3,10 @@ import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Avatar, Button, Card, CardHeader, Help, Icon, PageHeader, useToast } from '../../components/ui';
 import type { IconName } from '../../components/ui';
-import { useApplicants, useCalls, useHandOver, usePeople, useSaveProfile, useSaveSettings, useSettings } from '../../lib/hooks';
+import {
+  useApplicants, useBulkShare, useCalls, useHandOver, usePeople, useProviders, useSaveProfile, useSaveSettings, useSettings,
+} from '../../lib/hooks';
+import type { Applicant } from '../../lib/types';
 import { DEFAULT_SETTINGS, myPart, teamPart } from '../../lib/settings';
 import type { AppSettings } from '../../lib/settings';
 import { URGENCY_LABEL } from '../../lib/tiering';
@@ -248,6 +251,8 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
 
       <RequestTemplates draft={draft} set={set} />
 
+      <SharingSettings draft={draft} set={set} clients={active} />
+
       <Card>
         <CardHeader icon="flag" title="Client progress" help="progress" />
         <div className="flex flex-col gap-4 p-5">
@@ -277,6 +282,55 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
         </div>
       </Card>
     </fieldset>
+  );
+}
+
+/** Team settings: whether clients are OK to share their details with landlords, for new clients and for everyone at once. */
+function SharingSettings({ draft, set, clients }: {
+  draft: AppSettings; set: <K extends keyof AppSettings>(k: K, v: AppSettings[K]) => void; clients: Applicant[];
+}) {
+  const { ready } = useProviders();
+  const bulk = useBulkShare();
+  const { toast } = useToast();
+  if (!ready) return null;
+  const on = clients.filter((a) => a.share_with_landlords).length;
+  const formYes = clients.filter((a) => a.consent === true).length;
+  const run = (mode: 'on' | 'off' | 'form') => {
+    const ask = mode === 'on'
+      ? `Mark all ${clients.length} active clients as OK to share their details with landlords?\n\nOnly do this if every one of them has agreed.`
+      : mode === 'off'
+        ? `Mark all ${clients.length} active clients as not OK to share? Send client details will be blocked until you tick it again for each one.`
+        : `Match the referral form? The ${formYes} who gave consent on it become OK to share; the other ${clients.length - formYes} become not OK.`;
+    if (!window.confirm(ask)) return;
+    bulk.mutate({ clients, mode }, {
+      onSuccess: (n) => toast(n ? `Updated ${n} ${n === 1 ? 'client' : 'clients'}. Each one's timeline says so.` : 'Nothing to change', 'success'),
+      onError: (e) => toast((e as Error).message, 'danger'),
+    });
+  };
+  const small = 'min-h-0 px-3 py-1.5 text-[13px]';
+  return (
+    <Card>
+      <CardHeader icon="users" title="Sharing with landlords" sub={`${on} of ${clients.length} OK`} help="requests" />
+      <div className="flex flex-col gap-5 p-5">
+        <Row icon="plus" title="New clients start as OK to share"
+          text="Only turn this on if your intake form asks clients to agree. Applies to every new client, website ones too, once the 0011 database update is run.">
+          <Switch on={draft.shareWithLandlordsByDefault} onChange={(v) => set('shareWithLandlordsByDefault', v)} label="New clients start as OK to share" />
+        </Row>
+        <div className="flex flex-col gap-3 border-t border-[var(--line)] pt-4">
+          <div>
+            <div className="text-[15px] font-medium text-[var(--ink)]">Everyone at once</div>
+            <div className="text-[13px] text-[var(--ink-muted)]">
+              {on} of {clients.length} active clients are OK to share now. These buttons change clients straight away; they are not part of Save team settings.
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button className={small} disabled={bulk.isPending} onClick={() => run('on')}>Turn on for everyone</Button>
+            <Button className={small} disabled={bulk.isPending} onClick={() => run('off')}>Turn off for everyone</Button>
+            <Button className={small} disabled={bulk.isPending} onClick={() => run('form')}>Match the referral form ({formYes} agreed)</Button>
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }
 

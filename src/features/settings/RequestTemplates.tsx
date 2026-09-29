@@ -7,7 +7,10 @@ import { REQUEST_PLACEHOLDERS, requestMessage } from '../../lib/requests';
 import type { Applicant } from '../../lib/types';
 
 type Key = keyof AppSettings['requestTemplates'];
-const KINDS: Array<[Key, string]> = [['availability', 'Check availability'], ['viewing', 'Book viewing'], ['details', 'Send client details'], ['chase', 'Chase']];
+const KINDS: Array<[Key, string]> = [
+  ['availability', 'Check availability'], ['viewing', 'Book viewing'], ['details', 'Send client details'], ['chase', 'Chase'],
+  ['reschedule', 'Viewing moved'], ['cancel', 'Viewing cancelled'],
+];
 
 const sample = (p: Partial<Applicant>): Applicant => ({
   id: 's', full_name: 'X', phone: null, email: null, date_of_birth: null, adults: 1, children: 0, benefit_type: null, referring_borough: null,
@@ -29,13 +32,26 @@ export function RequestTemplates({ draft, set }: { draft: AppSettings; set: <K e
   const preview = requestMessage({
     type: kind, template: value, provider: { name: 'Zubair Properties', contact_first_name: 'Zubair' },
     property: { address_line: 'Broadfield Close, London NW2 6NR', rent_pcm: 1436, rent_text: null },
-    clients: SAMPLE_CLIENTS, slots, myName: myName ?? 'Ridwan',
+    clients: kind === 'reschedule' || kind === 'cancel' ? SAMPLE_CLIENTS.slice(0, 1) : SAMPLE_CLIENTS, slots, myName: myName ?? 'Ridwan',
+    oldTime: slots[0], newTime: slots[1],
   });
 
   return (
     <Card>
       <CardHeader icon="send" title="Requests to providers" help="requests" />
       <div className="flex flex-col gap-4 p-5">
+        <label className="flex flex-wrap items-center gap-3 text-[15px] text-[var(--ink)]">
+          <span className="min-w-[200px] flex-1">
+            Chase a provider after
+            <span className="block text-[13px] text-[var(--ink-muted)]">A request with no reply by then goes to the top of Awaiting providers on Home.</span>
+          </span>
+          <span className="flex items-center gap-2 text-[13px] text-[var(--ink-muted)]">
+            <input type="number" min={1} max={168} value={draft.requestFollowUpHours} aria-label="Hours before a chase is due"
+              onChange={(e) => set('requestFollowUpHours', Math.min(168, Math.max(1, Number(e.target.value) || 24)))}
+              className="h-10 w-20 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2.5 font-mono text-[15px] text-[var(--ink)] outline-none focus:border-[var(--accent)]" />
+            hours
+          </span>
+        </label>
         <div className="flex flex-wrap gap-1 rounded-lg bg-[var(--paper-2)] p-1" role="tablist" aria-label="Request type">
           {KINDS.map(([k, label]) => (
             <button key={k} type="button" role="tab" aria-selected={kind === k} onClick={() => setKind(k)}
@@ -61,7 +77,7 @@ export function RequestTemplates({ draft, set }: { draft: AppSettings; set: <K e
             )}
           </div>
           <div className="flex flex-col gap-2">
-            <span className="text-[13px] font-medium text-[var(--ink-muted)]">How it looks, with two clients</span>
+            <span className="text-[13px] font-medium text-[var(--ink-muted)]">How it looks{kind === 'reschedule' || kind === 'cancel' ? '' : ', with two clients'}</span>
             <div className="whitespace-pre-wrap rounded-lg rounded-tr-none bg-[var(--accent-soft)] p-3 text-[14px] leading-relaxed text-[var(--ink)]">{preview}</div>
           </div>
         </div>

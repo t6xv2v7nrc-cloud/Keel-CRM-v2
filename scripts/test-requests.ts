@@ -3,7 +3,8 @@ import {
   awaitingProviders, benefitWords, followUpFrom, householdWords, needsConsent, propertyProblems, providerFor, providerNumber,
   requestMessage, ruleProblems, rulesSummary,
 } from '../src/lib/requests';
-import { waLink } from '../src/lib/whatsapp';
+import { viewingMessage, waLink } from '../src/lib/whatsapp';
+import { DEFAULT_SETTINGS, DEFAULT_VIEWING_MOVED, setActiveSettings } from '../src/lib/settings';
 import type { Applicant, Provider, ProviderRequest } from '../src/lib/types';
 
 let failed = 0;
@@ -64,6 +65,16 @@ check('new lines are encoded as %0A', link.includes('pcm%0ALine%20two'), link);
 check('link goes to the provider number', link.startsWith('https://wa.me/447700900123?text='));
 check('the whole message survives the round trip', decodeURIComponent(waLink('447700900123', two).split('?text=')[1]) === two);
 
+// Viewings that move or are cancelled
+const was = new Date(2026, 8, 30, 14, 0).toISOString();
+const now = new Date(2026, 9, 1, 11, 0).toISOString();
+const moved = requestMessage({ type: 'reschedule', provider: zub, property, clients: [charles], myName: 'Ridwan', oldTime: was, newTime: now });
+check('moved viewing: old and new times', moved.includes('from Wed 30 Sep, 2pm to Thu 1 Oct, 11am') && moved.includes('Client: Charles'), JSON.stringify(moved));
+const cancelled = requestMessage({ type: 'cancel', provider: zub, property, clients: [charles], myName: 'Ridwan', oldTime: was });
+check('cancelled viewing: says when it was', cancelled.includes('cancel the viewing at Broadfield Close, London NW2 6NR on Wed 30 Sep, 2pm'), JSON.stringify(cancelled));
+check('the client is told too', viewingMessage(DEFAULT_VIEWING_MOVED, { clientName: 'Charles Okoro', address: 'Broadfield Close', when: 'Thursday 1 October, 11am', myName: 'Ridwan' })
+  .startsWith('Hi Charles, your viewing at Broadfield Close has moved to Thursday 1 October, 11am.'));
+
 // Following up after 24 hours
 const req = (id: string, sentHoursAgo: number, status: ProviderRequest['status'] = 'sent'): ProviderRequest => {
   const sent = new Date(Date.now() - sentHoursAgo * 3_600_000);
@@ -75,6 +86,9 @@ check('only open requests are listed', list.length === 3 && !list.some((x) => x.
 check('a request sent 25 hours ago is due a chase', list.find((x) => x.request.id === 'old')?.overdue === true);
 check('one sent an hour ago is not yet', list.find((x) => x.request.id === 'fresh')?.overdue === false);
 check('overdue first, oldest first', list.map((x) => x.request.id).join(',') === 'older,old,fresh', list.map((x) => x.request.id).join(','));
+setActiveSettings({ ...DEFAULT_SETTINGS, requestFollowUpHours: 48 });
+check('the chase wait comes from Team settings', followUpFrom(new Date(0)).getTime() === 48 * 3_600_000);
+setActiveSettings(DEFAULT_SETTINGS);
 
 console.log(failed ? `\n${failed} failed` : '\nAll passed');
 process.exit(failed ? 1 : 0);

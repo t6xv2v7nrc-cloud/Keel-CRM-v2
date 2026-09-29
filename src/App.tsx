@@ -15,6 +15,7 @@ import { CallsPage } from './features/calls/CallsPage';
 import { SettingsPage } from './features/settings/SettingsPage';
 import { CommandSearch, openSearch } from './features/search/CommandSearch';
 import { RequestSheetHost } from './features/requests/RequestSheet';
+import { ViewingChangeHost } from './features/progress/ViewingChange';
 import { useEnsureProfile, usePeople, useSettings } from './lib/hooks';
 import { setActiveSettings } from './lib/settings';
 import { ThemeToggle } from './components/ThemeToggle';
@@ -151,6 +152,7 @@ function Shell() {
 
       <CommandSearch />
       <RequestSheetHost />
+      <ViewingChangeHost />
     </div>
   );
 }

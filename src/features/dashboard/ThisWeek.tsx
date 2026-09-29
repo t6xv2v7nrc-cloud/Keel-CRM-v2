@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, CardHeader, Empty } from '../../components/ui';
+import { Card, CardHeader, Empty, Icon } from '../../components/ui';
 import { useDeals } from '../../lib/hooks';
 import { dayLabel, isoDay } from '../../lib/calls';
 import { clockTime } from '../../lib/format';
@@ -8,6 +8,7 @@ import { isLive, shortAddress, stuckDays, viewingsBetween } from '../../lib/prog
 import { isActive } from '../../lib/search';
 import type { Applicant, Deal } from '../../lib/types';
 import { ReminderLink, STAGE_NAME, StuckChip, dealWords } from '../progress/Progress';
+import { openViewingChange } from '../progress/ViewingChange';
 
 const time = clockTime;
 
@@ -69,6 +70,10 @@ export function ThisWeek({ applicants }: { applicants: Applicant[] }) {
                         <div className="truncate text-[13px] text-[var(--ink-muted)]">{d.address}</div>
                       </div>
                       {a && <ReminderLink applicant={a} deal={d} label />}
+                      <button type="button" onClick={() => openViewingChange(d.id)} title="Move or cancel this viewing" aria-label="Move or cancel this viewing"
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-[var(--line)] text-[var(--ink-muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]">
+                        <Icon name="calendar" size={14} />
+                      </button>
                     </li>
                   );
                 })}

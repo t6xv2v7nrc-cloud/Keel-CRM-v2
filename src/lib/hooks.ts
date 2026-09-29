@@ -662,22 +662,23 @@ export function useAddDeals() {
 export function useMoveDeal() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ applicant, deal, to, viewingAt, moveInOn, reason, allDeals, property }: {
+    mutationFn: async ({ applicant, deal, to, viewingAt, moveInOn, reason, allDeals, property, activityBody }: {
       applicant: Applicant; deal: Deal; to: DealStatus; allDeals: Deal[];
-      viewingAt?: string | null; moveInOn?: string | null; reason?: string | null;
+      viewingAt?: string | null; moveInOn?: string | null; reason?: string | null; activityBody?: string;
       property?: Pick<Property, 'id' | 'status' | 'address_line'> | null;
     }): Promise<{ stage: ApplicantStage | null; step: string | null }> => {
       const patch: Partial<Deal> = { status: to };
       if (to === 'viewing') patch.viewing_at = viewingAt ?? deal.viewing_at;
+      if (deal.status === 'viewing' && to === 'interested') patch.viewing_at = null;
       if (to === 'moved_in') patch.move_in_on = moveInOn ?? todayIso();
       if (to === 'fell_through') patch.fell_through_reason = reason ?? null;
       const { error } = await supabase.from('deals').update(patch).eq('id', deal.id);
       if (error) throw missingTable(error) ? new Error(PROGRESS_UPDATE) : error;
 
-      const body = to === 'viewing' && patch.viewing_at ? `Viewing booked at ${deal.address}: ${viewingWords(patch.viewing_at)}`
+      const body = activityBody ?? (to === 'viewing' && patch.viewing_at ? `Viewing booked at ${deal.address}: ${viewingWords(patch.viewing_at)}`
         : to === 'fell_through' ? `${deal.address} fell through${reason ? `: ${reason}` : ''}`
         : to === 'moved_in' ? `Moved in to ${deal.address}${patch.move_in_on ? ` on ${shortDate(patch.move_in_on)}` : ''}`
-        : `${deal.address}: ${DEAL_LABEL[to].toLowerCase()}`;
+        : `${deal.address}: ${DEAL_LABEL[to].toLowerCase()}`);
       await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: applicant.id, kind: 'progress', body });
 
       // The client's stage and next step
@@ -920,5 +921,75 @@ export function useUpdateRequest() {
       qc.invalidateQueries({ queryKey: ['requests'] });
       qc.invalidateQueries({ queryKey: ['activities'] });
     },
+  });
+}
+
+/** Say which provider supplies some properties (or none). */
+export function useSetPropertyProvider() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ properties, provider }: { properties: Pick<Property, 'id' | 'address_line'>[]; provider: Pick<Provider, 'id' | 'tag'> | null }) => {
+      const onDevice = properties.filter((p) => isLocalProperty(p.id)).map((p) => p.id);
+      if (onDevice.length) localProperties.update(onDevice, { provider_id: provider?.id ?? null, ...(provider ? { source_tag: provider.tag } : {}) });
+      const inDb = properties.filter((p) => !isLocalProperty(p.id));
+      for (const ids of chunks(inDb.map((p) => p.id))) {
+        const { error } = await supabase.from('properties').update({ provider_id: provider?.id ?? null }).in('id', ids);
+        if (error) throw isMissingColumn(error) || missingTable(error) ? new Error(PROVIDERS_UPDATE) : error;
+      }
+      if (inDb.length) {
+        await supabase.from('activities').insert(inDb.map((p) => ({
+          entity_type: 'property', entity_id: p.id, kind: 'updated', body: provider ? `Provider set to ${provider.tag}` : 'Provider cleared',
+        })));
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['properties'] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+/**
+ * Set "OK to share with landlords" for every active client at once: on, off,
+ * or to match the consent answer on their referral form. Each client whose
+ * answer changes gets a line on their timeline.
+ */
+export function useBulkShare() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ clients, mode }: { clients: Applicant[]; mode: 'on' | 'off' | 'form' }): Promise<number> => {
+      const want = (a: Applicant) => (mode === 'on' ? true : mode === 'off' ? false : a.consent === true);
+      const changing = clients.filter((a) => (a.share_with_landlords ?? false) !== want(a));
+      for (const value of [true, false]) {
+        const ids = changing.filter((a) => want(a) === value).map((a) => a.id);
+        for (const part of chunks(ids)) {
+          const { error } = await supabase.from('applicants').update({ share_with_landlords: value }).in('id', part);
+          if (error) throw isMissingColumn(error) ? new Error(PROVIDERS_UPDATE) : error;
+        }
+      }
+      const why = mode === 'form' ? ' to match their referral form' : ' for everyone';
+      for (const part of chunks(changing, 500)) {
+        await supabase.from('activities').insert(part.map((a) => ({
+          entity_type: 'applicant', entity_id: a.id, kind: 'updated',
+          body: `${want(a) ? 'OK' : 'Not OK'} to share details with landlords (set${why})`,
+        })));
+      }
+      return changing.length;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['applicants'] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+/** A line on a client's timeline, e.g. "Told Anna the viewing moved". */
+export function useClientNote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ applicantId, kind = 'progress', body }: { applicantId: string; kind?: string; body: string }) => {
+      await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: applicantId, kind, body });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['activities'] }),
   });
 }

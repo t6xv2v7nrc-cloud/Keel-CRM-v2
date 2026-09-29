@@ -107,7 +107,14 @@ export interface AppSettings {
   /** Wording for a viewing reminder ({first name}, {address}, {when}, {my name}). */
   whatsappReminder: string;
   /** Wording for requests to providers, per type, plus a short chase. See lib/requests.ts for the placeholders. */
-  requestTemplates: { availability: string; viewing: string; details: string; chase: string };
+  requestTemplates: { availability: string; viewing: string; details: string; chase: string; reschedule: string; cancel: string };
+  /** Wording to a client when their viewing moves or is cancelled ({first name}, {address}, {when}, {old when}, {my name}). */
+  whatsappViewingMoved: string;
+  whatsappViewingCancelled: string;
+  /** Hours to wait for a provider's reply before a request is due a chase. */
+  requestFollowUpHours: number;
+  /** New clients start as OK to share their details with landlords (applied by the database, migration 0011). */
+  shareWithLandlordsByDefault: boolean;
   /** Page to open after signing in. */
   startPage: '/' | '/calls' | '/pipeline' | '/bin' | '/properties';
   /** Which clients the Calls page shows first. */
@@ -148,7 +155,29 @@ export const DEFAULT_REQUEST_TEMPLATES = {
     'Thanks, {my_name}, Keel Lettings',
   ].join('\n'),
   chase: 'Salam {provider_first_name}, just checking on my message about {property_address}. Thanks, {my_name}',
+  reschedule: [
+    'Salam {provider_first_name}, can we move the viewing at {property_address} from {old_time} to {new_time}?',
+    'Client: {client_first_name}',
+    'Thanks, {my_name}, Keel Lettings',
+  ].join('\n'),
+  cancel: [
+    'Salam {provider_first_name}, sorry, we need to cancel the viewing at {property_address} on {old_time}.',
+    'Client: {client_first_name}',
+    'Thanks, {my_name}, Keel Lettings',
+  ].join('\n'),
 };
+
+export const DEFAULT_VIEWING_MOVED = [
+  'Hi {first name}, your viewing at {address} has moved to {when}.',
+  'Reply here if that time does not work for you.',
+  '{my name}, Keel Lettings',
+].join('\n');
+
+export const DEFAULT_VIEWING_CANCELLED = [
+  'Hi {first name}, sorry, your viewing at {address} on {old when} is cancelled.',
+  'I will be in touch about another time.',
+  '{my name}, Keel Lettings',
+].join('\n');
 
 export const DEFAULT_SETTINGS: AppSettings = {
   tierLogic: DEFAULT_TIER_LOGIC,
@@ -168,6 +197,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   whatsappMessage: DEFAULT_WHATSAPP_MESSAGE,
   whatsappReminder: DEFAULT_WHATSAPP_REMINDER,
   requestTemplates: DEFAULT_REQUEST_TEMPLATES,
+  whatsappViewingMoved: DEFAULT_VIEWING_MOVED,
+  whatsappViewingCancelled: DEFAULT_VIEWING_CANCELLED,
+  requestFollowUpHours: 24,
+  shareWithLandlordsByDefault: false,
   startPage: '/',
   callsView: 'everyone',
 };

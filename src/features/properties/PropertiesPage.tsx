@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Button, Card, Help, Icon, PageHeader, TierBadge, UrgentChip, useToast } from '../../components/ui';
 import {
   NeedsDatabaseUpdate, PROPERTY_STATUS_LABEL, sentKey, useAddProperties, useApplicants, useDeleteProperties, useProperties,
-  useDeals, useRequests, useSentOnWhatsApp, useSetPropertyStatus,
+  useDeals, useProviders, useRequests, useSentOnWhatsApp, useSetPropertyProvider, useSetPropertyStatus,
 } from '../../lib/hooks';
 import { isLocalProperty, localProperties } from '../../lib/localProperties';
 import type { NewProperty, SavedProperty, SentOnWhatsApp } from '../../lib/hooks';
@@ -20,6 +20,7 @@ import { SentTag, WhatsAppLink } from './WhatsApp';
 import { MapView } from '../map/MapView';
 import { DealChip } from '../progress/Progress';
 import { RequestButton } from '../requests/RequestSheet';
+import { providerFor } from '../../lib/requests';
 import { effectiveTier, isUrgent } from '../../lib/search';
 import { tierLabel } from '../../lib/tiering';
 import { money, shortDate } from '../../lib/format';
@@ -94,6 +95,9 @@ export function PropertiesPage() {
   const [borough, setBorough] = useState('all');
   const [q, setQ] = useState('');
   const [lhaFilter, setLhaFilter] = useState<'any' | 'within' | 'over' | 'unknown'>('any');
+  const [providerFilter, setProviderFilter] = useState<string>('any'); // 'any', 'none' or a provider id
+  const { providers, ready: providersReady } = useProviders();
+  const setProvider = useSetPropertyProvider();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // List or map; remembered on this device
   const [view, setViewState] = useState<'list' | 'map'>(() => {
@@ -126,12 +130,17 @@ export function PropertiesPage() {
         if (!c || c.status === 'unknown') return false;
         return lhaFilter === 'over' ? c.status === 'over' : c.status !== 'over';
       })
+      .filter((p) => {
+        if (providerFilter === 'any') return true;
+        const who = providerFor(p, providers);
+        return providerFilter === 'none' ? !who : who?.id === providerFilter;
+      })
       .filter((p) => !needle || [p.address_line, p.area, p.borough, p.postcode, p.property_type, p.source_tag]
         .some((x) => x?.toLowerCase().includes(needle)))
       .sort((a, b) => Number(justAdded.has(b.id)) - Number(justAdded.has(a.id))
         || (matches.get(b.id)?.length ?? 0) - (matches.get(a.id)?.length ?? 0)
         || b.created_at.localeCompare(a.created_at));
-  }, [properties, status, borough, q, justAdded, matches, lhaFilter]);
+  }, [properties, status, borough, q, justAdded, matches, lhaFilter, providerFilter, providers]);
 
   const toggle = (id: string) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const selectedRows = rows.filter((p) => selected.has(p.id));
@@ -245,6 +254,17 @@ export function PropertiesPage() {
                 <option value="unknown">LHA not worked out</option>
               </select>
             </label>
+            {providersReady && providers.length > 0 && (
+              <label className="flex flex-col gap-1">
+                <span className="flex items-center gap-1.5 text-[13px] font-medium text-[var(--ink-muted)]">Provider <Help topic="providers" /></span>
+                <select value={providerFilter} onChange={(e) => setProviderFilter(e.target.value)}
+                  className="min-h-[40px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]">
+                  <option value="any">Any provider</option>
+                  {providers.map((pr) => <option key={pr.id} value={pr.id}>{pr.tag}{pr.name !== pr.tag ? ` · ${pr.name}` : ''}</option>)}
+                  <option value="none">No provider set</option>
+                </select>
+              </label>
+            )}
             <label className="flex min-w-[220px] flex-1 flex-col gap-1">
               <span className="text-[13px] font-medium text-[var(--ink-muted)]">Search</span>
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Address, area, postcode, source"
@@ -267,6 +287,23 @@ export function PropertiesPage() {
           {selectedRows.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-4 py-2">
               <span className="text-[15px] text-[var(--ink)]">{selectedRows.length} selected</span>
+              {providersReady && (
+                <select value="" aria-label="Set the provider for the selected properties"
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (!v) return;
+                    const pr = v === 'none' ? null : providers.find((x) => x.id === v) ?? null;
+                    setProvider.mutate({ properties: selectedRows, provider: pr }, {
+                      onSuccess: () => toast(`${selectedRows.length} ${selectedRows.length === 1 ? 'property' : 'properties'} now ${pr ? `from ${pr.tag}` : 'with no provider'}`, 'success'),
+                      onError: (err) => toast((err as Error).message, 'danger'),
+                    });
+                  }}
+                  className="h-9 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[13px] text-[var(--ink)]">
+                  <option value="">Set provider…</option>
+                  {providers.filter((x) => x.active).map((pr) => <option key={pr.id} value={pr.id}>{pr.tag}{pr.name !== pr.tag ? ` · ${pr.name}` : ''}</option>)}
+                  <option value="none">No provider</option>
+                </select>
+              )}
               <WhatsAppLink properties={selectedRows} label={`Share ${selectedRows.length === 1 ? 'it' : `all ${selectedRows.length}`} on WhatsApp`} />
               <Button className="min-h-0 px-3 py-1.5 text-[13px]" onClick={bulkLet}>Mark as let</Button>
               <Button variant="danger" className="min-h-0 px-3 py-1.5 text-[13px]" onClick={bulkDelete}>Delete</Button>
@@ -392,6 +429,7 @@ function PasteImport({ existing, applicants, canClose, onClose, onAdded, onNeeds
   const [blocked, setBlocked] = useState(false); // the database is not ready for lists yet
   const [text, setText] = useState('');
   const [source, setSource] = useState('');
+  const { providers, ready: providersReady } = useProviders();
   const [drafts, setDrafts] = useState<Draft[] | null>(null);
   const [shared, setShared] = useState<string[]>([]);
   const [skipped, setSkipped] = useState<string[]>([]);
@@ -456,9 +494,15 @@ function PasteImport({ existing, applicants, canClose, onClose, onAdded, onNeeds
           />
           <div className="flex flex-wrap items-end justify-between gap-3">
             <label className="flex flex-col gap-1">
-              <span className="text-[13px] font-medium text-[var(--ink-muted)]">Where is this list from? (optional)</span>
-              <input value={source} onChange={(e) => setSource(e.target.value)} placeholder="e.g. BP, SR, landlord name"
+              <span className="text-[13px] font-medium text-[var(--ink-muted)]">Who is this list from? (optional)</span>
+              <input value={source} onChange={(e) => setSource(e.target.value)} placeholder="e.g. BP, SR, ZUB" list="keel-provider-tags"
                 className="min-h-[40px] w-[260px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-3 text-[15px] text-[var(--ink)] outline-none focus:border-[var(--hull)]" />
+              <datalist id="keel-provider-tags">{providers.filter((x) => x.active).map((pr) => <option key={pr.id} value={pr.tag}>{pr.name}</option>)}</datalist>
+              {source.trim() && providersReady && (
+                <span className="text-[12px] text-[var(--ink-muted)]">
+                  {providerFor({ source_tag: source }, providers) ? `Properties will be from ${providerFor({ source_tag: source }, providers)!.tag} (${providerFor({ source_tag: source }, providers)!.name})` : 'No provider with this tag yet: add one in Settings, Providers'}
+                </span>
+              )}
             </label>
             <Button variant="primary" onClick={read} disabled={!text.trim()}>Read list and find matches</Button>
           </div>
@@ -609,6 +653,7 @@ function PropertyCard({ p, matches, deals, names, sent, openRequests, isNew, sel
           <div className="mt-0.5 text-[14px] text-[var(--ink-muted)]">{facts.join(' · ') || 'No details'}</div>
           <div className="mt-1.5"><LhaLine property={p} /></div>
           <InPlay deals={deals} names={names} />
+          <ProviderPicker property={p} />
         </div>
         <div className="flex w-full flex-wrap items-center gap-2 pl-7 sm:w-auto sm:justify-end sm:pl-0">
           {openRequests > 0 && (
@@ -654,6 +699,34 @@ function PropertyCard({ p, matches, deals, names, sent, openRequests, isNew, sel
 }
 
 /** One client: strength, who, the reasons in brief (all of them on hover), and ways to reach them. */
+/** Who supplies this property: picked from the providers, or worked out from the list's tag. */
+function ProviderPicker({ property }: { property: Property }) {
+  const { providers, ready } = useProviders();
+  const setProvider = useSetPropertyProvider();
+  const { toast } = useToast();
+  if (!ready || providers.length === 0) return null;
+  const who = providerFor(property, providers);
+  const byTagOnly = who && !property.provider_id;
+  return (
+    <label className="mt-1.5 inline-flex flex-wrap items-center gap-1.5 text-[13px] text-[var(--ink-muted)]">
+      Provider
+      <select value={who?.id ?? ''} disabled={setProvider.isPending} aria-label={`Provider of ${property.address_line}`}
+        onChange={(e) => {
+          const pr = providers.find((x) => x.id === e.target.value) ?? null;
+          setProvider.mutate({ properties: [property], provider: pr }, {
+            onSuccess: () => toast(pr ? `${property.address_line.split(',')[0]} is from ${pr.tag}` : 'Provider cleared', 'success'),
+            onError: (err) => toast((err as Error).message, 'danger'),
+          });
+        }}
+        className={`h-7 rounded border bg-[var(--surface)] px-1.5 text-[13px] ${who ? 'border-[var(--line)] font-medium text-[var(--ink)]' : 'border-[var(--note-fg)] text-[var(--note-fg)]'}`}>
+        <option value="">{who ? 'No provider' : 'Not set: choose…'}</option>
+        {providers.filter((x) => x.active || x.id === who?.id).map((pr) => <option key={pr.id} value={pr.id}>{pr.tag}{pr.name !== pr.tag ? ` · ${pr.name}` : ''}</option>)}
+      </select>
+      {byTagOnly && <span className="text-[12px]" title="Worked out from the tag on its list; pick one to set it for good">from the list tag</span>}
+    </label>
+  );
+}
+
 /** Who is going for this property beyond being sent it: "Anna (viewing Thu 2 Oct, 2pm) · Diana (offer made)". */
 function InPlay({ deals, names }: { deals: Deal[]; names: Map<string, string> }) {
   const going = deals.filter((d) => d.status !== 'sent' && d.status !== 'fell_through');
