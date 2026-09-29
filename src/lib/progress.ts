@@ -13,6 +13,7 @@ import type { Applicant, Deal, DealStatus } from './types';
 import { activeSettings } from './settings';
 import { isActive } from './search';
 import { addDays, dayLabel, isoDay } from './calls';
+import { clockTime, shortDay } from './format';
 
 export const DEAL_STEPS: ReadonlyArray<{ key: Exclude<DealStatus, 'fell_through'>; label: string }> = [
   { key: 'sent', label: 'Sent' },
@@ -82,7 +83,7 @@ export function shouldAdvance(current: ApplicantStage, target: ApplicantStage | 
 
 // ── Next step ──────────────────────────────────────────────────────
 
-const time = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true }).replace(':00', '').replace(' ', '');
+const time = clockTime;
 
 /** "Thursday 2 October, 2pm" */
 export function viewingWords(iso: string): string {
@@ -95,7 +96,7 @@ export function viewingShort(iso: string): string {
   const day = isoDay(new Date(iso));
   const label = dayLabel(day);
   const named = /^(Today|Tomorrow|Yesterday)$/.test(label) ? label
-    : new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+    : shortDay(iso);
   return `${named}, ${time(iso)}`;
 }
 

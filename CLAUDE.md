@@ -13,10 +13,11 @@ src/
               whatsapp.ts (wa.me links and message wording for sending properties),
               geo.ts (placing postcodes via postcodes.io, cached per device; a client's areas as districts),
               progress.ts (deals: each property a client is going for; stage follows deals, next steps, stuck),
+              requests.ts (providers' rules, request messages to providers, follow-ups; never phone, surname or health),
               help.ts (words behind the "?" help buttons)
   components/ ui primitives on tokens (Button, Badge, Card, Field, Toast, KeelLine,
               Icon, Visuals: avatars, page headers, stat tiles, SVG charts)
-  features/   dashboard/ bin/ pipeline/ calls/ applicants/ properties/ settings/ map/ (Leaflet, lazy-loaded) progress/
+  features/   dashboard/ bin/ pipeline/ calls/ applicants/ properties/ settings/ map/ (Leaflet, lazy-loaded) progress/ requests/ (request sheet, Awaiting providers)
   types/      extraction.ts (shared contract, imported by netlify functions)
 netlify/functions/ extract.ts, lib/prompt.ts, lib/claude.ts
 supabase/migrations/

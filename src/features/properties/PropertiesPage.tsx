@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Button, Card, Help, Icon, PageHeader, TierBadge, UrgentChip, useToast } from '../../components/ui';
 import {
   NeedsDatabaseUpdate, PROPERTY_STATUS_LABEL, sentKey, useAddProperties, useApplicants, useDeleteProperties, useProperties,
-  useDeals, useSentOnWhatsApp, useSetPropertyStatus,
+  useDeals, useRequests, useSentOnWhatsApp, useSetPropertyStatus,
 } from '../../lib/hooks';
 import { isLocalProperty, localProperties } from '../../lib/localProperties';
 import type { NewProperty, SavedProperty, SentOnWhatsApp } from '../../lib/hooks';
@@ -19,6 +19,7 @@ import { LhaChip, LhaLine } from './Lha';
 import { SentTag, WhatsAppLink } from './WhatsApp';
 import { MapView } from '../map/MapView';
 import { DealChip } from '../progress/Progress';
+import { RequestButton } from '../requests/RequestSheet';
 import { effectiveTier, isUrgent } from '../../lib/search';
 import { tierLabel } from '../../lib/tiering';
 import { money, shortDate } from '../../lib/format';
@@ -52,6 +53,7 @@ export function PropertiesPage() {
   const add = useAddProperties();
   const sent = useSentOnWhatsApp();
   const { deals } = useDeals();
+  const { requests } = useRequests();
   const names = useMemo(() => new Map(applicants.map((a) => [a.id, a.full_name])), [applicants]);
   // each property's deals, by id (or address for properties only on this device)
   const dealsOf = useMemo(() => {
@@ -156,6 +158,7 @@ export function PropertiesPage() {
       matches={matches.get(p.id) ?? []}
       deals={dealsOf(p)}
       names={names}
+      openRequests={requests.filter((r) => r.status === 'sent' && (r.property_id === p.id || r.property_address === p.address_line)).length}
       sent={sent}
       isNew={justAdded.has(p.id)}
       selected={selected.has(p.id)}
@@ -569,8 +572,8 @@ function PasteImport({ existing, applicants, canClose, onClose, onAdded, onNeeds
 
 // ── Property card with its matches ────────────────────────────────
 
-function PropertyCard({ p, matches, deals, names, sent, isNew, selected, onToggle, onStatus, onDelete }: {
-  p: Property; matches: Match[]; deals: Deal[]; names: Map<string, string>; sent: Map<string, SentOnWhatsApp>; isNew: boolean; selected: boolean;
+function PropertyCard({ p, matches, deals, names, sent, openRequests, isNew, selected, onToggle, onStatus, onDelete }: {
+  p: Property; matches: Match[]; deals: Deal[]; names: Map<string, string>; sent: Map<string, SentOnWhatsApp>; openRequests: number; isNew: boolean; selected: boolean;
   onToggle: () => void; onStatus: (s: Property['status']) => void; onDelete: () => void;
 }) {
   const [showAll, setShowAll] = useState(false);
@@ -594,10 +597,10 @@ function PropertyCard({ p, matches, deals, names, sent, isNew, selected, onToggl
 
   return (
     <Card className={`overflow-hidden ${isNew ? 'ring-2 ring-[var(--accent)]' : ''}`}>
-      <div className="flex items-start gap-3 px-5 py-4">
+      <div className="flex flex-wrap items-start gap-3 px-5 py-4">
         <input type="checkbox" checked={selected} onChange={onToggle} aria-label={`Select ${p.address_line}`}
           className="mt-1 h-4 w-4 shrink-0 accent-[var(--accent)]" />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-[240px]">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="m-0 text-[17px] font-semibold text-[var(--ink)]">{p.address_line}</h3>
             {isNew && <span className="rounded bg-[var(--accent)] px-1.5 py-0.5 text-[12px] font-semibold text-[var(--on-accent)]">New</span>}
@@ -607,7 +610,14 @@ function PropertyCard({ p, matches, deals, names, sent, isNew, selected, onToggl
           <div className="mt-1.5"><LhaLine property={p} /></div>
           <InPlay deals={deals} names={names} />
         </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 pl-7 sm:w-auto sm:justify-end sm:pl-0">
+          {openRequests > 0 && (
+            <span className="inline-flex items-center gap-1 whitespace-nowrap rounded bg-[var(--chip-bg)] px-1.5 py-0.5 text-[12px] font-medium text-[var(--chip-fg)]"
+              title="Requests to the provider still waiting on a reply">
+              <Icon name="send" size={11} /> {openRequests} open
+            </span>
+          )}
+          <RequestButton property={p} />
           <WhatsAppLink properties={[p]} />
           <select value={p.status} onChange={(e) => onStatus(e.target.value as Property['status'])} aria-label={`Status of ${p.address_line}`}
             className="min-h-[36px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[13px] text-[var(--ink)]">

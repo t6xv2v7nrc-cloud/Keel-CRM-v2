@@ -40,6 +40,8 @@ export interface Applicant {
   // 0009_progress.sql
   next_step?: string | null;        // what to do next; its date is next_call_at
   stage_changed_at?: string | null; // when the stage last moved
+  // 0010_providers_requests.sql
+  share_with_landlords?: boolean;   // OK to send their details to landlords and agents
   created_at: string;
   updated_at: string;
 }
@@ -76,6 +78,7 @@ export interface Property {
   area: string | null;
   source_tag: string | null;
   lha_area?: string | null; // 0008: LHA area (BRMA) chosen by hand
+  provider_id?: string | null; // 0010: who supplied it
   created_at: string;
   updated_at: string;
 }
@@ -132,6 +135,55 @@ export interface Deal {
   move_in_on: string | null;
   fell_through_reason: string | null;
   notes: string | null;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** What a provider will take (0010). All optional; an empty rule means anyone. */
+export interface ProviderRules {
+  benefits_required?: string[];  // any of: "PIP", "LCWRA", "UC", "HB", "Full-time"
+  household_allowed?: string[];  // "Single", "Couple", "Family"
+  max_rent?: number | null;
+  boroughs?: string[];           // councils they take clients from
+  furnished?: 'furnished' | 'unfurnished' | null;
+}
+
+/** Who supplies properties: the source tag on a stock list (0010). */
+export interface Provider {
+  id: string;
+  name: string;
+  contact_first_name: string | null;
+  company: string | null;
+  tag: string;
+  whatsapp: string | null; // digits only, e.g. 447700900123
+  email: string | null;
+  rules: ProviderRules;
+  fee_terms: string | null;
+  notes: string | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type RequestType = 'availability' | 'viewing' | 'details';
+export type RequestStatus = 'sent' | 'confirmed' | 'declined' | 'no_reply' | 'cancelled';
+
+/** A request sent to a provider on WhatsApp (0010). */
+export interface ProviderRequest {
+  id: string;
+  provider_id: string | null;
+  property_id: string | null;
+  property_address: string;
+  client_ids: string[];
+  type: RequestType;
+  message: string;
+  slots: string[];
+  status: RequestStatus;
+  sent_at: string;
+  follow_up_at: string | null;
+  outcome_note: string | null;
+  override_reason: string | null;
   created_by?: string | null;
   created_at: string;
   updated_at: string;

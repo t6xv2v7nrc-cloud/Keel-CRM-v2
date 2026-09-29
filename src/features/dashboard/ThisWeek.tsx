@@ -3,12 +3,13 @@ import { Link } from 'react-router-dom';
 import { Card, CardHeader, Empty } from '../../components/ui';
 import { useDeals } from '../../lib/hooks';
 import { dayLabel, isoDay } from '../../lib/calls';
+import { clockTime } from '../../lib/format';
 import { isLive, shortAddress, stuckDays, viewingsBetween } from '../../lib/progress';
 import { isActive } from '../../lib/search';
 import type { Applicant, Deal } from '../../lib/types';
 import { ReminderLink, STAGE_NAME, StuckChip, dealWords } from '../progress/Progress';
 
-const time = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true }).replace(':00', '').replace(' ', '');
+const time = clockTime;
 
 /** Home: the week's viewings (with a one-tap reminder) and the clients who have stopped moving. */
 export function ThisWeek({ applicants }: { applicants: Applicant[] }) {
@@ -50,7 +51,7 @@ export function ThisWeek({ applicants }: { applicants: Applicant[] }) {
     <Card>
       <CardHeader icon="calendar" title="This week" sub={`${viewingCount} ${viewingCount === 1 ? 'viewing' : 'viewings'} · ${stuck.length} stuck`} help="progress" />
       <div className="grid gap-6 p-5 lg:grid-cols-2">
-        <section className="flex flex-col gap-3">
+        <section className="flex min-w-0 flex-col gap-3">
           <h3 className="m-0 text-[13px] font-medium uppercase tracking-wider text-[var(--ink-muted)]">Viewings</h3>
           {viewings.length === 0 ? (
             <p className="m-0 text-[15px] text-[var(--ink-muted)]">None booked for the next 7 days. Book one from a client's Progress.</p>
@@ -76,7 +77,7 @@ export function ThisWeek({ applicants }: { applicants: Applicant[] }) {
           ))}
         </section>
 
-        <section className="flex flex-col gap-3">
+        <section className="flex min-w-0 flex-col gap-3">
           <div className="flex items-center justify-between">
             <h3 className="m-0 text-[13px] font-medium uppercase tracking-wider text-[var(--ink-muted)]">Needs a push</h3>
             {stuck.length > 6 && <Link to="/pipeline?progress=stuck" className="text-[13px] text-[var(--link)] hover:underline">See all {stuck.length}</Link>}

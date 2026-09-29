@@ -13,6 +13,7 @@ import { tierColor, tierCount, tierLabel, tierNumbers } from '../../lib/tiering'
 import type { ApplicantStage } from '../../types/extraction';
 import type { Activity } from '../../lib/types';
 import { ThisWeek } from './ThisWeek';
+import { AwaitingProviders } from '../requests/AwaitingProviders';
 
 const FUNNEL: Array<{ stage: ApplicantStage; label: string }> = [
   { stage: 'lead', label: 'Lead' }, { stage: 'referred', label: 'Referred' }, { stage: 'viewing', label: 'Viewing' },
@@ -108,6 +109,8 @@ export function DashboardPage() {
       </div>
 
       <ThisWeek applicants={applicants} />
+
+      <AwaitingProviders applicants={applicants} />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
         {/* Triage */}
@@ -214,7 +217,7 @@ export function DashboardPage() {
                 </>
               );
               return (
-                <li key={act.id}>
+                <li key={act.id} className="min-w-0">
                   {name ? (
                     <Link to={`/applicants/${act.entity_id}`} className="flex items-center gap-3 rounded-md px-3 py-2 hover:bg-[var(--surface-2)]">{inner}</Link>
                   ) : (
@@ -234,6 +237,7 @@ function activityIcon(a: Activity): IconName {
   if (a.kind === 'call') return 'phone';
   if (a.kind === 'whatsapp') return 'chat';
   if (a.kind === 'progress') return 'flag';
+  if (a.kind === 'request') return 'send';
   if (a.kind === 'stage_change') return 'arrowRight';
   if (a.entity_type === 'property') return 'building';
   if (a.kind === 'created') return a.body.includes('screenshot') ? 'inbox' : 'plus';

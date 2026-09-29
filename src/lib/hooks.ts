@@ -8,7 +8,10 @@ import { addDays, OUTCOME_LABEL, todayIso } from './calls';
 import { DEAL_LABEL, isLive, shouldAdvance, stageFromDeals, stepAfter, takesOver, viewingWords } from './progress';
 import { computeTier } from './tiering';
 import { shortDate } from './format';
-import type { Activity, Applicant, Call, CallOutcome, Deal, DealStatus, Profile, Property } from './types';
+import type {
+  Activity, Applicant, Call, CallOutcome, Deal, DealStatus, Profile, Property, Provider, ProviderRequest, RequestStatus, RequestType,
+} from './types';
+import { followUpFrom, providerNumber, REQUEST_LABEL } from './requests';
 import type { ApplicantStage } from '../types/extraction';
 
 // ── Applicants ──────────────────────────────────────────────────────
@@ -607,18 +610,17 @@ async function updateApplicant(id: string, patch: Record<string, unknown>) {
 }
 
 /** Every deal (a client going for a property), most recently moved first. `ready` is false until 0009 is run. */
+export async function fetchDeals(): Promise<{ deals: Deal[]; ready: boolean }> {
+  const { data, error } = await supabase.from('deals').select('*').order('updated_at', { ascending: false });
+  if (error) {
+    if (missingTable(error)) return { deals: [], ready: false };
+    throw error;
+  }
+  return { deals: data as Deal[], ready: true };
+}
+
 export function useDeals() {
-  const q = useQuery({
-    queryKey: ['deals'],
-    queryFn: async (): Promise<{ deals: Deal[]; ready: boolean }> => {
-      const { data, error } = await supabase.from('deals').select('*').order('updated_at', { ascending: false });
-      if (error) {
-        if (missingTable(error)) return { deals: [], ready: false };
-        throw error;
-      }
-      return { deals: data as Deal[], ready: true };
-    },
-  });
+  const q = useQuery({ queryKey: ['deals'], queryFn: fetchDeals });
   return { deals: q.data?.deals ?? [], ready: q.data?.ready ?? true, isLoading: q.isLoading };
 }
 
@@ -759,6 +761,163 @@ export function useSetNextStep() {
     onSuccess: (_d, { applicant }) => {
       qc.invalidateQueries({ queryKey: ['applicants'] });
       qc.invalidateQueries({ queryKey: ['applicants', applicant.id] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+// ── Providers and requests (0010) ───────────────────────────────────
+const PROVIDERS_UPDATE =
+  'Providers and requests need a one-off database update: run supabase/migrations/0010_providers_requests.sql in the Supabase SQL Editor.';
+
+/** Every provider, by tag. `ready` is false until 0010 is run. */
+export function useProviders() {
+  const q = useQuery({
+    queryKey: ['providers'],
+    queryFn: async (): Promise<{ providers: Provider[]; ready: boolean }> => {
+      const { data, error } = await supabase.from('providers').select('*').order('tag');
+      if (error) {
+        if (missingTable(error)) return { providers: [], ready: false };
+        throw error;
+      }
+      return { providers: (data as Provider[]).map((p) => ({ ...p, rules: p.rules ?? {} })), ready: true };
+    },
+  });
+  return { providers: q.data?.providers ?? [], ready: q.data?.ready ?? false, isLoading: q.isLoading };
+}
+
+export type ProviderDraft = Omit<Provider, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+
+/** Add or change a provider, then link any properties carrying its tag. */
+export function useSaveProvider() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (p: ProviderDraft): Promise<Provider> => {
+      const tag = p.tag.trim().toUpperCase();
+      if (!tag || !p.name.trim()) throw new Error('A provider needs a name and a tag.');
+      const whatsapp = p.whatsapp?.trim() ? providerNumber(p.whatsapp) : null;
+      if (p.whatsapp?.trim() && !whatsapp) throw new Error('That WhatsApp number does not look right. Use a UK mobile (07...) or +country code.');
+      const row = {
+        name: p.name.trim(), contact_first_name: p.contact_first_name?.trim() || null, company: p.company?.trim() || null, tag, whatsapp,
+        email: p.email?.trim() || null, rules: p.rules ?? {}, fee_terms: p.fee_terms?.trim() || null, notes: p.notes?.trim() || null, active: p.active,
+      };
+      const res = p.id
+        ? await supabase.from('providers').update(row).eq('id', p.id).select().single()
+        : await supabase.from('providers').insert(row).select().single();
+      if (res.error) {
+        if (res.error.code === '42501') throw new Error('Only the owner can change providers.');
+        if (res.error.code === '23505') throw new Error(`The tag ${tag} is already used by another provider.`);
+        throw missingTable(res.error) ? new Error(PROVIDERS_UPDATE) : res.error;
+      }
+      const saved = res.data as Provider;
+      // properties from lists tagged with it now belong to it
+      await supabase.from('properties').update({ provider_id: saved.id }).is('provider_id', null).ilike('source_tag', tag);
+      await supabase.from('activities').insert({
+        entity_type: 'provider', entity_id: saved.id, kind: p.id ? 'updated' : 'created',
+        body: p.id ? `${p.active ? 'Updated' : 'Deactivated'} provider ${tag} (${row.name})` : `Added provider ${tag} (${row.name})`,
+      });
+      return saved;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['providers'] });
+      qc.invalidateQueries({ queryKey: ['properties'] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+/** Every request to a provider, newest first. `ready` is false until 0010 is run. */
+export function useRequests() {
+  const q = useQuery({
+    queryKey: ['requests'],
+    queryFn: async (): Promise<{ requests: ProviderRequest[]; ready: boolean }> => {
+      const { data, error } = await supabase.from('requests').select('*').order('sent_at', { ascending: false }).limit(1000);
+      if (error) {
+        if (missingTable(error)) return { requests: [], ready: false };
+        throw error;
+      }
+      return { requests: (data as ProviderRequest[]).map((r) => ({ ...r, slots: Array.isArray(r.slots) ? r.slots : [], client_ids: r.client_ids ?? [] })), ready: true };
+    },
+  });
+  return { requests: q.data?.requests ?? [], ready: q.data?.ready ?? false };
+}
+
+/**
+ * Log a request as it is opened in WhatsApp: on the request list (to chase in
+ * 24 hours), on each client's timeline and the property's. Asking for a
+ * viewing or sending details also starts tracking the property for them.
+ */
+export function useCreateRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ provider, property, clients, type, message, slots, overrideReason, problemsOf }: {
+      provider: Provider; property: Pick<Property, 'id' | 'address_line'>; clients: Applicant[]; type: RequestType;
+      message: string; slots: string[]; overrideReason: string | null;
+      /** each client's rule problems (and the property's, under ''), for the timeline when sent anyway */
+      problemsOf: Record<string, string[]>;
+    }) => {
+      const sent = new Date();
+      const inDb = property.id && !isLocalProperty(property.id);
+      const { error } = await supabase.from('requests').insert({
+        provider_id: provider.id, property_id: inDb ? property.id : null, property_address: property.address_line,
+        client_ids: clients.map((c) => c.id), type, message, slots, status: 'sent',
+        sent_at: sent.toISOString(), follow_up_at: followUpFrom(sent).toISOString(), override_reason: overrideReason,
+      });
+      if (error) throw missingTable(error) ? new Error(PROVIDERS_UPDATE) : error;
+      const what = `${REQUEST_LABEL[type].done} from ${provider.tag} for ${property.address_line}`;
+      const override = (id: string) => {
+        const theirs = [...(problemsOf[''] ?? []), ...(problemsOf[id] ?? [])];
+        return overrideReason && theirs.length ? `. Sent although: ${theirs.join('; ')}. Reason: ${overrideReason}` : '';
+      };
+      if (clients.length) {
+        await supabase.from('activities').insert(clients.map((c) => ({ entity_type: 'applicant', entity_id: c.id, kind: 'request', body: `${what}${override(c.id)}` })));
+      }
+      if (inDb) {
+        await supabase.from('activities').insert({
+          entity_type: 'property', entity_id: property.id, kind: 'request',
+          body: `${REQUEST_LABEL[type].done} from ${provider.tag}${clients.length ? ` for ${clients.map((c) => c.full_name.split(' ')[0]).join(', ')}` : ''}`,
+        });
+      }
+      if (type !== 'availability' && clients.length) {
+        await supabase.from('deals').upsert(
+          clients.map((c) => ({ applicant_id: c.id, property_id: inDb ? property.id : null, address: property.address_line, status: 'interested' })),
+          { onConflict: 'applicant_id,address', ignoreDuplicates: true },
+        ); // before 0009 there is no deals table; the request still counts
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['requests'] });
+      qc.invalidateQueries({ queryKey: ['deals'] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+/** Record what a provider said (or that you chased them), on the request and each client's timeline. */
+export function useUpdateRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ request, tag, status, note, chased }: {
+      request: ProviderRequest; tag: string; status?: RequestStatus; note?: string | null; chased?: boolean;
+    }) => {
+      const patch: Partial<ProviderRequest> = {};
+      if (status) patch.status = status;
+      if (note !== undefined) patch.outcome_note = note;
+      if (chased) patch.follow_up_at = followUpFrom(new Date()).toISOString();
+      const { error } = await supabase.from('requests').update(patch).eq('id', request.id);
+      if (error) throw error;
+      const body = chased ? `Chased ${tag} about ${request.property_address}`
+        : status === 'confirmed' ? `${tag} confirmed ${request.property_address}${note ? `: ${note}` : ''}`
+        : status === 'declined' ? `${tag} declined ${request.property_address}${note ? `: ${note}` : ''}`
+        : status === 'no_reply' ? `No reply from ${tag} about ${request.property_address}`
+        : status === 'cancelled' ? `Request to ${tag} about ${request.property_address} cancelled`
+        : `Request to ${tag} updated`;
+      if (request.client_ids.length) {
+        await supabase.from('activities').insert(request.client_ids.map((id) => ({ entity_type: 'applicant', entity_id: id, kind: 'request', body })));
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['requests'] });
       qc.invalidateQueries({ queryKey: ['activities'] });
     },
   });

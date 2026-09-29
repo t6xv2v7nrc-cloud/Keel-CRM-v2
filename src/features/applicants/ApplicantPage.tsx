@@ -4,7 +4,8 @@ import {
   Avatar, Button, Card, CardHeader, Empty, Help, Icon, StageBadge, TierBadge, UrgentChip, useToast,
 } from '../../components/ui';
 import {
-  sentKey, useActivities, useApplicant, useAssign, useCalls, useDeals, useDeleteApplicant, usePeople, useProperties, useSentOnWhatsApp,
+  sentKey, useActivities, useApplicant, useAssign, useCalls, useDeals, useDeleteApplicant, usePeople, useProperties, useProviders, useRequests,
+  useSentOnWhatsApp,
 } from '../../lib/hooks';
 import { bestFew, brief, matchesForApplicant } from '../../lib/propertyMatch';
 import { money, timeAgo } from '../../lib/format';
@@ -18,6 +19,7 @@ import { LhaChip } from '../properties/Lha';
 import { SentTag, WhatsAppLink } from '../properties/WhatsApp';
 import { LazyMap, MapKey } from '../map/MapView';
 import { NextStepRow, ProgressCard, StuckChip } from '../progress/Progress';
+import { RequestButton, RequestChip } from '../requests/RequestSheet';
 import { stuckDays } from '../../lib/progress';
 import { clientAreas, placeKey } from '../../lib/geo';
 
@@ -104,7 +106,7 @@ function TimelineRow({ act }: { act: Activity }) {
   const fromScreenshot = act.body.includes('screenshot') || act.inbox_item_id != null;
   const isCall = act.kind === 'call';
   const isWhatsApp = act.kind === 'whatsapp';
-  const isProgress = act.kind === 'progress';
+  const isProgress = act.kind === 'progress' || act.kind === 'request';
   return (
     <li className="relative flex gap-3 pl-5">
       <span aria-hidden className="absolute left-0 top-1.5 h-[9px] w-[9px] rounded-full ring-2 ring-[var(--surface)]"
@@ -112,7 +114,7 @@ function TimelineRow({ act }: { act: Activity }) {
       <div className="flex-1">
         <div className="text-[15px] text-[var(--ink)]">{act.body}</div>
         <div className="mt-0.5 flex items-center gap-2 text-[13px] text-[var(--ink-muted)]">
-          <span>{isCall ? 'Call' : isWhatsApp ? 'WhatsApp' : isProgress ? 'Progress' : act.kind.replace('_', ' ')}</span>
+          <span>{isCall ? 'Call' : isWhatsApp ? 'WhatsApp' : act.kind === 'request' ? 'Request' : isProgress ? 'Progress' : act.kind.replace('_', ' ')}</span>
           <span>·</span>
           <span>{timeAgo(act.created_at)}</span>
           {who && <><span>·</span><span>by {who}</span></>}
@@ -240,6 +242,7 @@ function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
                       {m.cautions[0] && <span className="text-[var(--note-fg)]"> · {brief(m.cautions[0])}</span>}
                     </div>
                   </div>
+                  <RequestButton property={p} client={applicant} compact />
                   <WhatsAppLink to={applicant} properties={[p]} icon />
                 </li>
               );
@@ -269,6 +272,9 @@ function HeroCard({ applicant, lastCall, onLogCall }: { applicant: Applicant; la
   const next = applicant.next_call_at;
   const { deals } = useDeals();
   const stuck = stuckDays(applicant, deals);
+  const { requests } = useRequests();
+  const { providers } = useProviders();
+  const latestRequest = requests.find((r) => r.status === 'sent' && r.client_ids.includes(applicant.id)) ?? null;
   return (
     <Card className="overflow-hidden">
       <div className="h-1.5 w-full" style={{ background: tier === 1 ? 'var(--accent)' : tier === 2 ? 'var(--accent-soft)' : 'var(--paper-2)' }} />
@@ -283,6 +289,7 @@ function HeroCard({ applicant, lastCall, onLogCall }: { applicant: Applicant; la
                 {isUrgent(applicant) && <UrgentChip />}
                 <StageBadge stage={applicant.stage} />
                 {stuck !== null && <StuckChip days={stuck} />}
+                {latestRequest && <RequestChip request={latestRequest} providers={providers} />}
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[15px] text-[var(--ink-muted)]">
                 {applicant.phone && <a href={`tel:${applicant.phone}`} className="inline-flex items-center gap-1.5 font-mono hover:text-[var(--link)]"><Icon name="phone" size={15} />{applicant.phone}</a>}

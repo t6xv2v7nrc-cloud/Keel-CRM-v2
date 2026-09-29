@@ -27,12 +27,13 @@ export function CardHeader({
   children?: ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-2.5 border-b border-[var(--line)] px-5 py-3">
+    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 border-b border-[var(--line)] px-5 py-3">
       {icon && <Icon name={icon} size={17} className="text-[var(--accent)]" />}
       <h3 className="m-0 text-[15px] font-semibold text-[var(--ink)]">{title}</h3>
       {help && <Help topic={help} />}
       {sub && <span className="font-mono text-[13px] text-[var(--ink-muted)]">{sub}</span>}
-      {children && <div className="ml-auto flex items-center gap-2">{children}</div>}
+      {/* on a phone the buttons drop under the title rather than push the page wider */}
+      {children && <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">{children}</div>}
     </div>
   );
 }

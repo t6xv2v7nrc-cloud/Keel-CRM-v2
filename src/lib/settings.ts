@@ -106,6 +106,8 @@ export interface AppSettings {
   whatsappMessage: string;
   /** Wording for a viewing reminder ({first name}, {address}, {when}, {my name}). */
   whatsappReminder: string;
+  /** Wording for requests to providers, per type, plus a short chase. See lib/requests.ts for the placeholders. */
+  requestTemplates: { availability: string; viewing: string; details: string; chase: string };
   /** Page to open after signing in. */
   startPage: '/' | '/calls' | '/pipeline' | '/bin' | '/properties';
   /** Which clients the Calls page shows first. */
@@ -127,6 +129,27 @@ export const DEFAULT_WHATSAPP_REMINDER = [
   '{my name}, Keel Lettings',
 ].join('\n');
 
+// A line with a {client_...} placeholder is repeated once per client, so one message can cover several.
+export const DEFAULT_REQUEST_TEMPLATES = {
+  availability: [
+    'Salam {provider_first_name}, is {property_address} ({property_rent}) still available?',
+    'I have a client: {client_household}, {client_benefits}',
+    'Thanks, {my_name}, Keel Lettings',
+  ].join('\n'),
+  viewing: [
+    'Salam {provider_first_name}, can I book a viewing at {property_address}?',
+    'Client: {client_first_name}, {client_household}, {client_benefits}',
+    'Available: {slots}',
+    'Thanks, {my_name}, Keel Lettings',
+  ].join('\n'),
+  details: [
+    'Salam {provider_first_name}, here are my client details for {property_address} ({property_rent}):',
+    'Client: {client_first_name}, {client_household}, {client_benefits}',
+    'Thanks, {my_name}, Keel Lettings',
+  ].join('\n'),
+  chase: 'Salam {provider_first_name}, just checking on my message about {property_address}. Thanks, {my_name}',
+};
+
 export const DEFAULT_SETTINGS: AppSettings = {
   tierLogic: DEFAULT_TIER_LOGIC,
   membersCanSetTier: true,
@@ -144,6 +167,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lhaLeeway: 50,
   whatsappMessage: DEFAULT_WHATSAPP_MESSAGE,
   whatsappReminder: DEFAULT_WHATSAPP_REMINDER,
+  requestTemplates: DEFAULT_REQUEST_TEMPLATES,
   startPage: '/',
   callsView: 'everyone',
 };

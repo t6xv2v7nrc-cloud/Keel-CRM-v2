@@ -37,6 +37,7 @@ const PATHS = {
   pound: <><path d="M16 7.2A3.8 3.8 0 0 0 9 9.3V14c0 2.4-.8 4.2-2.5 5.5H17.5" /><path d="M6.5 13.5H14" /></>,
   chat: <><path d="M12 3.8a8.2 8.2 0 0 1 0 16.4c-1.4 0-2.8-.36-4-1L3.8 20.3l1.1-4A8.2 8.2 0 0 1 12 3.8z" /><path d="M8.5 11.9h.01M12 11.9h.01M15.5 11.9h.01" strokeWidth="2.4" /></>,
   share: <><circle cx="17.5" cy="5.5" r="2.5" /><circle cx="6.5" cy="12" r="2.5" /><circle cx="17.5" cy="18.5" r="2.5" /><path d="M8.7 10.7l6.6-3.9M8.7 13.3l6.6 3.9" /></>,
+  send: <><path d="M21 3L10.5 13.5" /><path d="M21 3l-6.5 18-4-7.5L3 9.5z" /></>,
   monitor: <><rect x="3" y="4.5" width="18" height="12" rx="1.5" /><path d="M8 20h8M12 16.5V20" /></>,
 } satisfies Record<string, ReactNode>;
 

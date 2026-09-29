@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader, Help, Icon, useToast } from '../../components/ui';
 import type { IconName } from '../../components/ui';
-import { useMoveStage, usePeople, useUpdateTriage } from '../../lib/hooks';
+import { useMoveStage, usePeople, useProviders, useUpdateTriage } from '../../lib/hooks';
 import { activeSettings } from '../../lib/settings';
 import { computeTier, HOUSEHOLD_LABEL, tierLabel, tierNumbers, tierReason, tierStyle, URGENCY_LABEL, WORK_STATUS_LABEL } from '../../lib/tiering';
 import { effectiveTier } from '../../lib/search';
@@ -27,6 +27,7 @@ export function ClientDetails({ applicant }: { applicant: Applicant }) {
   const { toast } = useToast();
   const a = applicant;
   const effective = effectiveTier(a);
+  const { ready: sharingReady } = useProviders(); // the landlord-sharing field arrives with 0010
   const auto = computeTier(a);
   const locked = a.tier_locked === true || (a.tier_locked === undefined && a.tier != null && a.tier !== auto);
   const canSetTier = people.isOwner || !people.rolesReady || activeSettings().membersCanSetTier;
@@ -171,6 +172,13 @@ export function ClientDetails({ applicant }: { applicant: Applicant }) {
           <Row label="Consent to share">
             <YesNo value={a.consent} onChange={(v) => save({ consent: v }, `Consent set to ${yesNoWord(v)}`)} />
           </Row>
+          {sharingReady && (
+            <Row label="OK to share with landlords">
+              <Choice value={a.share_with_landlords ? 'yes' : 'no'} options={[['no', 'Not yet'], ['yes', 'Yes, they agreed']]}
+                onChange={(v) => save({ share_with_landlords: v === 'yes' },
+                  v === 'yes' ? 'Agreed their details can be sent to landlords' : 'No longer OK to send their details to landlords')} />
+            </Row>
+          )}
         </Section>
       </div>
 

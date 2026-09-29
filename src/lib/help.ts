@@ -156,6 +156,24 @@ export const HELP = {
       'Postcodes are placed using postcodes.io, a free public lookup; only property postcodes are sent, never anything about a client. The map is from OpenStreetMap.',
     ],
   },
+  requests: {
+    title: 'Requests to providers',
+    body: [
+      'Ask the provider of a property to check it is available, book a viewing (offer up to 3 times), or send a client\'s details. Keel writes the message; Open in WhatsApp opens a chat with the provider with it typed in, and nothing is sent until you press send.',
+      'Messages only ever carry a client\'s first name, household and benefits: never their phone, surname or anything medical. Several clients go in one message, one line each.',
+      'If a client does not meet the provider\'s rules (say they need PIP or LCWRA), Keel warns you. You can still send it with a reason, which is kept on the client\'s timeline.',
+      'Sending details needs the client to have agreed: OK to share with landlords, in their details. Checking availability does not.',
+      'Every request is logged. If the provider has not replied after 24 hours it moves to the top of Awaiting providers on Home, with one tap to confirm, decline or chase.',
+    ],
+  },
+  providers: {
+    title: 'Providers',
+    body: [
+      'Who supplies your properties, by the tag on their stock lists (BP, SR, ZUB...). Properties from a list with that tag belong to them.',
+      'Rules are what they will take: benefits (any of those ticked), household, the councils they take clients from, a maximum rent and furnished or not. Requests warn you when a client does not fit.',
+      'Switching a provider off keeps their history but stops new requests. Only the owner can change providers.',
+    ],
+  },
   whatsapp: {
     title: 'Sending on WhatsApp',
     body: [

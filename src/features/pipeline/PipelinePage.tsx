@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useApplicants, useCalls, useDeals, useMoveStage, useDeleteApplicant, usePeople } from '../../lib/hooks';
+import { useApplicants, useCalls, useDeals, useMoveStage, useDeleteApplicant, usePeople, useProviders, useRequests } from '../../lib/hooks';
 import { Avatar, Card, Help, Icon, PageHeader, TierBadge, UrgentChip, useToast } from '../../components/ui';
 import { callState, dayLabel, dayWord, lastCallMap, OUTCOME_LABEL, todayIso } from '../../lib/calls';
 import { readNotes } from '../../lib/readNotes';
 import type { CallState } from '../../lib/calls';
 import { APPLICANT_STAGES } from '../../types/extraction';
 import type { ApplicantStage } from '../../types/extraction';
-import type { Applicant, Call, Deal } from '../../lib/types';
+import type { Applicant, Call, Deal, ProviderRequest } from '../../lib/types';
+import { RequestChip } from '../requests/RequestSheet';
 import { DEAL_STEPS, isLive, stuckDays } from '../../lib/progress';
 import { DealChip, StuckChip } from '../progress/Progress';
 import { money, timeAgo } from '../../lib/format';
@@ -57,6 +58,14 @@ export function PipelinePage() {
   const { calls } = useCalls();
   const last = useMemo(() => lastCallMap(calls), [calls]);
   const { deals, ready: progressReady } = useDeals();
+  const { requests } = useRequests();
+  const { providers } = useProviders();
+  // each client's latest request still waiting on a provider
+  const openRequestOf = useMemo(() => {
+    const m = new Map<string, ProviderRequest>();
+    for (const r of requests) if (r.status === 'sent') for (const id of r.client_ids) if (!m.has(id)) m.set(id, r);
+    return m;
+  }, [requests]);
   // per client: days stuck (or null), and their furthest live deal
   const progressOf = useMemo(() => {
     const byClient = new Map<string, Deal[]>();
@@ -342,11 +351,13 @@ export function PipelinePage() {
                         {a.phone && <div className="font-mono text-[13px] text-[var(--ink-muted)]">{a.phone}</div>}
                         {(() => {
                           const pr = progressOf(a);
-                          if (pr.stuck === null && !pr.lead) return null;
+                          const req = openRequestOf.get(a.id);
+                          if (pr.stuck === null && !pr.lead && !req) return null;
                           return (
                             <div className="mt-1 flex flex-wrap items-center gap-1">
                               {pr.stuck !== null && <StuckChip days={pr.stuck} />}
                               {pr.lead && pr.lead.status !== 'sent' && <span title={pr.lead.address}><DealChip deal={pr.lead} /></span>}
+                              {req && <RequestChip request={req} providers={providers} />}
                             </div>
                           );
                         })()}

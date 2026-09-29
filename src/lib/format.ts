@@ -26,6 +26,23 @@ export function shortDate(iso: string | null | undefined): string {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "Wed 30 Sep", written the same on every phone and browser (they disagree on "Sept" and commas). */
+export function shortDay(iso: string | Date): string {
+  const d = new Date(iso);
+  return `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
+
+/** "2pm", "10:30am" */
+export function clockTime(iso: string | Date): string {
+  const d = new Date(iso);
+  const h = d.getHours() % 12 || 12;
+  const m = d.getMinutes();
+  return `${h}${m ? `:${String(m).padStart(2, '0')}` : ''}${d.getHours() < 12 ? 'am' : 'pm'}`;
+}
+
 /** Relative time: "2h ago", "3d ago" */
 export function timeAgo(iso: string | null | undefined): string {
   if (!iso) return '·';

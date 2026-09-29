@@ -10,23 +10,26 @@ import { URGENCY_LABEL } from '../../lib/tiering';
 import { TierLogicEditor } from './TierLogicEditor';
 import { LhaSettings } from './LhaSettings';
 import { WhatsAppSettings } from './WhatsAppSettings';
+import { ProvidersTab } from './ProvidersTab';
+import { RequestTemplates } from './RequestTemplates';
 import { isActive } from '../../lib/search';
 import { addDays, isoDay } from '../../lib/calls';
 import { money } from '../../lib/format';
 
 const same = (x: unknown, y: unknown) => JSON.stringify(x) === JSON.stringify(y);
 
-type Tab = 'me' | 'team' | 'people';
+type Tab = 'me' | 'team' | 'providers' | 'people';
 const TABS: Array<{ key: Tab; label: string; icon: IconName; who: string }> = [
   { key: 'me', label: 'My settings', icon: 'user', who: 'Only you' },
   { key: 'team', label: 'Team settings', icon: 'users', who: 'Everyone' },
+  { key: 'providers', label: 'Providers', icon: 'building', who: 'Everyone' },
   { key: 'people', label: 'Team', icon: 'users', who: '' },
 ];
 
 /** My settings (only me), team settings (everyone) and who is on the team. */
 export function SettingsPage() {
   const [params, setParams] = useSearchParams();
-  const tab: Tab = params.get('tab') === 'team' ? 'team' : params.get('tab') === 'people' ? 'people' : 'me';
+  const tab: Tab = (['team', 'providers', 'people'] as const).find((t) => t === params.get('tab')) ?? 'me';
   const { settings, ready, isLoading } = useSettings();
   const people = usePeople();
   const save = useSaveSettings();
@@ -85,6 +88,7 @@ export function SettingsPage() {
           email={people.members.find((m) => m.id === people.meId)?.email ?? null} />
       )}
       {tab === 'team' && <TeamSettingsTab draft={draft} set={set} saved={settings} canEdit={people.canEditTeam} ownerName={people.ownerName} rolesReady={people.rolesReady} />}
+      {tab === 'providers' && <ProvidersTab />}
       {tab === 'people' && <PeopleTab />}
 
       {(tab === 'me' || (tab === 'team' && people.canEditTeam)) && (
@@ -241,6 +245,8 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
       <LhaSettings draft={draft} set={set} />
 
       <WhatsAppSettings draft={draft} set={set} />
+
+      <RequestTemplates draft={draft} set={set} />
 
       <Card>
         <CardHeader icon="flag" title="Client progress" help="progress" />
