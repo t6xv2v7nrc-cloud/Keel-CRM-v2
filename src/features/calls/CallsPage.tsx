@@ -6,6 +6,7 @@ import {
 import { useApplicants, useAssign, useCalls, usePeople, useSettings } from '../../lib/hooks';
 import { addDays, callQueue, callsPerDay, callState, dayLabel, isoDay, lastCallMap, OUTCOME_LABEL, queueLabel, todayIso } from '../../lib/calls';
 import { effectiveTier, isUrgent } from '../../lib/search';
+import { URGENCY_LABEL } from '../../lib/tiering';
 import { timeAgo } from '../../lib/format';
 import type { Applicant, Call } from '../../lib/types';
 import { CallLogger, OUTCOME_ICON, useCallWho } from './CallLogger';
@@ -190,7 +191,7 @@ function QueueRow({ a, lastCall, label, overdue, owner, canClaim }: {
           <div className="flex flex-wrap items-center gap-2">
             <Link to={`/applicants/${a.id}`} className="text-[15px] font-medium text-[var(--ink)] hover:underline">{a.full_name}</Link>
             <TierBadge tier={tier} />
-            {isUrgent(a) && <UrgentChip />}
+            {isUrgent(a) && <UrgentChip reason={URGENCY_LABEL[a.urgency ?? '']} />}
           </div>
           <div className="mt-0.5 flex flex-wrap gap-x-3 text-[13px]">
             <span className={overdue ? 'font-semibold text-[var(--ink)]' : 'text-[var(--ink-muted)]'}>{label}</span>

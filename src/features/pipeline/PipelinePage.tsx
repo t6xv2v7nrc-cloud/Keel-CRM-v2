@@ -14,8 +14,8 @@ import { DealChip, StuckChip } from '../progress/Progress';
 import { money, timeAgo } from '../../lib/format';
 import { HOUSEHOLD_LABEL, tierLabel, tierNumbers, URGENCY_LABEL, WORK_STATUS_LABEL } from '../../lib/tiering';
 import {
-  applyFilters, areaOf, BENEFITS, benefitsOf, DEFAULT_FILTERS, effectiveTier, filtersFromParams,
-  filtersToParams, householdOf, isActive, isUrgent, parseQuery, previewText, searchText, sortApplicants,
+  applyFilters, areaOf, BENEFITS, benefitsOf, councilOf, DEFAULT_FILTERS, effectiveTier, filtersFromParams,
+  filtersToParams, hasOfficer, householdOf, isActive, isUrgent, officerName, officerOrg, parseQuery, previewText, searchText, sortApplicants,
 } from '../../lib/search';
 import type { BenefitKey, PipelineFilters, SortKey } from '../../lib/search';
 
@@ -153,6 +153,13 @@ export function PipelinePage() {
     return m;
   }, [applicants]);
   const activeCount = applicants.filter(isActive).length;
+  const withOfficer = applicants.filter((a) => isActive(a) && hasOfficer(a)).length;
+  const councilCount = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const a of applicants) { const c = councilOf(a); if (c && isActive(a)) m.set(c, (m.get(c) ?? 0) + 1); }
+    return m;
+  }, [applicants]);
+  const councils = [...councilCount.keys()].sort();
   const scopeCount = filters.stage === 'active' ? activeCount
     : filters.stage === 'all' ? applicants.length
     : stageCounts.get(filters.stage) ?? 0;
@@ -177,12 +184,15 @@ export function PipelinePage() {
   });
   if (filters.calls !== 'any') pills.push({ label: CALLS_LABEL[filters.calls], remove: (f) => ({ ...f, calls: 'any' }) });
   if (filters.progress !== 'any') pills.push({ label: PROGRESS_LABEL[filters.progress], remove: (f) => ({ ...f, progress: 'any' }) });
+  if (filters.officer !== 'any') pills.push({ label: filters.officer === 'yes' ? 'Has a housing officer' : 'No housing officer', remove: (f) => ({ ...f, officer: 'any' }) });
+  if (filters.council !== 'any') pills.push({ label: filters.council === 'none' ? 'Council not given' : `${filters.council} council`, remove: (f) => ({ ...f, council: 'any' }) });
   for (const b of filters.benefits) {
     pills.push({ label: BENEFITS.find((x) => x.key === b)?.label ?? b, remove: (f) => ({ ...f, benefits: f.benefits.filter((x) => x !== b) }) });
   }
 
   // The everyday filters stay in view; the rest open with More filters (already open if one is in use)
-  const extraInUse = [filters.household !== 'any', filters.work !== 'any', filters.councilReg !== 'any', filters.urgency !== 'any', filters.benefits.length > 0]
+  const extraInUse = [filters.household !== 'any', filters.work !== 'any', filters.councilReg !== 'any', filters.urgency !== 'any', filters.benefits.length > 0,
+    filters.council !== 'any']
     .filter(Boolean).length;
   const showMore = moreOpen || extraInUse > 0;
 
@@ -246,6 +256,8 @@ export function PipelinePage() {
             <FilterSelect label="Progress" value={filters.progress} onChange={(v) => update({ progress: v as PipelineFilters['progress'] })}
               options={Object.entries(PROGRESS_LABEL) as Array<[string, string]>} />
           )}
+          <FilterSelect label={`Housing officer (${withOfficer})`} value={filters.officer} onChange={(v) => update({ officer: v as PipelineFilters['officer'] })}
+            options={[['any', 'Any'], ['yes', 'Has one'], ['no', 'None given']]} />
           {extraInUse === 0 && (
             <button type="button" onClick={() => setMoreOpen((v) => !v)} aria-expanded={showMore}
               className="inline-flex min-h-[40px] items-center gap-1.5 rounded-md px-2 text-[13px] font-medium text-[var(--link)] hover:underline">
@@ -260,6 +272,8 @@ export function PipelinePage() {
               options={[['any', 'Any'], ['single', 'Single'], ['couple', 'Couple'], ['family', 'Family with children'], ['other', 'Other'], ['unknown', 'Not set']]} />
             <FilterSelect label="Work" value={filters.work} onChange={(v) => update({ work: v as PipelineFilters['work'] })}
               options={[['any', 'Any'], ['not_working', 'Not working'], ['part_time', 'Part time'], ['full_time', 'Full time']]} />
+            <FilterSelect label="Council" value={filters.council} onChange={(v) => update({ council: v })}
+              options={[['any', 'Any'], ...councils.map((c): [string, string] => [c, `${c} (${councilCount.get(c)})`]), ['none', 'Not given']]} />
             <FilterSelect label="Council-registered" value={filters.councilReg} onChange={(v) => update({ councilReg: v as PipelineFilters['councilReg'] })}
               options={[['any', 'Any'], ['yes', 'Yes'], ['no', 'No']]} />
             <FilterSelect label="Urgency" value={filters.urgency} onChange={(v) => update({ urgency: v as PipelineFilters['urgency'] })}
@@ -315,7 +329,7 @@ export function PipelinePage() {
       </div>
 
       <Card className="overflow-x-auto">
-        <table className="w-full min-w-[1140px] border-collapse text-[15px]">
+        <table className="w-full min-w-[1280px] border-collapse text-[15px]">
           <thead>
             <tr className="bg-[var(--surface-2)] text-left text-[13px] text-[var(--ink-muted)]">
               <Th k="tier" sortKey={sortKey} dir={dir} onSort={toggleSort}>Tier</Th>
@@ -323,6 +337,7 @@ export function PipelinePage() {
               <Th k="household" sortKey={sortKey} dir={dir} onSort={toggleSort}>Type</Th>
               <Th k="benefits" sortKey={sortKey} dir={dir} onSort={toggleSort}>Benefits</Th>
               <Th k="area" sortKey={sortKey} dir={dir} onSort={toggleSort}>Area</Th>
+              <Th k="officer" sortKey={sortKey} dir={dir} onSort={toggleSort}>Housing officer</Th>
               <Th k="budget" sortKey={sortKey} dir={dir} onSort={toggleSort} right>Budget</Th>
               <th className="px-3 py-2 font-medium"><span className="inline-flex items-center gap-1.5">Calls <Help topic="pipelineCalls" /></span></th>
               <Th k="stage" sortKey={sortKey} dir={dir} onSort={toggleSort}>Stage</Th>
@@ -339,7 +354,7 @@ export function PipelinePage() {
                 <tr key={a.id} className="border-t border-[var(--line)] align-top hover:bg-[var(--surface-2)]">
                   <td className="px-5 py-3">
                     <TierBadge tier={effectiveTier(a)} />
-                    {isUrgent(a) && <div className="mt-1.5"><UrgentChip /></div>}
+                    {isUrgent(a) && <div className="mt-1.5"><UrgentChip reason={URGENCY_LABEL[a.urgency ?? '']} /></div>}
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex max-w-[380px] gap-3">
@@ -395,6 +410,14 @@ export function PipelinePage() {
                     )}
                   </td>
                   <td className="px-3 py-3 text-[var(--ink-muted)]">{areaOf(a) || '·'}</td>
+                  <td className="max-w-[200px] px-3 py-3">
+                    {hasOfficer(a) ? (
+                      <div className="min-w-0" title={[a.officer_name, a.officer_email, a.officer_phone].filter(Boolean).join('\n')}>
+                        <div className="truncate text-[14px] text-[var(--ink)]">{officerName(a) ?? a.officer_email ?? a.officer_phone}</div>
+                        <div className="truncate text-[12px] text-[var(--ink-muted)]">{[officerOrg(a), councilOf(a) && councilOf(a) !== officerOrg(a) ? `client: ${councilOf(a)}` : null].filter(Boolean).join(' · ')}</div>
+                      </div>
+                    ) : <span className="text-[var(--ink-muted)]">·</span>}
+                  </td>
                   <td className="px-3 py-3 text-right font-mono text-[var(--ink)]">{a.budget_pcm ? money(a.budget_pcm) : '·'}</td>
                   <td className="px-3 py-3"><CallCell state={callState(a, last.get(a.id))} lastOutcome={last.get(a.id)?.outcome} lastAt={last.get(a.id)?.created_at} /></td>
                   <td className="px-3 py-3">

@@ -205,11 +205,13 @@ export function Empty({ icon, title, children }: { icon: IconName; title: string
 }
 
 /** Urgent flag: inverted ink, so it stands out without another colour. */
-export function UrgentChip({ label = 'Urgent' }: { label?: string }) {
+/** "URGENT", with the reason on hover; `showReason` writes it out too: "URGENT · In temporary accommodation". */
+export function UrgentChip({ reason, showReason = false }: { reason?: string; showReason?: boolean }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[12px] font-semibold uppercase tracking-wide"
-      style={{ background: 'var(--urgent-bg)', color: 'var(--urgent-fg)' }} title={label}>
-      <Icon name="alert" size={12} strokeWidth={2.2} /> Urgent
+    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[12px] font-semibold"
+      style={{ background: 'var(--urgent-bg)', color: 'var(--urgent-fg)' }} title={reason ? `Urgent: ${reason}` : 'Urgent'}>
+      <Icon name="alert" size={12} strokeWidth={2.2} /> <span className="uppercase tracking-wide">Urgent</span>
+      {showReason && reason && <span className="font-medium">· {reason}</span>}
     </span>
   );
 }

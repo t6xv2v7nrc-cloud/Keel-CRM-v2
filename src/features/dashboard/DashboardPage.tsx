@@ -9,7 +9,7 @@ import { timeAgo } from '../../lib/format';
 import { effectiveTier, isActive, isUrgent } from '../../lib/search';
 import { matchesForProperty } from '../../lib/propertyMatch';
 import { addDays, callQueue, callsPerDay, isoDay, lastCallMap, OUTCOME_LABEL, queueLabel, todayIso } from '../../lib/calls';
-import { tierColor, tierCount, tierLabel, tierNumbers } from '../../lib/tiering';
+import { tierColor, tierCount, tierLabel, tierNumbers, URGENCY_LABEL } from '../../lib/tiering';
 import type { ApplicantStage } from '../../types/extraction';
 import type { Activity } from '../../lib/types';
 import { ThisWeek } from './ThisWeek';
@@ -164,7 +164,7 @@ export function DashboardPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="truncate text-[15px] font-medium text-[var(--ink)]">{a.full_name}</span>
                         <TierBadge tier={effectiveTier(a)} />
-                        {isUrgent(a) && <UrgentChip />}
+                        {isUrgent(a) && <UrgentChip reason={URGENCY_LABEL[a.urgency ?? '']} />}
                       </div>
                       <div className="text-[13px] text-[var(--ink-muted)]">
                         {queueLabel(state, a.next_step)}

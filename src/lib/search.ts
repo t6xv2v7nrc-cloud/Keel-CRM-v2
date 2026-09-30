@@ -14,6 +14,7 @@ import {
 } from './tiering';
 import type { Tier } from './tiering';
 import { activeSettings } from './settings';
+import { BOROUGHS, canonicalBorough } from './london';
 
 // ── Derived fields ──────────────────────────────────────────────────
 
@@ -56,6 +57,35 @@ export function householdOf(a: Applicant): HouseholdKey | null {
   if ((a.adults ?? 0) >= 2) return 'couple';
   return null;
 }
+
+// ── Housing officer (case worker) ─────────────────────────────────
+
+/** The client has a housing officer: any of their name, email or phone is filled in. */
+export const hasOfficer = (a: Applicant) => Boolean(a.officer_name?.trim() || a.officer_email?.trim() || a.officer_phone?.trim());
+
+const EMAIL = /\S+@\S+\.\S+/;
+
+/** The officer's name, unless the form put their email in the name box. */
+export function officerName(a: Applicant): string | null {
+  const n = a.officer_name?.trim();
+  return n && !EMAIL.test(n) ? n : null;
+}
+
+/** Where the officer works, from their email: tdcruz@westminster.gov.uk is Westminster; royalgreenwich.gov.uk is Greenwich. */
+export function officerOrg(a: Applicant): string | null {
+  const email = [a.officer_email, a.officer_name].find((x) => x && EMAIL.test(x));
+  const domain = email?.split('@')[1]?.toLowerCase().trim();
+  if (!domain) return null;
+  const label = domain.replace(/\.(gov|org|nhs|co|ac|police)\.uk$/, '').replace(/\.(com|org|net|uk|co)$/, '').split('.').pop() ?? '';
+  const squash = (s: string) => s.toLowerCase().replace(/[^a-z]/g, '');
+  const borough = BOROUGHS.find((b) => label.includes(squash(b)));
+  if (borough) return borough;
+  if (/^(gmail|hotmail|outlook|yahoo|icloud|live|btinternet|aol)$/.test(label)) return null;
+  return label ? label.charAt(0).toUpperCase() + label.slice(1) : null;
+}
+
+/** The client's council, as a borough name, or null. */
+export const councilOf = (a: Applicant) => canonicalBorough(a.council || a.referring_borough);
 
 // ── Text search ─────────────────────────────────────────────────────
 
@@ -119,10 +149,12 @@ export interface PipelineFilters {
   calls: 'any' | 'due' | 'never' | 'scheduled'; // applied by the Pipeline, which has the call log
   owner: string; // 'any' | 'me' | 'none' | a team member's id; applied by the Pipeline, which knows who is signed in
   progress: 'any' | 'stuck' | 'viewing' | 'offer' | 'nothing'; // applied by the Pipeline, which has the deals
+  officer: 'any' | 'yes' | 'no'; // has a housing officer (case worker)
+  council: string; // 'any', 'none', or a borough
 }
 
 export const DEFAULT_FILTERS: PipelineFilters = {
-  q: '', stage: 'active', tier: 'any', household: 'any', work: 'any', councilReg: 'any', urgency: 'any', benefits: [], calls: 'any', owner: 'any', progress: 'any',
+  q: '', stage: 'active', tier: 'any', household: 'any', work: 'any', councilReg: 'any', urgency: 'any', benefits: [], calls: 'any', owner: 'any', progress: 'any', officer: 'any', council: 'any',
 };
 
 export function applyFilters(
@@ -139,6 +171,8 @@ export function applyFilters(
     if (f.councilReg === 'yes' && a.council_registered !== true) return false;
     if (f.councilReg === 'no' && a.council_registered !== false) return false;
     if (f.urgency === 'urgent' ? !isUrgent(a) : f.urgency !== 'any' && a.urgency !== f.urgency) return false;
+    if (f.officer !== 'any' && hasOfficer(a) !== (f.officer === 'yes')) return false;
+    if (f.council !== 'any' && (f.council === 'none' ? councilOf(a) !== null : councilOf(a) !== f.council)) return false;
     for (const key of f.benefits) {
       if (!BENEFITS.some((b) => b.key === key && b.has(a))) return false;
     }
@@ -164,6 +198,8 @@ export function filtersFromParams(p: URLSearchParams): PipelineFilters {
     calls: oneOf(p.get('calls'), ['any', 'due', 'never', 'scheduled'] as const, 'any'),
     owner: p.get('owner') || 'any',
     progress: oneOf(p.get('progress'), ['any', 'stuck', 'viewing', 'offer', 'nothing'] as const, 'any'),
+    officer: oneOf(p.get('officer'), ['any', 'yes', 'no'] as const, 'any'),
+    council: p.get('council') || 'any',
   };
 }
 
@@ -181,12 +217,14 @@ export function filtersToParams(f: PipelineFilters, base = new URLSearchParams()
   set('calls', f.calls, 'any');
   set('owner', f.owner, 'any');
   set('progress', f.progress, 'any');
+  set('officer', f.officer, 'any');
+  set('council', f.council, 'any');
   return p;
 }
 
 // ── Sorting ─────────────────────────────────────────────────────────
 
-export type SortKey = 'tier' | 'name' | 'household' | 'benefits' | 'area' | 'budget' | 'stage' | 'updated';
+export type SortKey = 'tier' | 'name' | 'household' | 'benefits' | 'area' | 'officer' | 'budget' | 'stage' | 'updated';
 
 const HOUSEHOLD_ORDER: Record<string, number> = { single: 0, couple: 1, family: 2, other: 3 };
 const benefitScore = (a: Applicant) => benefitsOf(a).reduce((s, b) => s + ({ lcwra: 8, pip: 4, uc: 2, hb: 1 })[b.key], 0);
@@ -215,6 +253,13 @@ export function sortApplicants(list: Applicant[], key: SortKey, dir: 1 | -1): Ap
         const x = areaOf(a), y = areaOf(b);
         if (!x !== !y) return x ? -1 : 1; // blanks always last
         return (x.localeCompare(y) || byName(a, b)) * dir;
+      }
+      case 'officer': {
+        // those with a housing officer first, grouped by where the officer works
+        if (hasOfficer(a) !== hasOfficer(b)) return (hasOfficer(a) ? -1 : 1) * dir;
+        const oa = officerOrg(a), ob = officerOrg(b);
+        if (!oa !== !ob) return (oa ? -1 : 1) * dir; // officers we cannot place come after the rest
+        return ((oa ?? '').localeCompare(ob ?? '') || byName(a, b)) * dir;
       }
       case 'budget': return (((a.budget_pcm ?? 0) - (b.budget_pcm ?? 0)) || byName(a, b)) * dir;
       case 'stage': return ((APPLICANT_STAGES.indexOf(a.stage) - APPLICANT_STAGES.indexOf(b.stage)) || byName(a, b)) * dir;

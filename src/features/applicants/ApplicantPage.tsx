@@ -10,6 +10,7 @@ import {
 import { bestFew, brief, matchesForApplicant } from '../../lib/propertyMatch';
 import { money, timeAgo } from '../../lib/format';
 import { effectiveTier, isUrgent } from '../../lib/search';
+import { URGENCY_LABEL } from '../../lib/tiering';
 import { dayWord, OUTCOME_LABEL, todayIso } from '../../lib/calls';
 import type { Activity, Applicant, Call } from '../../lib/types';
 import { CallHistory, CallLogger } from '../calls/CallLogger';
@@ -286,7 +287,7 @@ function HeroCard({ applicant, lastCall, onLogCall }: { applicant: Applicant; la
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="m-0 text-[28px] font-bold leading-tight text-[var(--ink)]">{applicant.full_name}</h1>
                 <TierBadge tier={tier} />
-                {isUrgent(applicant) && <UrgentChip />}
+                {isUrgent(applicant) && <UrgentChip reason={URGENCY_LABEL[applicant.urgency ?? '']} showReason />}
                 <StageBadge stage={applicant.stage} />
                 {stuck !== null && <StuckChip days={stuck} />}
                 {latestRequest && <RequestChip request={latestRequest} providers={providers} />}

@@ -758,7 +758,7 @@ function MatchRow({ m, p, sent, deal }: { m: Match; p: Property; sent: SentOnWha
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <Link to={`/applicants/${a.id}`} className="text-[15px] font-medium text-[var(--ink)] hover:underline">{a.full_name}</Link>
           <TierBadge tier={tier} />
-          {isUrgent(a) && <span title={urgentWhy}><UrgentChip /></span>}
+          {isUrgent(a) && <UrgentChip reason={urgentWhy?.replace(/^Urgent:\s*/, '')} />}
           {deal && deal.status !== 'sent' ? <DealChip deal={deal} /> : <SentTag sent={sent} />}
         </div>
         <div className="text-[13px] text-[var(--ink-muted)] sm:truncate">
