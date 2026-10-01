@@ -27,6 +27,11 @@ const STAGE_LABEL: Record<ApplicantStage, string> = {
 // Fee stages are no longer used; clients left at one still show it in their row.
 const PICKABLE_STAGES: ApplicantStage[] = APPLICANT_STAGES.filter((s) => s !== 'fee_invoiced' && s !== 'fee_paid');
 
+const SORT_OPTIONS: Array<[SortKey, string]> = [
+  ['tier', 'Tier'], ['name', 'Name'], ['officer', 'Housing officer first'], ['household', 'Client type'], ['benefits', 'Benefits'],
+  ['area', 'Area'], ['budget', 'Budget'], ['stage', 'Stage'], ['updated', 'Recently updated'],
+];
+
 const PROGRESS_LABEL: Record<PipelineFilters['progress'], string> = {
   any: 'Any', stuck: 'Stuck', viewing: 'Viewing booked', offer: 'Offer made or accepted', nothing: 'No properties sent yet',
 };
@@ -326,136 +331,144 @@ export function PipelinePage() {
         {pills.length > 0 && (
           <button onClick={clearAll} className="text-[var(--link)] hover:underline">Clear all</button>
         )}
+        <label className="ml-auto inline-flex items-center gap-1.5 text-[var(--ink-muted)]">
+          Sort by
+          <select value={sortKey} onChange={(e) => setSort({ key: e.target.value as SortKey, dir: 1 })} aria-label="Sort by"
+            className="h-8 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-1.5 text-[13px] text-[var(--ink)]">
+            {SORT_OPTIONS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+          </select>
+          <button type="button" onClick={() => setSort((x) => ({ ...x, dir: x.dir === 1 ? -1 : 1 }))}
+            aria-label={dir === 1 ? 'Reverse the order' : 'Back to the usual order'} title={dir === 1 ? 'Reverse the order' : 'Back to the usual order'}
+            className="grid h-8 w-8 place-items-center rounded-md border border-[var(--line-strong)] bg-[var(--surface)] text-[var(--ink)]">
+            {dir === 1 ? '↓' : '↑'}
+          </button>
+        </label>
       </div>
 
-      <Card className="overflow-x-auto">
-        <table className="w-full min-w-[1280px] border-collapse text-[15px]">
-          <thead>
-            <tr className="bg-[var(--surface-2)] text-left text-[13px] text-[var(--ink-muted)]">
-              <Th k="tier" sortKey={sortKey} dir={dir} onSort={toggleSort}>Tier</Th>
-              <Th k="name" sortKey={sortKey} dir={dir} onSort={toggleSort}>Client</Th>
-              <Th k="household" sortKey={sortKey} dir={dir} onSort={toggleSort}>Type</Th>
-              <Th k="benefits" sortKey={sortKey} dir={dir} onSort={toggleSort}>Benefits</Th>
-              <Th k="area" sortKey={sortKey} dir={dir} onSort={toggleSort}>Area</Th>
-              <Th k="officer" sortKey={sortKey} dir={dir} onSort={toggleSort}>Housing officer</Th>
-              <Th k="budget" sortKey={sortKey} dir={dir} onSort={toggleSort} right>Budget</Th>
-              <th className="px-3 py-2 font-medium"><span className="inline-flex items-center gap-1.5">Calls <Help topic="pipelineCalls" /></span></th>
-              <Th k="stage" sortKey={sortKey} dir={dir} onSort={toggleSort}>Stage</Th>
-              <Th k="updated" sortKey={sortKey} dir={dir} onSort={toggleSort} right>Updated</Th>
-              <th className="px-3 py-2"><span className="sr-only">Actions</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((a) => {
-              const preview = previewText(a, terms);
-              const household = householdOf(a);
-              const benefits = benefitsOf(a);
-              return (
-                <tr key={a.id} className="border-t border-[var(--line)] align-top hover:bg-[var(--surface-2)]">
-                  <td className="px-5 py-3">
-                    <TierBadge tier={effectiveTier(a)} />
-                    {isUrgent(a) && <div className="mt-1.5"><UrgentChip reason={URGENCY_LABEL[a.urgency ?? '']} /></div>}
-                  </td>
-                  <td className="px-3 py-3">
-                    <div className="flex max-w-[380px] gap-3">
-                      <Avatar name={a.full_name} size={34} accent={effectiveTier(a) === 1} />
-                      <div className="min-w-0">
-                        <button onClick={() => navigate(`/applicants/${a.id}`)} className="text-left font-medium text-[var(--ink)] hover:underline">
-                          <Highlight text={a.full_name} terms={terms} />
-                        </button>
-                        {a.phone && <div className="font-mono text-[13px] text-[var(--ink-muted)]">{a.phone}</div>}
-                        {(() => {
-                          const pr = progressOf(a);
-                          const req = openRequestOf.get(a.id);
-                          if (pr.stuck === null && !pr.lead && !req) return null;
-                          return (
-                            <div className="mt-1 flex flex-wrap items-center gap-1">
-                              {pr.stuck !== null && <StuckChip days={pr.stuck} />}
-                              {pr.lead && pr.lead.status !== 'sent' && <span title={pr.lead.address}><DealChip deal={pr.lead} /></span>}
-                              {req && <RequestChip request={req} providers={providers} />}
-                            </div>
-                          );
-                        })()}
+      <Card className="overflow-hidden">
+        {/* Column names on wide screens; the blocks stack on narrower ones, so there is never any sideways scrolling */}
+        <div className="hidden grid-cols-[minmax(0,1.5fr)_minmax(0,1.1fr)_minmax(0,1fr)_150px] gap-x-5 bg-[var(--surface-2)] px-5 py-2 text-[13px] text-[var(--ink-muted)] xl:grid">
+          <SortLabel k="name" sortKey={sortKey} dir={dir} onSort={toggleSort}>Client</SortLabel>
+          <SortLabel k="area" sortKey={sortKey} dir={dir} onSort={toggleSort}>Looking for</SortLabel>
+          <span className="inline-flex items-center gap-1.5">
+            <SortLabel k="officer" sortKey={sortKey} dir={dir} onSort={toggleSort}>Housing officer</SortLabel> and calls <Help topic="pipelineCalls" />
+          </span>
+          <SortLabel k="stage" sortKey={sortKey} dir={dir} onSort={toggleSort}>Stage</SortLabel>
+        </div>
+        <ul className="m-0 list-none p-0">
+          {rows.map((a) => {
+            const preview = previewText(a, terms);
+            const household = householdOf(a);
+            const benefits = benefitsOf(a);
+            const pr = progressOf(a);
+            const req = openRequestOf.get(a.id);
+            const needs = [household ? TYPE_SHORT[household] : null, a.budget_pcm ? `${money(a.budget_pcm)} budget` : null].filter(Boolean).join(' · ');
+            return (
+              <li key={a.id} className="grid gap-x-5 gap-y-3 border-t border-[var(--line)] px-5 py-3 first:border-t-0 hover:bg-[var(--surface-2)] md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1.1fr)_minmax(0,1fr)_150px] xl:first:border-t">
+                {/* Who */}
+                <div className="flex min-w-0 gap-3">
+                  <Avatar name={a.full_name} size={34} accent={effectiveTier(a) === 1} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <button onClick={() => navigate(`/applicants/${a.id}`)} className="text-left font-medium text-[var(--ink)] hover:underline">
+                        <Highlight text={a.full_name} terms={terms} />
+                      </button>
+                      <TierBadge tier={effectiveTier(a)} />
+                      {isUrgent(a) && <UrgentChip reason={URGENCY_LABEL[a.urgency ?? '']} />}
+                    </div>
+                    {a.phone && <div className="font-mono text-[13px] text-[var(--ink-muted)]">{a.phone}</div>}
+                    {(pr.stuck !== null || (pr.lead && pr.lead.status !== 'sent') || req || (fromNotes.get(a.id) ?? 0) > 0 || a.assigned_to) && (
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        {pr.stuck !== null && <StuckChip days={pr.stuck} />}
+                        {pr.lead && pr.lead.status !== 'sent' && <span title={pr.lead.address}><DealChip deal={pr.lead} /></span>}
+                        {req && <RequestChip request={req} providers={providers} />}
                         {(fromNotes.get(a.id) ?? 0) > 0 && (
                           <Link to={`/applicants/${a.id}#details`} title="Answers Keel found in their notes"
-                            className="mt-1 inline-flex items-center gap-1 rounded bg-[var(--accent-soft)] px-1.5 py-0.5 text-[12px] font-medium text-[var(--accent-ink)] hover:underline">
+                            className="inline-flex items-center gap-1 rounded bg-[var(--accent-soft)] px-1.5 py-0.5 text-[12px] font-medium text-[var(--accent-ink)] hover:underline">
                             <Icon name="sparkle" size={12} /> {fromNotes.get(a.id)} found in notes
                           </Link>
                         )}
                         {a.assigned_to && (
-                          <div className="mt-0.5 inline-flex items-center gap-1 text-[12px] text-[var(--ink-muted)]">
+                          <span className="inline-flex items-center gap-1 text-[12px] text-[var(--ink-muted)]">
                             <Icon name="user" size={12} />{people.whoOf(a.assigned_to) === 'you' ? 'You' : people.nameOf(a.assigned_to)}
-                          </div>
-                        )}
-                        {preview && (
-                          <div className="mt-1 truncate text-[13px] text-[var(--ink-muted)]" title={a.notes || a.requirements || ''}>
-                            <Highlight text={preview} terms={terms} />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-3 py-3 text-[var(--ink-muted)]">{household ? TYPE_SHORT[household] : '·'}</td>
-                  <td className="px-3 py-3">
-                    {benefits.length === 0 ? (
-                      <span className="text-[var(--ink-muted)]">·</span>
-                    ) : (
-                      <div className="flex flex-wrap gap-1">
-                        {benefits.map((b) => (
-                          <span key={b.key} className="rounded bg-[var(--chip-bg)] px-1.5 py-0.5 text-[13px] font-medium text-[var(--chip-fg)]">
-                            {b.label}
                           </span>
-                        ))}
+                        )}
                       </div>
                     )}
-                  </td>
-                  <td className="px-3 py-3 text-[var(--ink-muted)]">{areaOf(a) || '·'}</td>
-                  <td className="max-w-[200px] px-3 py-3">
-                    {hasOfficer(a) ? (
-                      <div className="min-w-0" title={[a.officer_name, a.officer_email, a.officer_phone].filter(Boolean).join('\n')}>
-                        <div className="truncate text-[14px] text-[var(--ink)]">{officerName(a) ?? a.officer_email ?? a.officer_phone}</div>
-                        <div className="truncate text-[12px] text-[var(--ink-muted)]">{[officerOrg(a), councilOf(a) && councilOf(a) !== officerOrg(a) ? `client: ${councilOf(a)}` : null].filter(Boolean).join(' · ')}</div>
+                    {preview && (
+                      <div className="mt-1 truncate text-[13px] text-[var(--ink-muted)]" title={a.notes || a.requirements || ''}>
+                        <Highlight text={preview} terms={terms} />
                       </div>
-                    ) : <span className="text-[var(--ink-muted)]">·</span>}
-                  </td>
-                  <td className="px-3 py-3 text-right font-mono text-[var(--ink)]">{a.budget_pcm ? money(a.budget_pcm) : '·'}</td>
-                  <td className="px-3 py-3"><CallCell state={callState(a, last.get(a.id))} lastOutcome={last.get(a.id)?.outcome} lastAt={last.get(a.id)?.created_at} /></td>
-                  <td className="px-3 py-3">
-                    <select
-                      value={a.stage}
-                      onChange={(e) => changeStage(a, e.target.value as ApplicantStage)}
-                      aria-label={`Stage for ${a.full_name}`}
-                      className="min-h-[36px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[13px] text-[var(--ink)]"
-                    >
-                      {(PICKABLE_STAGES.includes(a.stage) ? PICKABLE_STAGES : [...PICKABLE_STAGES, a.stage]).map((s) => (
-                        <option key={s} value={s}>{STAGE_LABEL[s]}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-3 py-3 text-right font-mono text-[13px] text-[var(--ink-muted)]">{timeAgo(a.updated_at)}</td>
-                  <td className="px-3 py-3 text-right">
+                    )}
+                  </div>
+                </div>
+
+                {/* Looking for */}
+                <div className="min-w-0 text-[14px] md:pl-0 pl-[46px]">
+                  <div className="flex flex-wrap items-center gap-1">
+                    {needs && <span className="text-[var(--ink)]">{needs}</span>}
+                    {benefits.map((b) => (
+                      <span key={b.key} className="rounded bg-[var(--chip-bg)] px-1.5 py-0.5 text-[12px] font-medium text-[var(--chip-fg)]">{b.label}</span>
+                    ))}
+                    {!needs && benefits.length === 0 && <span className="text-[var(--ink-muted)]">Type and benefits not known</span>}
+                  </div>
+                  <div className="mt-1 line-clamp-2 text-[13px] text-[var(--ink-muted)]" title={areaOf(a) || undefined}>
+                    {areaOf(a) || 'Area not given'}
+                  </div>
+                </div>
+
+                {/* Housing officer and calls */}
+                <div className="flex min-w-0 flex-col gap-1.5 pl-[46px] text-[14px] md:pl-[46px] xl:pl-0">
+                  {hasOfficer(a) ? (
+                    <div className="min-w-0" title={[a.officer_name, a.officer_email, a.officer_phone].filter(Boolean).join('\n')}>
+                      <div className="flex items-center gap-1.5 truncate text-[var(--ink)]">
+                        <Icon name="user" size={13} className="shrink-0 text-[var(--ink-muted)]" />
+                        <span className="truncate">{officerName(a) ?? a.officer_email ?? a.officer_phone}</span>
+                      </div>
+                      <div className="truncate pl-[19px] text-[12px] text-[var(--ink-muted)]">
+                        {[officerOrg(a), councilOf(a) && councilOf(a) !== officerOrg(a) ? `client: ${councilOf(a)}` : null].filter(Boolean).join(' · ')}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-[13px] text-[var(--ink-muted)]">No housing officer</div>
+                  )}
+                  <CallCell state={callState(a, last.get(a.id))} lastOutcome={last.get(a.id)?.outcome} lastAt={last.get(a.id)?.created_at} />
+                </div>
+
+                {/* Stage */}
+                <div className="flex items-center gap-2 pl-[46px] md:col-span-2 md:pl-[46px] xl:col-span-1 xl:flex-col xl:items-stretch xl:pl-0">
+                  <select
+                    value={a.stage}
+                    onChange={(e) => changeStage(a, e.target.value as ApplicantStage)}
+                    aria-label={`Stage for ${a.full_name}`}
+                    className="min-h-[36px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[13px] text-[var(--ink)]"
+                  >
+                    {(PICKABLE_STAGES.includes(a.stage) ? PICKABLE_STAGES : [...PICKABLE_STAGES, a.stage]).map((s) => (
+                      <option key={s} value={s}>{STAGE_LABEL[s]}</option>
+                    ))}
+                  </select>
+                  <div className="flex items-center gap-2 xl:justify-between">
+                    <span className="text-[12px] text-[var(--ink-muted)]">Updated {timeAgo(a.updated_at)}</span>
                     <button
                       onClick={() => removeApplicant(a)}
                       aria-label={`Delete ${a.full_name}`}
                       title="Delete client"
                       className="rounded p-1.5 text-[var(--ink-muted)] transition-colors hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
                     >
-                      <Icon name="trash" size={16} />
+                      <Icon name="trash" size={15} />
                     </button>
-                  </td>
-                </tr>
-              );
-            })}
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={10} className="px-5 py-10 text-center text-[var(--ink-muted)]">
-                  No clients match this search.{' '}
-                  {pills.length > 0 && <button onClick={clearAll} className="text-[var(--link)] hover:underline">Clear all filters</button>}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+          {rows.length === 0 && (
+            <li className="px-5 py-10 text-center text-[var(--ink-muted)]">
+              No clients match this search.{' '}
+              {pills.length > 0 && <button onClick={clearAll} className="text-[var(--link)] hover:underline">Clear all filters</button>}
+            </li>
+          )}
+        </ul>
       </Card>
     </div>
   );
@@ -480,17 +493,16 @@ function FilterSelect({ label, value, onChange, options }: {
   );
 }
 
-function Th({ k, sortKey, dir, onSort, right, children }: {
-  k: SortKey; sortKey: SortKey; dir: 1 | -1; onSort: (k: SortKey) => void; right?: boolean; children: React.ReactNode;
+function SortLabel({ k, sortKey, dir, onSort, children }: {
+  k: SortKey; sortKey: SortKey; dir: 1 | -1; onSort: (k: SortKey) => void; children: React.ReactNode;
 }) {
   const active = k === sortKey;
   return (
-    <th className={`px-3 py-2 font-medium first:pl-5 ${right ? 'text-right' : ''}`} aria-sort={active ? (dir === 1 ? 'ascending' : 'descending') : 'none'}>
-      <button onClick={() => onSort(k)} className={`inline-flex items-center gap-1 hover:text-[var(--ink)] ${active ? 'text-[var(--ink)]' : ''}`}>
-        {children}
-        {active && <span aria-hidden>{dir === 1 ? '↑' : '↓'}</span>}
-      </button>
-    </th>
+    <button type="button" onClick={() => onSort(k)} aria-sort={active ? (dir === 1 ? 'ascending' : 'descending') : 'none'}
+      className={`inline-flex items-center gap-1 self-start font-medium hover:text-[var(--ink)] ${active ? 'text-[var(--ink)]' : ''}`}>
+      {children}
+      {active && <span aria-hidden>{dir === 1 ? '↑' : '↓'}</span>}
+    </button>
   );
 }
 

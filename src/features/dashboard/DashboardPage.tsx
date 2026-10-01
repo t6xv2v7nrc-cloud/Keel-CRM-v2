@@ -221,7 +221,9 @@ export function DashboardPage() {
                   {name ? (
                     <Link to={`/applicants/${act.entity_id}`} className="flex items-center gap-3 rounded-md px-3 py-2 hover:bg-[var(--surface-2)]">{inner}</Link>
                   ) : (
-                    <div className="flex items-center gap-3 px-3 py-2">{inner}</div>
+                    act.entity_type === 'inbox'
+                      ? <Link to="/bin" className="flex items-center gap-3 rounded-md px-3 py-2 hover:bg-[var(--surface-2)]">{inner}</Link>
+                      : <div className="flex items-center gap-3 px-3 py-2">{inner}</div>
                   )}
                 </li>
               );

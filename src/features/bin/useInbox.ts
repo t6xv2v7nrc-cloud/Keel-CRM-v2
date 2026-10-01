@@ -51,6 +51,18 @@ export function useCreateInboxItem() {
   });
 }
 
+/** Which client (if any) each filed item went to, from the activity trail. Items with none were filed as notes. */
+export function useFiledLinks() {
+  return useQuery({
+    queryKey: ['activities', 'inbox-links'],
+    queryFn: async (): Promise<Array<{ inbox_item_id: string; entity_type: string; entity_id: string }>> => {
+      const { data, error } = await supabase.from('activities').select('inbox_item_id, entity_type, entity_id').not('inbox_item_id', 'is', null);
+      if (error) throw error;
+      return data as Array<{ inbox_item_id: string; entity_type: string; entity_id: string }>;
+    },
+  });
+}
+
 export function useUpdateInboxItem() {
   const qc = useQueryClient();
   return useMutation({

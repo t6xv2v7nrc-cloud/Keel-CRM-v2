@@ -24,7 +24,15 @@ export const HELP = {
     body: [
       'Update: adds this to an existing client Keel thinks is the same person. It shows why, for example a phone number match.',
       'Create new client: starts a new record with the details on the left.',
-      'Just log a note: keeps a record without changing any client.',
+      'Just log a note: changes no client. The note is kept in full under Notes, lower down the Bin page, where you can search it and later make a client from it or add it to one.',
+    ],
+  },
+  binNotes: {
+    title: 'Notes',
+    body: [
+      'Everything filed with Just log a note, newest first, with the full text that was pasted or read from the screenshot.',
+      'Search finds a name, phone number or area in any note. Open a note to read it all.',
+      'Make a client from it, or add it to one: sends the note back to the review list at the top of the Bin, where you can choose Create new client or Update.',
     ],
   },
   pipeline: {

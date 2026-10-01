@@ -6,13 +6,13 @@ import { parseEnquiryEmail } from '../../lib/parseEnquiry';
 import { runMatching } from '../../lib/matching';
 import { compressImage, uploadToBin } from './capture';
 import { useInbox, useCreateInboxItem, useUpdateInboxItem } from './useInbox';
+import { BinFiled } from './BinNotes';
 import type { InboxItem } from './useInbox';
 import { ReviewCard } from './ReviewCard';
 import { confirmInboxItem } from './confirm';
 import { defaultChoice, withMessageNotes } from './defaults';
 import type { CardState } from './defaults';
 import { supabase } from '../../lib/supabase';
-import { timeAgo } from '../../lib/format';
 
 type Stage = 'idle' | 'staging' | 'processing';
 
@@ -172,7 +172,6 @@ export function BinPage() {
   };
 
   const reviewItems = inbox.filter((i) => i.status === 'review');
-  const doneItems = inbox.filter((i) => i.status === 'confirmed').slice(0, 8);
 
   return (
     <div className="mx-auto flex max-w-[1000px] flex-col gap-6 p-6 pb-24">
@@ -290,23 +289,8 @@ export function BinPage() {
         </section>
       )}
 
-      {/* Recently confirmed */}
-      {doneItems.length > 0 && (
-        <Card>
-          <CardHeader title="Recently filed" sub={`${doneItems.length}`} />
-          <ul className="m-0 list-none p-0">
-            {doneItems.map((item: InboxItem) => (
-              <li key={item.id} className="flex items-center gap-3 border-b border-[var(--line)] px-5 py-3 last:border-b-0">
-                <span className="rounded bg-[var(--stage-placed-bg)] px-2 py-0.5 text-[13px] text-[var(--stage-placed-fg)]">
-                  {item.detected_type?.replace(/_/g, ' ') ?? 'filed'}
-                </span>
-                <span className="text-[15px] text-[var(--ink)]">{item.extraction?.summary ?? '·'}</span>
-                <span className="ml-auto font-mono text-[13px] text-[var(--ink-muted)]">{timeAgo(item.confirmed_at)}</span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
+      {/* Filed: notes in full, and what went to clients */}
+      <BinFiled inbox={inbox} />
 
       {/* Empty state */}
       {inbox.length === 0 && stage === 'idle' && (

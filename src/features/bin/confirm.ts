@@ -166,7 +166,9 @@ export async function confirmInboxItem({
       logActivity(activities, 'applicant', id, 'updated', `Updated ${current?.full_name ?? 'applicant'} (from screenshot)`, inboxItemId);
     }
   } else if (choice.applicantTarget === 'note_only' && outcome.applicantId == null) {
-    // Note-only with no specific applicant: log against the contact if we have one
+    // A note changes no client. It stays in the Bin under Notes (full text kept on the item)
+    // and shows in recent activity; log it against the contact too if there is one.
+    logActivity(activities, 'inbox', inboxItemId, 'note', `Note filed from the Bin: ${extraction.summary}`, inboxItemId);
     if (contactId) {
       logActivity(activities, 'contact', contactId, 'note', extraction.summary, inboxItemId);
     }
