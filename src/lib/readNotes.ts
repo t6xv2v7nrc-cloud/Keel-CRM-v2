@@ -323,6 +323,7 @@ export function readNotes(a: Applicant): NotesReading {
   }
   if (need.askNames.length) understood.push(`Wants ${need.askNames.slice(0, 3).join(', ')}`);
   if (need.flexible) understood.push('Open to any area');
+  if (need.rentCap !== null) understood.push(`Up to £${need.rentCap.toLocaleString('en-GB')} (on UC alone)`);
   if (need.selfContained) understood.push('Self-contained');
   if (need.needsStepFree) understood.push('Ground floor or step-free');
 

@@ -203,6 +203,7 @@ export const HELP = {
       'Strong: area, size and rent all fit. Good: a solid fit, perhaps in the borough next door. Possible: a looser fit, so check with the client first.',
       'Anything to check shows in amber. Hover over a client for every reason.',
       'Properties over the premium rent in Team settings are always offered to clients on PIP or in full-time work.',
+      'A client on UC alone (no PIP or LCWRA, not working) is never matched above the limit in Team settings, £1,100 as standard: they cannot afford it.',
     ],
   },
   mySettings: {

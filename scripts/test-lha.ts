@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { brmaGroups, lhaAreaFor, lhaCheck, lhaSizeOf, lhaWords, lookupPostcode, parseDistrict, parseLhaCsv, rateFor, searchPlaces } from '../src/lib/lha';
 import { LHA_RATES } from '../src/data/lha-rates';
 import { matchesForProperty } from '../src/lib/propertyMatch';
+import { DEFAULT_SETTINGS, setActiveSettings } from '../src/lib/settings';
 import type { Applicant } from '../src/lib/types';
 
 let failed = 0;
@@ -74,7 +75,8 @@ if (existsSync(CSV)) {
   console.log('SKIP  CSV loading (set LHA_CSV to the rates file to check it)');
 }
 
-// Matching uses the client's own LHA
+// Matching uses the client's own LHA (the UC-only rent limit is switched off here: it is checked in test-rules)
+setActiveSettings({ ...DEFAULT_SETTINGS, ucOnlyRentCap: 0 });
 let id = 0;
 const make = (p: Partial<Applicant>): Applicant => ({
   id: `a${++id}`, full_name: 'X', phone: null, email: null, date_of_birth: null, adults: 1, children: 0,

@@ -13,6 +13,10 @@
 // is always offered to clients on PIP (alone or with UC / LCWRA) or in
 // full-time work, whatever their stated budget or area, unless the property
 // physically cannot work for them.
+//
+// House rule (Settings): a client on UC alone (no PIP or LCWRA, not working)
+// can afford at most the UC-only limit (standard £1,100 pcm), whatever budget
+// they gave. Anything dearer is not a match for them at all.
 
 import type { Applicant } from './types';
 import { benefitsOf, effectiveTier, householdOf, isUrgent } from './search';
@@ -67,6 +71,7 @@ interface Needs {
   openToOthers: boolean; // "I don't mind if it is further north": other areas are a caution, not a no
   selfContained: boolean; // asked for self-contained: no rooms
   premiumOk: string | null; // why they can take a property over the premium rent: "PIP", "full-time"...
+  rentCap: number | null; // on UC alone: the most they can afford, or null if the limit does not apply
   beds: { min: number; max: number; asked: boolean } | null;
   household: HouseholdKey | null;
   children: number;
@@ -85,6 +90,16 @@ function premiumReason(a: Applicant): string | null {
   if (f.fullTime && a.work_status === 'full_time') return 'full-time';
   if (f.partTime && a.work_status === 'part_time') return 'part-time';
   return null;
+}
+
+/** The most a client can afford if they are on UC alone (no PIP or LCWRA, not working), per Settings; otherwise null. */
+export function ucOnlyCap(a: Applicant): number | null {
+  const cap = activeSettings().ucOnlyRentCap;
+  if (!cap) return null;
+  const has = (k: string) => benefitsOf(a).some((b) => b.key === k);
+  if (!has('uc') || has('pip') || has('lcwra')) return null;
+  if (a.work_status === 'full_time' || a.work_status === 'part_time') return null;
+  return cap;
 }
 
 export function clientNeeds(a: Applicant): Needs {
@@ -147,6 +162,7 @@ export function clientNeeds(a: Applicant): Needs {
     openToOthers: /\b(?:don'?t|do\s+not|wouldn'?t|would\s+not)\s+mind\b|\bopen\s+to\b|\bnot\s+fussy\b/i.test(text),
     selfContained,
     premiumOk: premiumReason(a),
+    rentCap: ucOnlyCap(a),
     flexible: /\b(anywhere|any\s+area|anywhere\s+in\s+london|flexible\s+on\s+area|open\s+to\s+(?:any|all|other)\s+areas?)\b/i.test(text),
     beds,
     household,
@@ -234,6 +250,8 @@ export function scoreMatch(p: PropertyLike, a: Applicant): Match | null {
   // Rent: against their budget if they gave one, otherwise against their LHA
   const lha = lhaCheck(p);
   const rent = p.rent_pcm ?? lha?.rent ?? null;
+  // On UC alone: over the limit is not affordable, so not a match
+  if (need.rentCap !== null && rent != null && rent > need.rentCap) return null;
   let judgedOnLha = false;
   if (premiumFit) {
     score += 15;
@@ -256,6 +274,13 @@ export function scoreMatch(p: PropertyLike, a: Applicant): Match | null {
   } else if (f.lha) {
     if (need.onBenefits) { score += 15; reasons.push(`${p.rent_text} rent, on benefits`); }
     else score += 5;
+  }
+  if (need.rentCap !== null) {
+    if (rent == null) cautions.push(`On UC alone: check the rent is ${money(need.rentCap)} or less`);
+    else if (!reasons.some((r) => /within|under their LHA|At their LHA|rent, on benefits/.test(r))) {
+      score += 10;
+      reasons.push(`${money(rent)} is within the ${money(need.rentCap)} limit for UC alone`);
+    }
   }
   if (premium && !premiumFit && !judgedOnLha && !(need.budget && p.rent_pcm! <= need.budget)) {
     score -= 5;

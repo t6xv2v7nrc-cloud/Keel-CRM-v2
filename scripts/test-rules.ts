@@ -2,7 +2,8 @@
 // self-contained asks, and the over-£1,300 rule for PIP / full-time clients.
 // Run with: npx tsx scripts/test-rules.ts
 import { parsePropertyList } from '../src/lib/parseProperties';
-import { matchesForApplicant, matchesForProperty } from '../src/lib/propertyMatch';
+import { clientNeeds, matchesForApplicant, matchesForProperty } from '../src/lib/propertyMatch';
+import { DEFAULT_SETTINGS, setActiveSettings } from '../src/lib/settings';
 import { regionsIn } from '../src/lib/london';
 import { clientAreas } from '../src/lib/geo';
 import type { Applicant } from '../src/lib/types';
@@ -63,7 +64,7 @@ check('Robinson: Tottenham studio shown as open to other areas', robFor(tottenha
 const forCroydon = matchesForProperty(croydon2bed, [robinson, ukOnly, worker, pipFamily]);
 const names = forCroydon.map((m) => m.applicant.full_name);
 check('£1,450 Croydon: full-time worker offered despite budget and "Harrow only"', names.some((n) => n.startsWith('Will')), names.join(', '));
-check('£1,450 Croydon: UC-only client gets an affordability caution', forCroydon.find((m) => m.applicant.full_name.startsWith('Uma'))?.cautions.some((c) => /afford/.test(c)) ?? true);
+check('£1,450 Croydon: UC-only client is not offered it (over the £1,100 limit for UC alone)', !forCroydon.some((m) => m.applicant.full_name.startsWith('Uma')));
 check('£1,350 Edmonton 1 bed: PIP family of 5 not offered (too small)', !matchesForProperty(edmonton1bed, [pipFamily]).length);
 check('£1,450 Croydon 2 bed: PIP family of 5 offered (2-3 bed fits)', names.some((n) => n.startsWith('Pam')));
 
@@ -92,6 +93,30 @@ check('email: Reading heading and RG postcodes give Reading', email.properties.s
 check('email: signature not in notes', !email.properties.some((p) => /Ridwan|Keel Lettings|Kind regards/.test(p.notes)));
 
 for (const m of rob) console.log(`   ${m.match.strength.padEnd(8)} ${m.property.address_line}: ${m.match.reasons.join('; ')}${m.match.cautions.length ? `  [! ${m.match.cautions.join('; ')}]` : ''}`);
+// On UC alone: nothing over the limit (£1,100 as standard)
+const place = (rent: number, type = 'Studio', beds = 0) => ({
+  address_line: '8 Mill Road, Tottenham N17 9AA', postcode: 'N17 9AA', area: 'Tottenham', borough: 'Haringey', property_type: type, bedrooms: beds,
+  rent_pcm: rent, rent_text: `£${rent} pcm`, furnished: null, notes: null,
+});
+const ucOnly = make({ full_name: 'Una Only', on_uc: true, household_type: 'single', council: 'Haringey', notes: 'Studio in Tottenham' });
+check('UC alone: a £1,150 studio is not a match', matchesForProperty(place(1150), [ucOnly]).length === 0);
+check('UC alone: £1,100 exactly is fine', matchesForProperty(place(1100), [ucOnly]).length === 1);
+check('UC alone: a higher budget does not lift the limit', matchesForProperty(place(1250), [{ ...ucOnly, id: 'u2', budget_pcm: 1400 }]).length === 0);
+check('UC alone: "1-Bed LHA" rent over the limit is not a match',
+  matchesForProperty({ ...place(0), rent_pcm: null, rent_text: '1-Bed LHA' }, [ucOnly]).length === 0);
+check('UC with PIP is not limited', matchesForProperty(place(1150), [{ ...ucOnly, id: 'u3', pip: true }]).length === 1);
+check('UC with LCWRA is not limited', matchesForProperty(place(1150), [{ ...ucOnly, id: 'u4', lcwra: true }]).length === 1);
+check('UC and working is not limited', matchesForProperty(place(1150), [{ ...ucOnly, id: 'u5', work_status: 'full_time' }]).length === 1);
+check('a UC-only family is limited too', matchesForProperty(place(1450, '2-Bed Flat', 2),
+  [make({ full_name: 'Fay Family', on_uc: true, household_type: 'family', children: 2, council: 'Haringey', notes: '2 bed Tottenham' })]).length === 0);
+check('the limit is a setting: 0 turns it off', (() => {
+  setActiveSettings({ ...DEFAULT_SETTINGS, ucOnlyRentCap: 0 });
+  const n = matchesForProperty(place(1150), [ucOnly]).length;
+  setActiveSettings(DEFAULT_SETTINGS);
+  return n === 1;
+})());
+check('clientNeeds reports the limit', clientNeeds(ucOnly).rentCap === 1100 && clientNeeds({ ...ucOnly, pip: true }).rentCap === null);
+
 // "Central": said however they say it, and only the central districts count
 check('"somewhere central" is central London', eq(regionsIn('Somewhere central please'), ['central london']));
 check('"central heating" and "Finchley Central" are not', regionsIn('needs central heating, near Finchley Central').length === 0);

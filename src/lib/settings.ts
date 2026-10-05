@@ -84,6 +84,8 @@ export interface AppSettings {
   urgentLevels: string[];
   /** Properties above this rent are always offered to the clients below. */
   premiumRent: number;
+  /** The most a client on UC alone (no PIP or LCWRA, not working) can afford, pcm. They are never matched above it. 0 = no limit. */
+  ucOnlyRentCap: number;
   premiumFor: { pip: boolean; lcwra: boolean; fullTime: boolean; partTime: boolean };
   /** Show "Possible" matches as well as Good and Strong. */
   showPossibleMatches: boolean;
@@ -184,6 +186,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   membersCanSetTier: true,
   urgentLevels: ['homeless_tonight', 'at_risk_56'],
   premiumRent: 1300,
+  ucOnlyRentCap: 1100,
   premiumFor: { pip: true, lcwra: false, fullTime: true, partTime: false },
   showPossibleMatches: true,
   callAgainAfterNoAnswer: 2,
