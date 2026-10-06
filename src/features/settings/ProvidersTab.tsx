@@ -176,7 +176,7 @@ function ProviderForm({ initial, onDone }: { initial: ProviderDraft | Provider; 
               </div>
             </Field>
             <p className="m-0 self-end text-[13px] text-[var(--ink-muted)]">
-              When a client moves in to one of their properties, the fee goes on Money owed with this amount and due date. Leave blank to use the team standard.
+              When a client moves in to one of their properties, the fee goes on Receivables with this amount and due date. Leave blank to use the team standard.
             </p>
           </div>
         </div>

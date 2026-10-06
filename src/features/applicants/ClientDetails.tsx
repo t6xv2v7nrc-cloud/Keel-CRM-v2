@@ -65,7 +65,7 @@ export function ClientDetails({ applicant }: { applicant: Applicant }) {
   const council = a.council || a.referring_borough || '';
 
   return (
-    <Card id="details" className="scroll-mt-20">
+    <Card id="details" className="scroll-mt-28 lg:scroll-mt-20">
       <CardHeader icon="user" title="Client details" help="clientDetails">
         <span className="inline-flex items-center gap-1.5 text-[13px] text-[var(--ink-muted)]">
           {triage.isPending || moveStage.isPending ? 'Saving…' : <><Icon name="check" size={13} />Saves as you go</>}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { BrowserRouter, Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { supabase } from './lib/supabase';
 import { AuthGate } from './features/auth/AuthGate';
@@ -36,7 +36,7 @@ const NAV: Array<{ to: string; label: string; icon: IconName }> = [
   { to: '/pipeline', label: 'Pipeline', icon: 'list' },
   { to: '/calls', label: 'Calls', icon: 'phone' },
   { to: '/properties', label: 'Properties', icon: 'building' },
-  { to: '/money', label: 'Money', icon: 'pound' },
+  { to: '/receivables', label: 'Receivables', icon: 'pound' },
 ];
 
 export default function App() {
@@ -95,7 +95,8 @@ function Shell() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-30 flex items-center gap-1 border-b border-[var(--line)] bg-[var(--surface)]/95 px-4 py-2 backdrop-blur">
+      {/* Below lg the pages sit on a row of their own, so every one is in reach without swiping sideways */}
+      <header className="sticky top-0 z-30 flex flex-wrap items-center gap-x-1 gap-y-1 border-b border-[var(--line)] bg-[var(--surface)]/95 px-4 py-1.5 backdrop-blur lg:py-2">
         {/* Clickable home / brand */}
         <Link to="/" aria-label="Home" title="Home" className="mr-2 flex items-center gap-2 rounded-md p-1 transition-colors hover:bg-[var(--surface-2)]">
           <span aria-hidden className="grid h-7 w-7 rotate-45 place-items-center rounded-[6px] bg-[var(--accent)]">
@@ -103,7 +104,7 @@ function Shell() {
           </span>
           <span className="hidden font-[var(--font-display)] text-[18px] font-bold text-[var(--ink)] sm:block">Keel</span>
         </Link>
-        <nav className="flex items-center gap-0.5 overflow-x-auto">
+        <nav className="order-last flex w-full items-center justify-between overflow-x-auto lg:order-none lg:w-auto lg:justify-start lg:gap-0.5">
           {NAV.map((item) => (
             <NavLink
               key={item.to}
@@ -111,7 +112,7 @@ function Shell() {
               end={item.to === '/'}
               title={item.label}
               className={({ isActive }) =>
-                `flex items-center gap-2 rounded-md px-2.5 py-2 text-[15px] transition-colors ${
+                `flex min-w-10 flex-col items-center gap-0.5 rounded-md px-1 py-1 text-[11px] leading-tight transition-colors lg:min-w-0 lg:flex-row lg:gap-2 lg:px-2.5 lg:py-2 lg:text-[15px] lg:leading-normal ${
                   isActive
                     ? 'bg-[var(--accent-soft)] font-semibold text-[var(--accent-ink)]'
                     : 'text-[var(--ink-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--ink)]'
@@ -119,7 +120,7 @@ function Shell() {
               }
             >
               <Icon name={item.icon} size={18} />
-              <span className="hidden md:inline">{item.label}</span>
+              <span>{item.label}</span>
             </NavLink>
           ))}
         </nav>
@@ -148,7 +149,9 @@ function Shell() {
           <Route path="/applicants/:id" element={<ApplicantPage />} />
           <Route path="/properties" element={<PropertiesPage />} />
           <Route path="/calls" element={<CallsPage />} />
-          <Route path="/money" element={<MoneyPage />} />
+          <Route path="/receivables" element={<MoneyPage />} />
+          {/* The page's first address; old links and bookmarks still land */}
+          <Route path="/money" element={<Navigate to="/receivables" replace />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>

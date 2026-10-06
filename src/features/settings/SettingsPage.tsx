@@ -307,7 +307,7 @@ function MoneySettings({ draft, set }: { draft: AppSettings; set: <K extends key
   );
   return (
     <Card>
-      <CardHeader icon="pound" title="Money owed" help="money" />
+      <CardHeader icon="pound" title="Receivables" help="money" />
       <div className="flex flex-col gap-5 p-5">
         <Row icon="calendar" title="Letting fees fall due" text="For the landlord, or a provider with no rule of its own. A provider's own rule (Settings, Providers) wins.">
           {due('feeDue', 'Letting fees fall due')}

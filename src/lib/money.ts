@@ -1,5 +1,7 @@
-// Money owed to Keel for a placement: the letting fee (from a provider such
-// as Watermint or Zuber, or the landlord) and any council incentive.
+// Receivables: money owed to Keel for a placement. The letting fee (from a
+// provider such as Watermint or Zuber, or the landlord) and any council
+// incentive. The app calls this "Receivables"; files and the activity kind
+// keep the name "money" they were built with.
 //
 // The due date is worked out from the sign-up date: a provider's own rule if
 // it has one ("1 month after sign up"), otherwise the team's standard in

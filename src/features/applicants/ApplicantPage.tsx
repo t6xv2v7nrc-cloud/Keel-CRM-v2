@@ -82,7 +82,7 @@ export function ApplicantPage() {
       <ClientDetails applicant={applicant} />
 
       <div className="grid items-start gap-6 lg:grid-cols-2">
-        <div ref={callsRef} className="min-w-0 scroll-mt-20">
+        <div ref={callsRef} className="min-w-0 scroll-mt-28 lg:scroll-mt-20">
           <CallsCard applicant={applicant} calls={mine} ready={callsReady} open={logging} setOpen={setLogging} />
         </div>
 
@@ -118,7 +118,7 @@ function TimelineRow({ act }: { act: Activity }) {
       <div className="flex-1">
         <div className="text-[15px] text-[var(--ink)]">{act.body}</div>
         <div className="mt-0.5 flex items-center gap-2 text-[13px] text-[var(--ink-muted)]">
-          <span>{isCall ? 'Call' : isWhatsApp ? 'WhatsApp' : act.kind === 'request' ? 'Request' : act.kind === 'money' ? 'Money' : isProgress ? 'Progress' : act.kind.replace('_', ' ')}</span>
+          <span>{isCall ? 'Call' : isWhatsApp ? 'WhatsApp' : act.kind === 'request' ? 'Request' : act.kind === 'money' ? 'Receivables' : isProgress ? 'Progress' : act.kind.replace('_', ' ')}</span>
           <span>·</span>
           <span>{timeAgo(act.created_at)}</span>
           {who && <><span>·</span><span>by {who}</span></>}

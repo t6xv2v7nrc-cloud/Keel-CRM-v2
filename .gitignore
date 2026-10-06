@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local visual test harness (see CLAUDE.md). Its sample data stays on this machine.
+.harness/
+/harness.html
+/src/__harness.tsx

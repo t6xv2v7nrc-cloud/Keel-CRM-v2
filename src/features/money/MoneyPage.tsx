@@ -12,7 +12,7 @@ import { MoneyNeedsUpdate, MoneyRow, ReceivableForm } from './Money';
 
 const select = 'min-h-[40px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]';
 
-/** Money owed: every letting fee and incentive still to come in, soonest due first, overdue flagged. */
+/** Receivables: every letting fee and incentive still to come in, soonest due first, overdue flagged. */
 export function MoneyPage() {
   const { receivables, ready } = useReceivables();
   const { data: applicants = [] } = useApplicants();
@@ -51,7 +51,7 @@ export function MoneyPage() {
 
   return (
     <div className="mx-auto flex max-w-[1100px] flex-col gap-5 p-6 pb-24">
-      <PageHeader icon="pound" title="Money owed" help="money"
+      <PageHeader icon="pound" title="Receivables" help="money"
         sub={ready ? <>{money(t.owed)} owed across {t.owedCount}{t.overdueCount > 0 && <> · <strong className="text-[var(--note-fg)]">{money(t.overdue)} overdue</strong></>}</> : undefined}>
         {ready && <Button variant="primary" onClick={() => setAddOpen((v) => !v)}><Icon name="plus" size={16} />Add a fee or incentive</Button>}
       </PageHeader>

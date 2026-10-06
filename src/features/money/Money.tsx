@@ -27,7 +27,7 @@ export function MoneyNeedsUpdate() {
     <div role="alert" className="flex gap-3 rounded-lg border border-[var(--line-strong)] bg-[var(--note-bg)] p-4 text-[15px] text-[var(--note-fg)]">
       <Icon name="alert" size={20} className="mt-0.5" />
       <div>
-        <strong>Money owed needs a one-off database update.</strong> In Supabase, open the SQL Editor, paste in{' '}
+        <strong>Receivables need a one-off database update.</strong> In Supabase, open the SQL Editor, paste in{' '}
         <code className="font-mono text-[13px]">supabase/migrations/0012_money.sql</code> and click Run. Then reload this page.
       </div>
     </div>
@@ -133,7 +133,7 @@ export function ReceivableForm({ initial, was = null, council, onDone }: { initi
   const rule = dueRuleFor(d.kind, provider);
 
   const submit = () => save.mutate({ draft: d, was }, {
-    onSuccess: () => { toast(was ? 'Saved' : `${KIND_LABEL[d.kind]} added to Money owed`, 'success'); onDone(); },
+    onSuccess: () => { toast(was ? 'Saved' : `${KIND_LABEL[d.kind]} added to Receivables`, 'success'); onDone(); },
     onError: (e) => toast((e as Error).message, 'danger'),
   });
 
@@ -231,7 +231,7 @@ export function MoneyCard({ applicant }: { applicant: Applicant }) {
 
   return (
     <Card>
-      <CardHeader icon="pound" title="Money" sub={open.length ? `${money(t.owed)} owed${t.overdueCount ? ` · ${t.overdueCount} overdue` : ''}` : mine.length ? 'All paid' : undefined} help="money">
+      <CardHeader icon="pound" title="Receivables" sub={open.length ? `${money(t.owed)} owed${t.overdueCount ? ` · ${t.overdueCount} overdue` : ''}` : mine.length ? 'All paid' : undefined} help="money">
         <Button className={small} onClick={() => setAdding(lettingFeeFor({ ...base, provider: property ? providerFor(property, providers) : null }))}><Icon name="plus" size={14} />Letting fee</Button>
         <Button className={small} onClick={() => setAdding(incentiveFor({ ...base, council: councilOf(applicant) }))}><Icon name="plus" size={14} />Incentive</Button>
       </CardHeader>
@@ -262,8 +262,8 @@ export function MoneyOwedSummary({ applicants }: { applicants: Applicant[] }) {
   const byId = new Map(applicants.map((a) => [a.id, a]));
   return (
     <Card>
-      <CardHeader icon="pound" title="Money owed" sub={`${money(t.owed)}${t.overdueCount ? ` · ${money(t.overdue)} overdue` : ''}`} help="money">
-        <Link to="/money" className="text-[13px] text-[var(--link)] hover:underline">See all {list.length}</Link>
+      <CardHeader icon="pound" title="Receivables" sub={`${money(t.owed)} owed${t.overdueCount ? ` · ${money(t.overdue)} overdue` : ''}`} help="money">
+        <Link to="/receivables" className="text-[13px] text-[var(--link)] hover:underline">See all {list.length}</Link>
       </CardHeader>
       <ul className="m-0 flex list-none flex-col divide-y divide-[var(--line)] px-5 py-0">
         {list.slice(0, 4).map((r) => <MoneyRow key={r.id} r={r} client={byId.get(r.applicant_id) ?? null} provider={providers.find((p) => p.id === r.provider_id) ?? null} />)}

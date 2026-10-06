@@ -722,7 +722,7 @@ export function useMoveDeal() {
         }
       }
 
-      // The letting fee is owed from now, so it goes on Money owed straight away (once; before 0012 this is skipped)
+      // The letting fee is owed from now, so it goes on Receivables straight away (once; before 0012 this is skipped)
       let fee: string | null = null;
       if (to === 'moved_in') {
         const had = await supabase.from('receivables').select('id').eq('deal_id', deal.id).eq('kind', 'letting_fee').limit(1);
@@ -733,7 +733,7 @@ export function useMoveDeal() {
           const added = await supabase.from('receivables').insert(draft);
           if (!added.error) {
             fee = describe(draft);
-            await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: applicant.id, kind: 'money', body: `${fee} added to Money owed` });
+            await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: applicant.id, kind: 'money', body: `${fee} added to Receivables` });
           }
         }
       }
@@ -1013,9 +1013,9 @@ export function useClientNote() {
   });
 }
 
-// ── Money owed (0012) ───────────────────────────────────────────────
+// ── Receivables (0012; "money" in file and kind names) ──────────────
 const MONEY_UPDATE =
-  'Money owed needs a one-off database update: run supabase/migrations/0012_money.sql in the Supabase SQL Editor.';
+  'Receivables need a one-off database update: run supabase/migrations/0012_money.sql in the Supabase SQL Editor.';
 
 /** Every letting fee and incentive, soonest due first. `ready` is false until 0012 is run. */
 export function useReceivables() {
