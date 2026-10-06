@@ -12,6 +12,7 @@ import { PipelinePage } from './features/pipeline/PipelinePage';
 import { ApplicantPage } from './features/applicants/ApplicantPage';
 import { PropertiesPage } from './features/properties/PropertiesPage';
 import { CallsPage } from './features/calls/CallsPage';
+import { MoneyPage } from './features/money/MoneyPage';
 import { SettingsPage } from './features/settings/SettingsPage';
 import { CommandSearch, openSearch } from './features/search/CommandSearch';
 import { RequestSheetHost } from './features/requests/RequestSheet';
@@ -35,6 +36,7 @@ const NAV: Array<{ to: string; label: string; icon: IconName }> = [
   { to: '/pipeline', label: 'Pipeline', icon: 'list' },
   { to: '/calls', label: 'Calls', icon: 'phone' },
   { to: '/properties', label: 'Properties', icon: 'building' },
+  { to: '/money', label: 'Money', icon: 'pound' },
 ];
 
 export default function App() {
@@ -146,6 +148,7 @@ function Shell() {
           <Route path="/applicants/:id" element={<ApplicantPage />} />
           <Route path="/properties" element={<PropertiesPage />} />
           <Route path="/calls" element={<CallsPage />} />
+          <Route path="/money" element={<MoneyPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>

@@ -8,6 +8,8 @@
 // Pure helpers such as computeTier read the active settings (team rules plus
 // the signed-in person's own), which the app shell keeps up to date.
 
+import type { DueRule } from './types';
+
 // ── Tier logic ─────────────────────────────────────────────────────
 // Any number of tiers, checked in order; a client gets the first tier whose
 // conditions they meet, and the last tier is "everyone else". Each tier has
@@ -117,6 +119,12 @@ export interface AppSettings {
   requestFollowUpHours: number;
   /** New clients start as OK to share their details with landlords (applied by the database, migration 0011). */
   shareWithLandlordsByDefault: boolean;
+  /** When a letting fee falls due after sign up, for payers with no rule of their own (a provider's own rule wins). */
+  feeDue: DueRule;
+  /** When a council incentive should have been paid, counted from sign up. */
+  incentiveDue: DueRule;
+  /** Wording when chasing a provider for a letting fee on WhatsApp. */
+  feeChaseMessage: string;
   /** Page to open after signing in. */
   startPage: '/' | '/calls' | '/pipeline' | '/bin' | '/properties';
   /** Which clients the Calls page shows first. */
@@ -169,6 +177,12 @@ export const DEFAULT_REQUEST_TEMPLATES = {
   ].join('\n'),
 };
 
+export const DEFAULT_FEE_CHASE = [
+  'Salam {provider_first_name}, the letting fee of {amount} for {client_first_name} at {property_address} was due on {due_date}.',
+  'Could you let me know when it will be paid?',
+  'Thanks, {my_name}, Keel Lettings',
+].join('\n');
+
 export const DEFAULT_VIEWING_MOVED = [
   'Hi {first name}, your viewing at {address} has moved to {when}.',
   'Reply here if that time does not work for you.',
@@ -204,6 +218,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   whatsappViewingCancelled: DEFAULT_VIEWING_CANCELLED,
   requestFollowUpHours: 24,
   shareWithLandlordsByDefault: false,
+  feeDue: { n: 1, unit: 'months' },
+  incentiveDue: { n: 6, unit: 'weeks' },
+  feeChaseMessage: DEFAULT_FEE_CHASE,
   startPage: '/',
   callsView: 'everyone',
 };

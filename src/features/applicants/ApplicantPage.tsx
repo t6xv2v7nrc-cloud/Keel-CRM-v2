@@ -21,6 +21,7 @@ import { SentTag, WhatsAppLink } from '../properties/WhatsApp';
 import { LazyMap, MapKey } from '../map/MapView';
 import { NextStepRow, ProgressCard, StuckChip } from '../progress/Progress';
 import { RequestButton, RequestChip } from '../requests/RequestSheet';
+import { MoneyCard } from '../money/Money';
 import { stuckDays } from '../../lib/progress';
 import { clientAreas, placeKey } from '../../lib/geo';
 
@@ -74,6 +75,8 @@ export function ApplicantPage() {
 
       <ProgressCard applicant={applicant} />
 
+      <MoneyCard applicant={applicant} />
+
       <SuitablePropertiesCard applicant={applicant} />
 
       <ClientDetails applicant={applicant} />
@@ -107,7 +110,7 @@ function TimelineRow({ act }: { act: Activity }) {
   const fromScreenshot = act.body.includes('screenshot') || act.inbox_item_id != null;
   const isCall = act.kind === 'call';
   const isWhatsApp = act.kind === 'whatsapp';
-  const isProgress = act.kind === 'progress' || act.kind === 'request';
+  const isProgress = act.kind === 'progress' || act.kind === 'request' || act.kind === 'money';
   return (
     <li className="relative flex gap-3 pl-5">
       <span aria-hidden className="absolute left-0 top-1.5 h-[9px] w-[9px] rounded-full ring-2 ring-[var(--surface)]"
@@ -115,7 +118,7 @@ function TimelineRow({ act }: { act: Activity }) {
       <div className="flex-1">
         <div className="text-[15px] text-[var(--ink)]">{act.body}</div>
         <div className="mt-0.5 flex items-center gap-2 text-[13px] text-[var(--ink-muted)]">
-          <span>{isCall ? 'Call' : isWhatsApp ? 'WhatsApp' : act.kind === 'request' ? 'Request' : isProgress ? 'Progress' : act.kind.replace('_', ' ')}</span>
+          <span>{isCall ? 'Call' : isWhatsApp ? 'WhatsApp' : act.kind === 'request' ? 'Request' : act.kind === 'money' ? 'Money' : isProgress ? 'Progress' : act.kind.replace('_', ' ')}</span>
           <span>·</span>
           <span>{timeAgo(act.created_at)}</span>
           {who && <><span>·</span><span>by {who}</span></>}

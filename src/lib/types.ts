@@ -147,6 +147,36 @@ export interface ProviderRules {
   max_rent?: number | null;
   boroughs?: string[];           // councils they take clients from
   furnished?: 'furnished' | 'unfurnished' | null;
+  /** Their usual letting fee to Keel, and when it falls due after sign up (kept with the rules: no extra database column). */
+  fee_amount?: number | null;
+  fee_due?: DueRule | null;
+}
+
+/** "1 month after sign up": how long after the sign-up date money falls due. */
+export interface DueRule { n: number; unit: 'days' | 'weeks' | 'months' }
+
+export type ReceivableKind = 'letting_fee' | 'incentive';
+export type ReceivableStatus = 'due' | 'chased' | 'paid' | 'to_claim' | 'submitted' | 'declined';
+
+/** Money Keel is owed for a placement: a letting fee, or a council incentive (0012). */
+export interface Receivable {
+  id: string;
+  kind: ReceivableKind;
+  applicant_id: string;
+  deal_id: string | null;
+  property_address: string | null;
+  payer: string;                 // 'Watermint', 'Zuber', 'Landlord', or the council for an incentive
+  provider_id: string | null;
+  amount: number | null;         // null until the amount is known
+  sign_up_on: string | null;     // YYYY-MM-DD
+  due_on: string | null;
+  claim_submitted_on: string | null;
+  status: ReceivableStatus;
+  paid_on: string | null;
+  notes: string | null;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 /** Who supplies properties: the source tag on a stock list (0010). */

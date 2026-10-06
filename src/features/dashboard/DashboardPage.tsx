@@ -14,6 +14,7 @@ import type { ApplicantStage } from '../../types/extraction';
 import type { Activity } from '../../lib/types';
 import { ThisWeek } from './ThisWeek';
 import { AwaitingProviders } from '../requests/AwaitingProviders';
+import { MoneyOwedSummary } from '../money/Money';
 
 const FUNNEL: Array<{ stage: ApplicantStage; label: string }> = [
   { stage: 'lead', label: 'Lead' }, { stage: 'referred', label: 'Referred' }, { stage: 'viewing', label: 'Viewing' },
@@ -111,6 +112,8 @@ export function DashboardPage() {
       <ThisWeek applicants={applicants} />
 
       <AwaitingProviders applicants={applicants} />
+
+      <MoneyOwedSummary applicants={applicants} />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
         {/* Triage */}
@@ -240,6 +243,7 @@ function activityIcon(a: Activity): IconName {
   if (a.kind === 'whatsapp') return 'chat';
   if (a.kind === 'progress') return 'flag';
   if (a.kind === 'request') return 'send';
+  if (a.kind === 'money') return 'pound';
   if (a.kind === 'stage_change') return 'arrowRight';
   if (a.entity_type === 'property') return 'building';
   if (a.kind === 'created') return a.body.includes('screenshot') ? 'inbox' : 'plus';

@@ -164,6 +164,15 @@ export const HELP = {
       'Postcodes are placed using postcodes.io, a free public lookup; only property postcodes are sent, never anything about a client. The map is from OpenStreetMap.',
     ],
   },
+  money: {
+    title: 'Money owed',
+    body: [
+      'Every letting fee and council incentive still to come in, soonest due first. Anything past its due date is flagged overdue in amber.',
+      'When a client is marked as moved in on their Progress, the letting fee is added by itself: from the property\'s provider (Watermint, Zuber...) at their usual fee, or from the landlord. Add an incentive from the client\'s page if the council pays one.',
+      'The due date is worked out from the sign-up date: the provider\'s own rule if it has one (say 1 month after sign up), otherwise the standard in Team settings. You can change any date by hand.',
+      'Letting fees go Due, Chased, Paid. Incentives go To claim, Claim submitted, Chased, Paid (or Declined). Chase opens WhatsApp to the provider with the message written; Paid takes it off the list. Each step is on the client\'s timeline.',
+    ],
+  },
   requests: {
     title: 'Requests to providers',
     body: [

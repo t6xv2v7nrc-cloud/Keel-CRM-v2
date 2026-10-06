@@ -6,8 +6,8 @@ import type { IconName } from '../../components/ui';
 import {
   useApplicants, useBulkShare, useCalls, useHandOver, usePeople, useProviders, useSaveProfile, useSaveSettings, useSettings,
 } from '../../lib/hooks';
-import type { Applicant } from '../../lib/types';
-import { DEFAULT_SETTINGS, myPart, teamPart } from '../../lib/settings';
+import type { Applicant, DueRule } from '../../lib/types';
+import { DEFAULT_FEE_CHASE, DEFAULT_SETTINGS, myPart, teamPart } from '../../lib/settings';
 import type { AppSettings } from '../../lib/settings';
 import { URGENCY_LABEL } from '../../lib/tiering';
 import { TierLogicEditor } from './TierLogicEditor';
@@ -257,6 +257,8 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
 
       <SharingSettings draft={draft} set={set} clients={active} />
 
+      <MoneySettings draft={draft} set={set} />
+
       <Card>
         <CardHeader icon="flag" title="Client progress" help="progress" />
         <div className="flex flex-col gap-4 p-5">
@@ -286,6 +288,46 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
         </div>
       </Card>
     </fieldset>
+  );
+}
+
+/** Team settings: when letting fees and incentives fall due after sign up, and the wording for chasing a fee. */
+function MoneySettings({ draft, set }: { draft: AppSettings; set: <K extends keyof AppSettings>(k: K, v: AppSettings[K]) => void }) {
+  const due = (key: 'feeDue' | 'incentiveDue', label: string) => (
+    <span className="flex items-center gap-2">
+      <input type="number" min={0} value={draft[key].n} aria-label={`${label}: how long`}
+        onChange={(e) => set(key, { ...draft[key], n: Math.max(0, Number(e.target.value) || 0) })}
+        className="h-10 w-20 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2.5 font-mono text-[15px] text-[var(--ink)] outline-none focus:border-[var(--accent)]" />
+      <select value={draft[key].unit} aria-label={`${label}: unit`} onChange={(e) => set(key, { ...draft[key], unit: e.target.value as DueRule['unit'] })}
+        className="h-10 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]">
+        <option value="days">days</option><option value="weeks">weeks</option><option value="months">months</option>
+      </select>
+      <span className="text-[13px] text-[var(--ink-muted)]">after sign up</span>
+    </span>
+  );
+  return (
+    <Card>
+      <CardHeader icon="pound" title="Money owed" help="money" />
+      <div className="flex flex-col gap-5 p-5">
+        <Row icon="calendar" title="Letting fees fall due" text="For the landlord, or a provider with no rule of its own. A provider's own rule (Settings, Providers) wins.">
+          {due('feeDue', 'Letting fees fall due')}
+        </Row>
+        <Row icon="calendar" title="Council incentives should arrive by" text="Counted from the sign-up date. Anything not paid by then shows as overdue.">
+          {due('incentiveDue', 'Incentives due')}
+        </Row>
+        <div className="flex flex-col gap-2 border-t border-[var(--line)] pt-4">
+          <label htmlFor="fee-chase" className="text-[15px] font-medium text-[var(--ink)]">Wording when chasing a provider for a fee</label>
+          <textarea id="fee-chase" rows={4} value={draft.feeChaseMessage} onChange={(e) => set('feeChaseMessage', e.target.value)}
+            className="w-full rounded-md border border-[var(--line-strong)] bg-[var(--surface)] p-3 text-[14px] text-[var(--ink)] outline-none focus:border-[var(--accent)]" />
+          <p className="m-0 text-[12px] text-[var(--ink-muted)]">
+            Placeholders: <code className="font-mono text-[var(--ink)]">{'{provider_first_name} {amount} {client_first_name} {property_address} {due_date} {my_name}'}</code>
+          </p>
+          {draft.feeChaseMessage !== DEFAULT_FEE_CHASE && (
+            <button type="button" onClick={() => set('feeChaseMessage', DEFAULT_FEE_CHASE)} className="self-start text-[13px] text-[var(--link)] hover:underline">Use the standard wording</button>
+          )}
+        </div>
+      </div>
+    </Card>
   );
 }
 

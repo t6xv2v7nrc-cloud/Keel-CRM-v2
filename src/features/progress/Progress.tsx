@@ -190,7 +190,7 @@ function DealRow({ applicant, deal, all, property }: { applicant: Applicant; dea
       onSuccess: (r) => {
         setMode(null);
         toast([`${short(deal.address)}: ${DEAL_LABEL[to]}`, r.stage ? `${first(applicant.full_name)} is now at ${STAGE_NAME[r.stage]}` : null,
-          r.step ? `Next step: ${r.step}` : null].filter(Boolean).join(' · '), 'success');
+          r.step ? `Next step: ${r.step}` : null, r.fee ? `${r.fee} added to Money owed` : null].filter(Boolean).join(' · '), 'success');
       },
       onError: (e) => toast((e as Error).message, 'danger'),
     });

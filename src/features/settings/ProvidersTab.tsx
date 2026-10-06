@@ -105,6 +105,8 @@ function ProviderForm({ initial, onDone }: { initial: ProviderDraft | Provider; 
       ...(d.rules.max_rent ? { max_rent: d.rules.max_rent } : {}),
       ...(boroughs.length ? { boroughs } : {}),
       ...(d.rules.furnished ? { furnished: d.rules.furnished } : {}),
+      ...(d.rules.fee_amount ? { fee_amount: d.rules.fee_amount } : {}),
+      ...(d.rules.fee_due && d.rules.fee_due.n > 0 ? { fee_due: d.rules.fee_due } : {}),
     };
     save.mutate({ ...d, active, rules }, {
       onSuccess: (p) => { toast(isNew ? `Added ${p.tag}` : active ? `Saved ${p.tag}` : `${p.tag} switched off`, 'success'); onDone(); },
@@ -152,6 +154,30 @@ function ProviderForm({ initial, onDone }: { initial: ProviderDraft | Provider; 
                 <option value="">Either</option><option value="furnished">Furnished</option><option value="unfurnished">Unfurnished</option>
               </select>
             </Field>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 rounded-lg bg-[var(--surface-2)] p-4 sm:col-span-2">
+          <div className="text-[15px] font-medium text-[var(--ink)]">Letting fee they pay Keel</div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label="Usual fee">
+              <input type="number" min={0} step={10} value={d.rules.fee_amount ?? ''} onChange={(e) => rule('fee_amount', e.target.value ? Number(e.target.value) : null)}
+                placeholder="£, if it is always the same" className={`${input} font-mono`} />
+            </Field>
+            <Field label="Due after sign up">
+              <div className="flex gap-2">
+                <input type="number" min={0} value={d.rules.fee_due?.n ?? ''} placeholder="Standard" aria-label="How long after sign up"
+                  onChange={(e) => rule('fee_due', e.target.value ? { n: Math.max(0, Number(e.target.value)), unit: d.rules.fee_due?.unit ?? 'months' } : null)}
+                  className={`${input} w-24 font-mono`} />
+                <select value={d.rules.fee_due?.unit ?? 'months'} aria-label="Unit" disabled={!d.rules.fee_due}
+                  onChange={(e) => rule('fee_due', { n: d.rules.fee_due?.n ?? 1, unit: e.target.value as 'days' | 'weeks' | 'months' })} className={input}>
+                  <option value="days">days</option><option value="weeks">weeks</option><option value="months">months</option>
+                </select>
+              </div>
+            </Field>
+            <p className="m-0 self-end text-[13px] text-[var(--ink-muted)]">
+              When a client moves in to one of their properties, the fee goes on Money owed with this amount and due date. Leave blank to use the team standard.
+            </p>
           </div>
         </div>
 
