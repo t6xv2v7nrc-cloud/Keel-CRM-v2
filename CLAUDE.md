@@ -14,12 +14,16 @@ src/
               geo.ts (placing postcodes via postcodes.io, cached per device; a client's areas as districts),
               progress.ts (deals: each property a client is going for; stage follows deals, next steps, stuck),
               requests.ts (providers' rules, request messages to providers, follow-ups; never phone, surname or health),
-              money.ts (receivables per placement: letting fees and incentives, due dates from sign up, overdue;
-                        the app says "Receivables", files and the activity kind keep the name "money"),
+              money.ts (Finances: receivables per placement (letting fees and incentives), fees worked out from the rent
+                        (£, % of a month's rent, weeks of rent; a week is pcm × 12 ÷ 52), due dates from sign up or from the
+                        first month's rent, overdue, potential fees from deals, by month, calendar and .ics file;
+                        the app says "Finances", files and the activity kind keep the name "money"),
+              invoice.ts (invoice wording, numbering, VAT split, WhatsApp and email text; client first name only to providers),
               help.ts (words behind the "?" help buttons)
   components/ ui primitives on tokens (Button, Badge, Card, Field, Toast, KeelLine,
               Icon, Visuals: avatars, page headers, stat tiles, SVG charts)
-  features/   dashboard/ bin/ pipeline/ calls/ applicants/ properties/ settings/ map/ (Leaflet, lazy-loaded) progress/ requests/ (request sheet, Awaiting providers) money/ (the Receivables page at /receivables, client card, Home summary)
+  features/   dashboard/ bin/ pipeline/ calls/ applicants/ properties/ settings/ map/ (Leaflet, lazy-loaded) progress/ requests/ (request sheet, Awaiting providers) money/ (the Finances page at /finances: Owed, Potential, Calendar, Paid; invoice page at /finances/invoice/:id;
+              client card, Home summary)
   types/      extraction.ts (shared contract, imported by netlify functions)
 netlify/functions/ extract.ts, lib/prompt.ts, lib/claude.ts
 supabase/migrations/
@@ -54,7 +58,9 @@ supabase/migrations/
 - Nothing scrolls sideways, on a phone especially.
 - Properties go to clients, and requests go to providers, as WhatsApp links (wa.me) the person sends by hand; every
   send is logged. Providers are greeted "Salam {name}".
-- Fees and incentives owed are called "Receivables", never "Money".
+- The page for fees, incentives, potential income and invoices is called "Finances" (Ridwan renamed it from "Receivables",
+  which had replaced "Money"); /receivables and /money still land there. Never call it "Money".
+- Invoices to providers or landlords name the client by first name only; a council incentive claim carries the full name.
 - Two people use Keel: Ridwan (owner) and a co-worker. Ridwan invites people from the Supabase dashboard; Claude never
   creates accounts or enters passwords.
 - Contacts was removed on request; do not bring it back unasked.
@@ -89,7 +95,8 @@ Never commit `.env.local`. Never expose the service role key or Anthropic key to
 - Ridwan runs each file by hand in the Supabase SQL Editor, so the app may be ahead of the database. Every feature must
   keep working before its migration has been run: hooks return a `ready` flag (`missingTable()` / `isMissingColumn()` in
   `lib/hooks.ts`) and the page shows a note naming the file to run.
-- Run order matters: 0009 (deals) before 0010 (providers, requests), then 0011 (sharing default), then 0012 (receivables).
+- Run order matters: 0009 (deals) before 0010 (providers, requests), then 0011 (sharing default), then 0012 (receivables),
+  then 0013 (finances: fees from the rent, first-rent dates, invoice numbers).
 
 ## Checking the screen without signing in
 
@@ -98,7 +105,9 @@ it answers every Supabase request from sample rows in memory.
 
 1. Copy `.harness/harness.html` to the repo root and `.harness/__harness.tsx` to `src/`. (Both are git-ignored. If
    `.harness/` is missing, it has to be rebuilt: an entry file that stubs `window.fetch` for the Supabase URL, stores a
-   fake session with `access_token: 'harness'`, then renders `<App />`.)
+   fake session with `access_token: 'harness'`, then renders `<App />`. No `.env.local` is needed: without one the
+   app uses `placeholder.supabase.co`, which the stub answers.) Extra query options: `&missing=receivables` makes a
+   table look missing, `&nocols=1` makes the 0013 columns look missing, `&theme=dark`.
 2. Start the preview (`keel-v2` in `.claude/launch.json`) and open `http://localhost:5173/harness.html?path=/pipeline`
    (any route after `path=`). A plain reload loads the real app, so always go back through `harness.html`.
 3. New table or column? Add sample rows to `db` in the harness copy, and save the improved copy back to `.harness/`.

@@ -7,12 +7,13 @@ import type { AppSettings } from './settings';
 import { addDays, OUTCOME_LABEL, todayIso } from './calls';
 import { DEAL_LABEL, isLive, shouldAdvance, stageFromDeals, stepAfter, takesOver, viewingWords } from './progress';
 import { computeTier } from './tiering';
-import { money, shortDate } from './format';
+import { moneyFee, shortDate } from './format';
 import type {
   Activity, Applicant, Call, CallOutcome, Deal, DealStatus, Profile, Property, Provider, ProviderRequest, Receivable, RequestStatus, RequestType,
 } from './types';
 import { followUpFrom, providerFor, providerNumber, REQUEST_LABEL } from './requests';
-import { describe, KIND_LABEL, lettingFeeFor, STATUS_LABEL } from './money';
+import { basisWords, describe, KIND_LABEL, lettingFeeFor, rentOf, STATUS_LABEL } from './money';
+import { invoiceNumber } from './invoice';
 import type { ReceivableDraft } from './money';
 import type { ApplicantStage } from '../types/extraction';
 
@@ -667,7 +668,7 @@ export function useMoveDeal() {
     mutationFn: async ({ applicant, deal, to, viewingAt, moveInOn, reason, allDeals, property, activityBody }: {
       applicant: Applicant; deal: Deal; to: DealStatus; allDeals: Deal[];
       viewingAt?: string | null; moveInOn?: string | null; reason?: string | null; activityBody?: string;
-      property?: (Pick<Property, 'id' | 'status' | 'address_line'> & Pick<Partial<Property>, 'provider_id' | 'source_tag'>) | null;
+      property?: (Pick<Property, 'id' | 'status' | 'address_line'> & Partial<Omit<Property, 'id' | 'status' | 'address_line'>>) | null;
     }): Promise<{ stage: ApplicantStage | null; step: string | null; fee: string | null }> => {
       const patch: Partial<Deal> = { status: to };
       if (to === 'viewing') patch.viewing_at = viewingAt ?? deal.viewing_at;
@@ -729,11 +730,15 @@ export function useMoveDeal() {
         if (!had.error && (had.data ?? []).length === 0) {
           const provs = await supabase.from('providers').select('*');
           const provider = property && !provs.error ? providerFor(property, (provs.data ?? []) as Provider[]) : null;
-          const draft = lettingFeeFor({ applicantId: applicant.id, dealId: deal.id, address: deal.address, signUpOn: patch.move_in_on ?? todayIso(), provider });
-          const added = await supabase.from('receivables').insert(draft);
+          const rentPcm = property ? rentOf({
+            address_line: property.address_line, postcode: property.postcode ?? null, borough: property.borough ?? null, property_type: property.property_type ?? null,
+            bedrooms: property.bedrooms ?? null, rent_pcm: property.rent_pcm ?? null, rent_text: property.rent_text ?? null, lha_area: property.lha_area ?? null,
+          }) : null;
+          const draft = lettingFeeFor({ applicantId: applicant.id, dealId: deal.id, address: deal.address, signUpOn: patch.move_in_on ?? todayIso(), provider, rentPcm });
+          const added = await writeReceivable({ ...draft });
           if (!added.error) {
             fee = describe(draft);
-            await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: applicant.id, kind: 'money', body: `${fee} added to Receivables` });
+            await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: applicant.id, kind: 'money', body: `${fee} added to Finances` });
           }
         }
       }
@@ -1013,24 +1018,45 @@ export function useClientNote() {
   });
 }
 
-// ── Receivables (0012; "money" in file and kind names) ──────────────
+// ── Finances: receivables (0012, 0013; "money" in file and kind names) ──
 const MONEY_UPDATE =
-  'Receivables need a one-off database update: run supabase/migrations/0012_money.sql in the Supabase SQL Editor.';
+  'Finances need a one-off database update: run supabase/migrations/0012_money.sql in the Supabase SQL Editor.';
+const FINANCES_UPDATE =
+  'Invoices need a one-off database update: run supabase/migrations/0013_finances.sql in the Supabase SQL Editor.';
+/** Columns added by 0013. Until it is run they are left out, so fees still save (without how they were worked out). */
+const FINANCE_COLUMNS = ['rent_pcm', 'fee_basis', 'fee_rate', 'due_after', 'first_rent_due_on', 'first_rent_paid_on', 'invoice_number', 'invoiced_on', 'bill_to'];
 
-/** Every letting fee and incentive, soonest due first. `ready` is false until 0012 is run. */
+/** Add (or, with an id, change) a receivable. Before 0013 the newer columns are dropped and it is tried again. */
+async function writeReceivable(row: Record<string, unknown>, id?: string) {
+  const run = (r: Record<string, unknown>) => (id ? supabase.from('receivables').update(r).eq('id', id) : supabase.from('receivables').insert(r));
+  const res = await run(row);
+  if (!res.error || !isMissingColumn(res.error)) return res;
+  return run(Object.fromEntries(Object.entries(row).filter(([k]) => !FINANCE_COLUMNS.includes(k))));
+}
+
+const numberOrNull = (v: unknown) => (v == null ? null : Number(v));
+
+/** Every letting fee and incentive, soonest due first. `ready` is false until 0012 is run;
+ *  `full` is false until 0013 is (fees kept with how they were worked out, waiting for the first rent, invoices). */
 export function useReceivables() {
   const q = useQuery({
     queryKey: ['receivables'],
-    queryFn: async (): Promise<{ receivables: Receivable[]; ready: boolean }> => {
+    queryFn: async (): Promise<{ receivables: Receivable[]; ready: boolean; full: boolean }> => {
       const { data, error } = await supabase.from('receivables').select('*').order('due_on', { ascending: true, nullsFirst: false });
       if (error) {
-        if (missingTable(error)) return { receivables: [], ready: false };
+        if (missingTable(error)) return { receivables: [], ready: false, full: false };
         throw error;
       }
-      return { receivables: (data as Receivable[]).map((r) => ({ ...r, amount: r.amount == null ? null : Number(r.amount) })), ready: true };
+      const rows = data as Receivable[];
+      const full = rows.length ? 'due_after' in rows[0] : !(await supabase.from('receivables').select('invoice_number').limit(1)).error;
+      return {
+        receivables: rows.map((r) => ({ ...r, amount: numberOrNull(r.amount), rent_pcm: numberOrNull(r.rent_pcm), fee_rate: numberOrNull(r.fee_rate) })),
+        ready: true,
+        full,
+      };
     },
   });
-  return { receivables: q.data?.receivables ?? [], ready: q.data?.ready ?? false };
+  return { receivables: q.data?.receivables ?? [], ready: q.data?.ready ?? false, full: q.data?.full ?? false };
 }
 
 /** Add or change a letting fee or incentive, and note it on the client's timeline. */
@@ -1045,21 +1071,24 @@ export function useSaveReceivable() {
         payer, provider_id: draft.provider_id, amount: draft.amount, sign_up_on: draft.sign_up_on || null, due_on: draft.due_on || null,
         claim_submitted_on: draft.claim_submitted_on || null, status: draft.status,
         paid_on: draft.status === 'paid' ? draft.paid_on || todayIso() : null, notes: draft.notes?.trim() || null,
+        rent_pcm: draft.rent_pcm ?? null, fee_basis: draft.fee_basis ?? null, fee_rate: draft.fee_rate ?? null,
+        due_after: draft.due_after ?? 'sign_up', first_rent_due_on: draft.first_rent_due_on || null, first_rent_paid_on: draft.first_rent_paid_on || null,
+        bill_to: draft.bill_to?.trim() || null,
       };
-      const res = draft.id
-        ? await supabase.from('receivables').update(row).eq('id', draft.id)
-        : await supabase.from('receivables').insert(row);
+      const res = await writeReceivable(row, draft.id);
       if (res.error) throw missingTable(res.error) ? new Error(MONEY_UPDATE) : res.error;
 
       const what = KIND_LABEL[row.kind].toLowerCase();
-      const sum = row.amount != null ? ` of ${money(row.amount)}` : '';
-      const body = !was ? `${describe(row)} added`
+      const sum = row.amount != null ? ` of ${moneyFee(row.amount)}` : '';
+      const how = basisWords(row);
+      const body = !was ? `${describe(row)} added${how ? ` (${how})` : ''}`
         : was.status !== row.status
           ? row.status === 'paid' ? `${KIND_LABEL[row.kind]}${sum} from ${payer} paid`
             : row.status === 'chased' ? `Chased ${payer} for the ${what}${sum}`
             : row.status === 'submitted' ? `Incentive claim${sum} submitted to ${payer}`
             : row.status === 'declined' ? `${payer} declined the ${what}`
             : `${KIND_LABEL[row.kind]} from ${payer}: ${STATUS_LABEL[row.status].toLowerCase()}`
+          : !was.first_rent_paid_on && row.first_rent_paid_on ? `First month's rent paid ${shortDate(row.first_rent_paid_on)}: ${describe(row)}`
           : `${describe(row)} updated`;
       await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: row.applicant_id, kind: 'money', body });
     },
@@ -1078,6 +1107,56 @@ export function useDeleteReceivable() {
       const { error } = await supabase.from('receivables').delete().eq('id', r.id);
       if (error) throw error;
       await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: r.applicant_id, kind: 'money', body: `${describe(r)} removed` });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['receivables'] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+/** Give a fee or incentive its invoice number (from the database, so it is never shared or reused) and date. Returns the number. */
+export function useRaiseInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ r, billTo, prefix, startAt }: { r: Receivable; billTo: string; prefix: string; startAt: number }): Promise<string> => {
+      if (r.invoice_number) return r.invoice_number;
+      const next = await supabase.rpc('next_invoice_no', { at_least: Math.max(1, Math.floor(startAt || 1)) });
+      if (next.error) throw new Error(/function|schema cache|does not exist/i.test(next.error.message) ? FINANCES_UPDATE : next.error.message);
+      const number = invoiceNumber(prefix, Number(next.data));
+      // only if nobody raised one for it in the meantime
+      const res = await supabase.from('receivables').update({ invoice_number: number, invoiced_on: todayIso(), bill_to: billTo.trim() || null })
+        .eq('id', r.id).is('invoice_number', null).select('invoice_number');
+      if (res.error) throw isMissingColumn(res.error) ? new Error(FINANCES_UPDATE) : res.error;
+      if (!(res.data ?? []).length) {
+        const theirs = await supabase.from('receivables').select('invoice_number').eq('id', r.id).single();
+        return (theirs.data as { invoice_number: string | null } | null)?.invoice_number ?? number;
+      }
+      await supabase.from('activities').insert({
+        entity_type: 'applicant', entity_id: r.applicant_id, kind: 'money',
+        body: `Invoice ${number} raised to ${r.payer} for the ${KIND_LABEL[r.kind].toLowerCase()}${r.amount != null ? ` of ${moneyFee(r.amount)}` : ''}`,
+      });
+      return number;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['receivables'] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+/** Change who an invoice is addressed to. */
+export function useSetBillTo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ r, billTo }: { r: Receivable; billTo: string }) => {
+      const text = billTo.trim() || null;
+      const { error } = await supabase.from('receivables').update({ bill_to: text }).eq('id', r.id);
+      if (error) throw isMissingColumn(error) ? new Error(FINANCES_UPDATE) : error;
+      await supabase.from('activities').insert({
+        entity_type: 'applicant', entity_id: r.applicant_id, kind: 'money',
+        body: `${r.invoice_number ? `Invoice ${r.invoice_number}` : 'Invoice'} now addressed to ${text ? text.split('\n')[0] : r.payer}`,
+      });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['receivables'] });

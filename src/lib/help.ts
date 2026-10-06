@@ -165,12 +165,37 @@ export const HELP = {
     ],
   },
   money: {
-    title: 'Receivables',
+    title: 'Finances',
     body: [
-      'What Keel is owed: every letting fee and council incentive still to come in, soonest due first. Anything past its due date is flagged overdue in amber.',
+      'What Keel is owed and what could come in. Owed is every letting fee and council incentive still to come in, soonest due first; anything past its due date is flagged overdue. Potential is fees from clients going for a property. Paid is what has come in.',
       'When a client is marked as moved in on their Progress, the letting fee is added by itself: from the property\'s provider (Watermint, Zuber...) at their usual fee, or from the landlord. Add an incentive from the client\'s page if the council pays one.',
-      'The due date is worked out from the sign-up date: the provider\'s own rule if it has one (say 1 month after sign up), otherwise the standard in Team settings. You can change any date by hand.',
+      'An amount can be typed in, or worked out from the property\'s rent: a percentage of a month\'s rent, or a number of weeks\' rent (a week is the monthly rent times 12, divided by 52). Change the rent if the listing was wrong.',
+      'The due date is worked out from the sign-up date: the provider\'s own rule if it has one (say 1 month after sign up), otherwise the standard in Team settings. Some providers only pay once the client\'s first month\'s rent is in: those fees wait for it, with the date it is expected on the calendar. Press First rent paid when it arrives and the fee falls due. You can change any date by hand.',
       'Letting fees go Due, Chased, Paid. Incentives go To claim, Claim submitted, Chased, Paid (or Declined). Chase opens WhatsApp to the provider with the message written; Paid takes it off the list. Each step is on the client\'s timeline.',
+    ],
+  },
+  potential: {
+    title: 'Potential',
+    body: [
+      'Letting fees that could come in from clients going for a property: a viewing booked, viewed, an offer made or accepted. Offers made and accepted are counted as likely.',
+      'Each client is counted once, at the property they have got furthest with, and each property once, as it can only be let once. Clients who have moved in are on Owed instead.',
+      'The fee is the provider\'s usual fee from Settings, Providers, worked out from the rent if they pay a percentage or weeks of rent. Fees from landlords, or from providers with no usual fee, show as not known.',
+    ],
+  },
+  moneyCalendar: {
+    title: 'Calendar',
+    body: [
+      'Every date that matters for money: when each fee or incentive is due, when a client\'s first month\'s rent is expected (for providers who pay after it), and when money came in. Pick a day to see what is on it.',
+      'Add to my calendar saves a calendar file. Open it on your phone and it goes into your own calendar (Apple, Google or Outlook) with a reminder at 9am on the day. Dates change as things move, so add them again after big changes.',
+    ],
+  },
+  invoices: {
+    title: 'Invoices',
+    body: [
+      'Raise invoice gives a fee or incentive the next invoice number and today\'s date, and keeps it with the fee. The number comes from the database, so two of you can never get the same one.',
+      'Print or save as PDF opens your browser\'s print window: choose Save as PDF to keep a copy or attach it to an email. Send on WhatsApp writes the message with the amount, due date and bank details; the PDF is attached by hand.',
+      'An invoice to a provider or landlord names the client by first name only. An incentive claim to a council carries their full name, so the council can match it.',
+      'Keel\'s address, bank details and VAT number come from Team settings, Invoices; only the owner can change them.',
     ],
   },
   requests: {
@@ -191,6 +216,7 @@ export const HELP = {
       'Rules are what they will take: benefits (any of those ticked), household, the councils they take clients from, a maximum rent and furnished or not. Requests warn you when a client does not fit.',
       'Switching a provider off keeps their history but stops new requests. Only the owner can change providers.',
       'A property belongs to the provider whose tag is on its list. To change it, pick the provider on the property card, or tick several properties and use Set provider. The Provider filter on Properties shows who supplies what.',
+      'Letting fee they pay Keel: a set amount, a percentage of a month\'s rent, or weeks of rent (say 1 week\'s rent). When their fee is due counts from sign up, or from when the client\'s first month\'s rent is paid if they only pay after it.',
     ],
   },
   whatsapp: {

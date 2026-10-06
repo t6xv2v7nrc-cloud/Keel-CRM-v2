@@ -29,3 +29,23 @@ h1, h2, h3 { font-family: var(--font-display); }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* An invoice reads like paper in either theme, on screen and when printed. */
+.invoice-sheet {
+  --surface: #FFFFFF;
+  --surface-2: #F4F2EE;
+  --ink: #2A2824;
+  --ink-muted: #666158;
+  --line: rgba(42, 40, 36, 0.12);
+  --line-strong: rgba(42, 40, 36, 0.24);
+  --accent: #2E6A4D;
+  --accent-ink: #24553D;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+@media print {
+  @page { size: A4; margin: 14mm; }
+  body { background: #FFFFFF; }
+  .invoice-sheet { box-shadow: none !important; border: 0 !important; margin: 0 !important; max-width: none !important; }
+}

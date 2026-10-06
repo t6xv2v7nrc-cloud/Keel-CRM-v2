@@ -147,18 +147,26 @@ export interface ProviderRules {
   max_rent?: number | null;
   boroughs?: string[];           // councils they take clients from
   furnished?: 'furnished' | 'unfurnished' | null;
-  /** Their usual letting fee to Keel, and when it falls due after sign up (kept with the rules: no extra database column). */
+  /** Their usual letting fee to Keel, and when it falls due after sign up (kept with the rules: no extra database column).
+   *  A set amount (fee_amount), or worked out from the rent: fee_basis 'percent' or 'weeks' with fee_rate (50 for 50%, 1 for a week). */
   fee_amount?: number | null;
+  fee_basis?: FeeBasis | null;
+  fee_rate?: number | null;
   fee_due?: DueRule | null;
 }
 
-/** "1 month after sign up": how long after the sign-up date money falls due. */
-export interface DueRule { n: number; unit: 'days' | 'weeks' | 'months' }
+/** How a fee is worked out: a set amount, a percentage of the monthly rent, or a number of weeks' rent. */
+export type FeeBasis = 'fixed' | 'percent' | 'weeks';
+
+/** "1 month after sign up", or "7 days after the first month's rent is paid": when money falls due. */
+export interface DueRule { n: number; unit: 'days' | 'weeks' | 'months'; from?: DueFrom }
+/** What a due date counts from: the sign-up date, or the day the client's first month's rent is paid. */
+export type DueFrom = 'sign_up' | 'first_rent';
 
 export type ReceivableKind = 'letting_fee' | 'incentive';
 export type ReceivableStatus = 'due' | 'chased' | 'paid' | 'to_claim' | 'submitted' | 'declined';
 
-/** Money Keel is owed for a placement: a letting fee, or a council incentive (0012). */
+/** Money Keel is owed for a placement: a letting fee, or a council incentive (0012; the optional fields need 0013). */
 export interface Receivable {
   id: string;
   kind: ReceivableKind;
@@ -174,6 +182,16 @@ export interface Receivable {
   status: ReceivableStatus;
   paid_on: string | null;
   notes: string | null;
+  // 0013_finances.sql (undefined until that update is run)
+  rent_pcm?: number | null;            // the rent a fee is worked out from
+  fee_basis?: FeeBasis | null;         // how the amount was worked out; null means typed in
+  fee_rate?: number | null;            // the percentage, or the number of weeks
+  due_after?: DueFrom | null;          // what the due date counts from
+  first_rent_due_on?: string | null;   // when the client's first month's rent is expected
+  first_rent_paid_on?: string | null;  // when it was paid
+  invoice_number?: string | null;      // e.g. KEEL-0007, once an invoice is raised
+  invoiced_on?: string | null;
+  bill_to?: string | null;             // who the invoice is addressed to, one line each
   created_by?: string | null;
   created_at: string;
   updated_at: string;

@@ -5,7 +5,8 @@ import { usePeople, useProperties, useProviders, useRequests, useSaveProvider } 
 import type { ProviderDraft } from '../../lib/hooks';
 import { providerFor, rulesSummary } from '../../lib/requests';
 import { BOROUGHS, canonicalBorough } from '../../lib/london';
-import type { Provider, ProviderRules } from '../../lib/types';
+import { usualFeeWords } from '../../lib/money';
+import type { DueFrom, DueRule, FeeBasis, Provider, ProviderRules } from '../../lib/types';
 
 const BENEFIT_CHOICES = ['PIP', 'LCWRA', 'UC', 'HB', 'Full-time'];
 const HOUSEHOLD_CHOICES = ['Single', 'Couple', 'Family'];
@@ -70,6 +71,8 @@ export function ProvidersTab() {
                   <div className="mt-1 text-[13px] text-[var(--ink)]">{rulesSummary(p.rules)}</div>
                   <div className="mt-1 text-[12px] text-[var(--ink-muted)]">
                     {count} available {count === 1 ? 'property' : 'properties'}{open ? ` · ${open} open ${open === 1 ? 'request' : 'requests'}` : ''}
+                    {usualFeeWords(p.rules) ? ` · Usual fee: ${usualFeeWords(p.rules)}` : ''}
+                    {p.rules.fee_due?.from === 'first_rent' ? ' after the first month\'s rent' : ''}
                     {p.fee_terms ? ` · Fee: ${p.fee_terms}` : ''}
                   </div>
                 </div>
@@ -96,6 +99,9 @@ function ProviderForm({ initial, onDone }: { initial: ProviderDraft | Provider; 
     rule(k, now.includes(v) ? now.filter((x) => x !== v) : [...now, v]);
   };
   const isNew = !('id' in initial) || !initial.id;
+  const feeBasis: FeeBasis = d.rules.fee_basis ?? 'fixed';
+  const due: DueRule | null = d.rules.fee_due ?? null;
+  const setDue = (p: Partial<DueRule>) => rule('fee_due', { n: due?.n ?? 1, unit: due?.unit ?? 'months', from: due?.from ?? 'sign_up', ...p });
 
   const submit = (active = d.active) => {
     const boroughs = boroughText.split(',').map((b) => canonicalBorough(b) ?? b.trim()).filter(Boolean);
@@ -105,8 +111,9 @@ function ProviderForm({ initial, onDone }: { initial: ProviderDraft | Provider; 
       ...(d.rules.max_rent ? { max_rent: d.rules.max_rent } : {}),
       ...(boroughs.length ? { boroughs } : {}),
       ...(d.rules.furnished ? { furnished: d.rules.furnished } : {}),
-      ...(d.rules.fee_amount ? { fee_amount: d.rules.fee_amount } : {}),
-      ...(d.rules.fee_due && d.rules.fee_due.n > 0 ? { fee_due: d.rules.fee_due } : {}),
+      ...(feeBasis === 'fixed' && d.rules.fee_amount ? { fee_amount: d.rules.fee_amount } : {}),
+      ...(feeBasis !== 'fixed' && d.rules.fee_rate ? { fee_basis: feeBasis, fee_rate: d.rules.fee_rate } : {}),
+      ...(d.rules.fee_due && (d.rules.fee_due.n > 0 || d.rules.fee_due.from === 'first_rent') ? { fee_due: d.rules.fee_due } : {}),
     };
     save.mutate({ ...d, active, rules }, {
       onSuccess: (p) => { toast(isNew ? `Added ${p.tag}` : active ? `Saved ${p.tag}` : `${p.tag} switched off`, 'success'); onDone(); },
@@ -159,24 +166,48 @@ function ProviderForm({ initial, onDone }: { initial: ProviderDraft | Provider; 
 
         <div className="flex flex-col gap-3 rounded-lg bg-[var(--surface-2)] p-4 sm:col-span-2">
           <div className="text-[15px] font-medium text-[var(--ink)]">Letting fee they pay Keel</div>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Usual fee">
-              <input type="number" min={0} step={10} value={d.rules.fee_amount ?? ''} onChange={(e) => rule('fee_amount', e.target.value ? Number(e.target.value) : null)}
-                placeholder="£, if it is always the same" className={`${input} font-mono`} />
+              <div className="flex flex-wrap gap-2">
+                <select value={feeBasis} aria-label="How the fee is worked out" className={`${input} w-auto`}
+                  onChange={(e) => {
+                    const b = e.target.value as FeeBasis;
+                    setD((x) => ({ ...x, rules: { ...x.rules, fee_basis: b === 'fixed' ? null : b, fee_rate: b === 'fixed' ? null : x.rules.fee_rate ?? (b === 'weeks' ? 1 : 50) } }));
+                  }}>
+                  <option value="fixed">A set amount</option>
+                  <option value="weeks">Weeks of rent</option>
+                  <option value="percent">% of a month&apos;s rent</option>
+                </select>
+                {feeBasis === 'fixed' ? (
+                  <input type="number" min={0} step={10} value={d.rules.fee_amount ?? ''} onChange={(e) => rule('fee_amount', e.target.value ? Number(e.target.value) : null)}
+                    placeholder="£, if it is always the same" aria-label="Usual fee in pounds" className={`${input} w-40 font-mono`} />
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <input type="number" min={0} step={feeBasis === 'weeks' ? 0.5 : 5} value={d.rules.fee_rate ?? ''} onChange={(e) => rule('fee_rate', e.target.value ? Number(e.target.value) : null)}
+                      aria-label={feeBasis === 'weeks' ? 'Weeks of rent' : 'Percentage of a month\'s rent'} className={`${input} w-20 font-mono`} />
+                    <span className="text-[14px] text-[var(--ink-muted)]">{feeBasis === 'weeks' ? (d.rules.fee_rate === 1 ? 'week\'s rent' : 'weeks\' rent') : '% of a month\'s rent'}</span>
+                  </span>
+                )}
+              </div>
             </Field>
-            <Field label="Due after sign up">
-              <div className="flex gap-2">
-                <input type="number" min={0} value={d.rules.fee_due?.n ?? ''} placeholder="Standard" aria-label="How long after sign up"
-                  onChange={(e) => rule('fee_due', e.target.value ? { n: Math.max(0, Number(e.target.value)), unit: d.rules.fee_due?.unit ?? 'months' } : null)}
+            <Field label="When it is due">
+              <div className="flex flex-wrap gap-2">
+                <input type="number" min={0} value={due?.n ?? ''} placeholder="Standard" aria-label="How long"
+                  onChange={(e) => (e.target.value === '' && due?.from !== 'first_rent' ? rule('fee_due', null) : setDue({ n: Math.max(0, Number(e.target.value) || 0) }))}
                   className={`${input} w-24 font-mono`} />
-                <select value={d.rules.fee_due?.unit ?? 'months'} aria-label="Unit" disabled={!d.rules.fee_due}
-                  onChange={(e) => rule('fee_due', { n: d.rules.fee_due?.n ?? 1, unit: e.target.value as 'days' | 'weeks' | 'months' })} className={input}>
+                <select value={due?.unit ?? 'months'} aria-label="Unit" disabled={!due} onChange={(e) => setDue({ unit: e.target.value as DueRule['unit'] })} className={`${input} w-auto`}>
                   <option value="days">days</option><option value="weeks">weeks</option><option value="months">months</option>
+                </select>
+                <select value={due?.from ?? 'sign_up'} aria-label="Counted from" className={`${input} w-auto`}
+                  onChange={(e) => setDue({ from: e.target.value as DueFrom, ...(e.target.value === 'first_rent' && !due ? { n: 0, unit: 'days' as const } : {}) })}>
+                  <option value="sign_up">after sign up</option>
+                  <option value="first_rent">after first rent is paid</option>
                 </select>
               </div>
             </Field>
-            <p className="m-0 self-end text-[13px] text-[var(--ink-muted)]">
-              When a client moves in to one of their properties, the fee goes on Receivables with this amount and due date. Leave blank to use the team standard.
+            <p className="m-0 text-[13px] text-[var(--ink-muted)] sm:col-span-2">
+              When a client moves in to one of their properties, the fee goes on Finances worked out from the rent, with its due date. If they only pay once the
+              client&apos;s first month&apos;s rent is in, the fee waits for it and the date it is expected goes on the calendar. Leave blank to use the team standard.
             </p>
           </div>
         </div>

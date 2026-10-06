@@ -125,6 +125,12 @@ export interface AppSettings {
   incentiveDue: DueRule;
   /** Wording when chasing a provider for a letting fee on WhatsApp. */
   feeChaseMessage: string;
+  /** When a client's first month's rent usually arrives, counted from sign up (for fees that wait for it). */
+  firstRentExpected: DueRule;
+  /** Keel's details printed on invoices, and how invoices are numbered. */
+  invoice: InvoiceSettings;
+  /** Wording when sending an invoice on WhatsApp. */
+  invoiceMessage: string;
   /** Page to open after signing in. */
   startPage: '/' | '/calls' | '/pipeline' | '/bin' | '/properties';
   /** Which clients the Calls page shows first. */
@@ -183,6 +189,51 @@ export const DEFAULT_FEE_CHASE = [
   'Thanks, {my_name}, Keel Lettings',
 ].join('\n');
 
+export const DEFAULT_INVOICE_MESSAGE = [
+  'Salam {provider_first_name}, here is invoice {invoice_number} for {amount}: the letting fee for {client_first_name} at {property_address}, due {due_date}.',
+  'Bank: {account_name}, sort code {sort_code}, account {account_number}. Please quote {invoice_number}.',
+  'Thanks, {my_name}, Keel Lettings',
+].join('\n');
+
+export interface InvoiceSettings {
+  businessName: string;
+  /** One line each */
+  address: string;
+  email: string;
+  phone: string;
+  companyNumber: string;
+  /** Printed when VAT registered; the amount then counts as including VAT at 20%. */
+  vatRegistered: boolean;
+  vatNumber: string;
+  bankName: string;
+  accountName: string;
+  sortCode: string;
+  accountNumber: string;
+  /** The line under the bank details. */
+  terms: string;
+  /** Invoice numbers are the prefix and a running number: KEEL-0001. */
+  prefix: string;
+  /** The lowest number to use, to carry on from invoices raised before Keel did them. */
+  startAt: number;
+}
+
+export const DEFAULT_INVOICE: InvoiceSettings = {
+  businessName: 'Keel Lettings Ltd',
+  address: '',
+  email: '',
+  phone: '',
+  companyNumber: '',
+  vatRegistered: false,
+  vatNumber: '',
+  bankName: '',
+  accountName: 'Keel Lettings Ltd',
+  sortCode: '',
+  accountNumber: '',
+  terms: 'Please pay by bank transfer, quoting the invoice number.',
+  prefix: 'KEEL-',
+  startAt: 1,
+};
+
 export const DEFAULT_VIEWING_MOVED = [
   'Hi {first name}, your viewing at {address} has moved to {when}.',
   'Reply here if that time does not work for you.',
@@ -218,9 +269,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
   whatsappViewingCancelled: DEFAULT_VIEWING_CANCELLED,
   requestFollowUpHours: 24,
   shareWithLandlordsByDefault: false,
-  feeDue: { n: 1, unit: 'months' },
-  incentiveDue: { n: 6, unit: 'weeks' },
+  // `from` is spelt out so a saved "after the first month's rent" survives withDefaults
+  feeDue: { n: 1, unit: 'months', from: 'sign_up' },
+  incentiveDue: { n: 6, unit: 'weeks', from: 'sign_up' },
   feeChaseMessage: DEFAULT_FEE_CHASE,
+  firstRentExpected: { n: 1, unit: 'months', from: 'sign_up' },
+  invoice: DEFAULT_INVOICE,
+  invoiceMessage: DEFAULT_INVOICE_MESSAGE,
   startPage: '/',
   callsView: 'everyone',
 };

@@ -13,6 +13,7 @@ import { ApplicantPage } from './features/applicants/ApplicantPage';
 import { PropertiesPage } from './features/properties/PropertiesPage';
 import { CallsPage } from './features/calls/CallsPage';
 import { MoneyPage } from './features/money/MoneyPage';
+import { InvoicePage } from './features/money/InvoicePage';
 import { SettingsPage } from './features/settings/SettingsPage';
 import { CommandSearch, openSearch } from './features/search/CommandSearch';
 import { RequestSheetHost } from './features/requests/RequestSheet';
@@ -36,7 +37,7 @@ const NAV: Array<{ to: string; label: string; icon: IconName }> = [
   { to: '/pipeline', label: 'Pipeline', icon: 'list' },
   { to: '/calls', label: 'Calls', icon: 'phone' },
   { to: '/properties', label: 'Properties', icon: 'building' },
-  { to: '/receivables', label: 'Receivables', icon: 'pound' },
+  { to: '/finances', label: 'Finances', icon: 'pound' },
 ];
 
 export default function App() {
@@ -96,7 +97,7 @@ function Shell() {
   return (
     <div className="flex min-h-screen flex-col">
       {/* Below lg the pages sit on a row of their own, so every one is in reach without swiping sideways */}
-      <header className="sticky top-0 z-30 flex flex-wrap items-center gap-x-1 gap-y-1 border-b border-[var(--line)] bg-[var(--surface)]/95 px-4 py-1.5 backdrop-blur lg:py-2">
+      <header className="sticky top-0 z-30 flex flex-wrap print:hidden items-center gap-x-1 gap-y-1 border-b border-[var(--line)] bg-[var(--surface)]/95 px-4 py-1.5 backdrop-blur lg:py-2">
         {/* Clickable home / brand */}
         <Link to="/" aria-label="Home" title="Home" className="mr-2 flex items-center gap-2 rounded-md p-1 transition-colors hover:bg-[var(--surface-2)]">
           <span aria-hidden className="grid h-7 w-7 rotate-45 place-items-center rounded-[6px] bg-[var(--accent)]">
@@ -149,9 +150,11 @@ function Shell() {
           <Route path="/applicants/:id" element={<ApplicantPage />} />
           <Route path="/properties" element={<PropertiesPage />} />
           <Route path="/calls" element={<CallsPage />} />
-          <Route path="/receivables" element={<MoneyPage />} />
-          {/* The page's first address; old links and bookmarks still land */}
-          <Route path="/money" element={<Navigate to="/receivables" replace />} />
+          <Route path="/finances" element={<MoneyPage />} />
+          <Route path="/finances/invoice/:id" element={<InvoicePage />} />
+          {/* The page's earlier addresses; old links and bookmarks still land */}
+          <Route path="/receivables" element={<Navigate to="/finances" replace />} />
+          <Route path="/money" element={<Navigate to="/finances" replace />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>

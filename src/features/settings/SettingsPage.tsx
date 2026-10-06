@@ -6,9 +6,9 @@ import type { IconName } from '../../components/ui';
 import {
   useApplicants, useBulkShare, useCalls, useHandOver, usePeople, useProviders, useSaveProfile, useSaveSettings, useSettings,
 } from '../../lib/hooks';
-import type { Applicant, DueRule } from '../../lib/types';
-import { DEFAULT_FEE_CHASE, DEFAULT_SETTINGS, myPart, teamPart } from '../../lib/settings';
-import type { AppSettings } from '../../lib/settings';
+import type { Applicant, DueFrom, DueRule } from '../../lib/types';
+import { DEFAULT_FEE_CHASE, DEFAULT_INVOICE_MESSAGE, DEFAULT_SETTINGS, myPart, teamPart } from '../../lib/settings';
+import type { AppSettings, InvoiceSettings } from '../../lib/settings';
 import { URGENCY_LABEL } from '../../lib/tiering';
 import { TierLogicEditor } from './TierLogicEditor';
 import { LhaSettings } from './LhaSettings';
@@ -42,6 +42,11 @@ export function SettingsPage() {
   const [name, setName] = useState('');
   useEffect(() => { if (!isLoading) setDraft(settings); }, [settings, isLoading]);
   useEffect(() => { setName(people.myName ?? ''); }, [people.myName]);
+  // a link such as /settings?tab=team#invoices lands on that card
+  useEffect(() => {
+    const hash = window.location.hash.slice(1);
+    if (hash && !isLoading) document.getElementById(hash)?.scrollIntoView({ block: 'start' });
+  }, [tab, isLoading]);
 
   const set = <K extends keyof AppSettings>(k: K, v: AppSettings[K]) => setDraft((d) => ({ ...d, [k]: v }));
   const nameDirty = people.ready && name.trim() !== (people.myName ?? '') && name.trim() !== '';
@@ -258,6 +263,7 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
       <SharingSettings draft={draft} set={set} clients={active} />
 
       <MoneySettings draft={draft} set={set} />
+      <InvoiceSettingsCard draft={draft} set={set} />
 
       <Card>
         <CardHeader icon="flag" title="Client progress" help="progress" />
@@ -291,29 +297,37 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
   );
 }
 
-/** Team settings: when letting fees and incentives fall due after sign up, and the wording for chasing a fee. */
+/** Team settings: when letting fees and incentives fall due, when a first month's rent is expected, and the wording for chasing a fee. */
 function MoneySettings({ draft, set }: { draft: AppSettings; set: <K extends keyof AppSettings>(k: K, v: AppSettings[K]) => void }) {
-  const due = (key: 'feeDue' | 'incentiveDue', label: string) => (
-    <span className="flex items-center gap-2">
+  const box = 'h-10 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]';
+  const due = (key: 'feeDue' | 'incentiveDue' | 'firstRentExpected', label: string, canWait: boolean) => (
+    <span className="flex flex-wrap items-center gap-2">
       <input type="number" min={0} value={draft[key].n} aria-label={`${label}: how long`}
         onChange={(e) => set(key, { ...draft[key], n: Math.max(0, Number(e.target.value) || 0) })}
         className="h-10 w-20 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2.5 font-mono text-[15px] text-[var(--ink)] outline-none focus:border-[var(--accent)]" />
-      <select value={draft[key].unit} aria-label={`${label}: unit`} onChange={(e) => set(key, { ...draft[key], unit: e.target.value as DueRule['unit'] })}
-        className="h-10 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]">
+      <select value={draft[key].unit} aria-label={`${label}: unit`} onChange={(e) => set(key, { ...draft[key], unit: e.target.value as DueRule['unit'] })} className={box}>
         <option value="days">days</option><option value="weeks">weeks</option><option value="months">months</option>
       </select>
-      <span className="text-[13px] text-[var(--ink-muted)]">after sign up</span>
+      {canWait ? (
+        <select value={draft[key].from ?? 'sign_up'} aria-label={`${label}: counted from`} onChange={(e) => set(key, { ...draft[key], from: e.target.value as DueFrom })} className={box}>
+          <option value="sign_up">after sign up</option>
+          <option value="first_rent">after first rent is paid</option>
+        </select>
+      ) : <span className="text-[13px] text-[var(--ink-muted)]">after sign up</span>}
     </span>
   );
   return (
     <Card>
-      <CardHeader icon="pound" title="Receivables" help="money" />
+      <CardHeader icon="pound" title="Finances" help="money" />
       <div className="flex flex-col gap-5 p-5">
         <Row icon="calendar" title="Letting fees fall due" text="For the landlord, or a provider with no rule of its own. A provider's own rule (Settings, Providers) wins.">
-          {due('feeDue', 'Letting fees fall due')}
+          {due('feeDue', 'Letting fees fall due', true)}
         </Row>
         <Row icon="calendar" title="Council incentives should arrive by" text="Counted from the sign-up date. Anything not paid by then shows as overdue.">
-          {due('incentiveDue', 'Incentives due')}
+          {due('incentiveDue', 'Incentives due', false)}
+        </Row>
+        <Row icon="clock" title="First month's rent usually arrives" text="For fees that wait for it: the date it is expected goes on the calendar, and you are asked to check if it is late.">
+          {due('firstRentExpected', 'First rent expected', false)}
         </Row>
         <div className="flex flex-col gap-2 border-t border-[var(--line)] pt-4">
           <label htmlFor="fee-chase" className="text-[15px] font-medium text-[var(--ink)]">Wording when chasing a provider for a fee</label>
@@ -324,6 +338,71 @@ function MoneySettings({ draft, set }: { draft: AppSettings; set: <K extends key
           </p>
           {draft.feeChaseMessage !== DEFAULT_FEE_CHASE && (
             <button type="button" onClick={() => set('feeChaseMessage', DEFAULT_FEE_CHASE)} className="self-start text-[13px] text-[var(--link)] hover:underline">Use the standard wording</button>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/** Team settings: Keel's details and bank details printed on invoices, numbering, VAT, and the WhatsApp wording. */
+function InvoiceSettingsCard({ draft, set }: { draft: AppSettings; set: <K extends keyof AppSettings>(k: K, v: AppSettings[K]) => void }) {
+  const inv = draft.invoice;
+  const put = <K extends keyof InvoiceSettings>(k: K, v: InvoiceSettings[K]) => set('invoice', { ...inv, [k]: v });
+  const box = 'h-10 w-full rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-3 text-[15px] text-[var(--ink)] outline-none focus:border-[var(--accent)]';
+  const text = (k: 'businessName' | 'email' | 'phone' | 'companyNumber' | 'vatNumber' | 'bankName' | 'accountName' | 'sortCode' | 'accountNumber' | 'prefix', label: string, extra: { placeholder?: string; mono?: boolean } = {}) => (
+    <label className="flex flex-col gap-1.5">
+      <span className="text-[13px] font-medium text-[var(--ink-muted)]">{label}</span>
+      <input value={inv[k]} onChange={(e) => put(k, e.target.value)} placeholder={extra.placeholder} className={`${box} ${extra.mono ? 'font-mono' : ''}`} />
+    </label>
+  );
+  return (
+    <Card id="invoices">
+      <CardHeader icon="file" title="Invoices" help="invoices" />
+      <div className="flex flex-col gap-5 p-5">
+        <p className="m-0 text-[14px] text-[var(--ink-muted)]">Printed on every invoice. Raise one from the Invoice button next to a fee on Finances.</p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {text('businessName', 'Business name')}
+          {text('companyNumber', 'Company number', { placeholder: 'Optional', mono: true })}
+          <label className="flex flex-col gap-1.5 sm:row-span-2">
+            <span className="text-[13px] font-medium text-[var(--ink-muted)]">Address (one line each)</span>
+            <textarea rows={4} value={inv.address} onChange={(e) => put('address', e.target.value)} className={`${box} h-auto py-2`} />
+          </label>
+          {text('email', 'Email')}
+          {text('phone', 'Phone', { mono: true })}
+        </div>
+        <div className="grid gap-4 border-t border-[var(--line)] pt-4 sm:grid-cols-2">
+          {text('accountName', 'Account name')}
+          {text('bankName', 'Bank', { placeholder: 'Optional' })}
+          {text('sortCode', 'Sort code', { placeholder: '00-00-00', mono: true })}
+          {text('accountNumber', 'Account number', { mono: true })}
+          <label className="flex flex-col gap-1.5 sm:col-span-2">
+            <span className="text-[13px] font-medium text-[var(--ink-muted)]">Line under the bank details</span>
+            <input value={inv.terms} onChange={(e) => put('terms', e.target.value)} className={box} />
+          </label>
+        </div>
+        <div className="grid gap-4 border-t border-[var(--line)] pt-4 sm:grid-cols-2">
+          {text('prefix', 'Invoice numbers start with', { mono: true })}
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[13px] font-medium text-[var(--ink-muted)]">Lowest number to use</span>
+            <input type="number" min={1} value={inv.startAt} onChange={(e) => put('startAt', Math.max(1, Math.floor(Number(e.target.value) || 1)))} className={`${box} font-mono`} />
+            <span className="text-[12px] text-[var(--ink-muted)]">Next invoice: {inv.prefix}{String(inv.startAt).padStart(4, '0')} or the number after the last one, whichever is higher.</span>
+          </label>
+          <label className="flex items-center gap-2 text-[15px] text-[var(--ink)]">
+            <input type="checkbox" checked={inv.vatRegistered} onChange={(e) => put('vatRegistered', e.target.checked)} className="h-4 w-4 accent-[var(--accent)]" />
+            VAT registered (fees include VAT at 20%, shown on the invoice)
+          </label>
+          {inv.vatRegistered && text('vatNumber', 'VAT number', { mono: true })}
+        </div>
+        <div className="flex flex-col gap-2 border-t border-[var(--line)] pt-4">
+          <label htmlFor="invoice-message" className="text-[15px] font-medium text-[var(--ink)]">Wording when sending an invoice on WhatsApp</label>
+          <textarea id="invoice-message" rows={4} value={draft.invoiceMessage} onChange={(e) => set('invoiceMessage', e.target.value)}
+            className="w-full rounded-md border border-[var(--line-strong)] bg-[var(--surface)] p-3 text-[14px] text-[var(--ink)] outline-none focus:border-[var(--accent)]" />
+          <p className="m-0 text-[12px] text-[var(--ink-muted)]">
+            Placeholders: <code className="font-mono text-[var(--ink)]">{'{provider_first_name} {invoice_number} {amount} {client_first_name} {property_address} {due_date} {account_name} {sort_code} {account_number} {my_name}'}</code>
+          </p>
+          {draft.invoiceMessage !== DEFAULT_INVOICE_MESSAGE && (
+            <button type="button" onClick={() => set('invoiceMessage', DEFAULT_INVOICE_MESSAGE)} className="self-start text-[13px] text-[var(--link)] hover:underline">Use the standard wording</button>
           )}
         </div>
       </div>

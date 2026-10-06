@@ -35,6 +35,38 @@ export function shortDay(iso: string | Date): string {
   return `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
 
+const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** "6 October 2026", for invoices; a YYYY-MM-DD day is read as that day wherever the phone is. */
+export function fullDate(iso: string): string {
+  const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T12:00:00` : iso);
+  return `${d.getDate()} ${MONTHS_LONG[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+/** "October 2026" from "2026-10" */
+export function monthName(ym: string, short = false): string {
+  const [y, m] = ym.split('-').map(Number);
+  return short ? MONTHS[m - 1] : `${MONTHS_LONG[m - 1]} ${y}`;
+}
+
+/** Pounds and pence: 288.461 → £288.46 (for invoices and fees worked out from the rent). */
+export function moneyExact(amount: number): string {
+  return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+}
+
+/** £288.46 when there are pence, £300 when there are none. */
+export function moneyFee(amount: number | null | undefined): string {
+  if (amount == null) return '·';
+  return Math.round(amount * 100) % 100 === 0 ? money(amount) : moneyExact(amount);
+}
+
+/** Short pounds for tight spaces: £950, £1.3k, £12k */
+export function moneyShort(amount: number): string {
+  if (amount < 1000) return `£${Math.round(amount)}`;
+  const k = amount / 1000;
+  return `£${k < 10 ? Math.round(k * 10) / 10 : Math.round(k)}k`;
+}
+
 /** "2pm", "10:30am" */
 export function clockTime(iso: string | Date): string {
   const d = new Date(iso);

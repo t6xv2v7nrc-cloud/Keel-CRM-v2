@@ -38,6 +38,12 @@ const PATHS = {
   chat: <><path d="M12 3.8a8.2 8.2 0 0 1 0 16.4c-1.4 0-2.8-.36-4-1L3.8 20.3l1.1-4A8.2 8.2 0 0 1 12 3.8z" /><path d="M8.5 11.9h.01M12 11.9h.01M15.5 11.9h.01" strokeWidth="2.4" /></>,
   share: <><circle cx="17.5" cy="5.5" r="2.5" /><circle cx="6.5" cy="12" r="2.5" /><circle cx="17.5" cy="18.5" r="2.5" /><path d="M8.7 10.7l6.6-3.9M8.7 13.3l6.6 3.9" /></>,
   send: <><path d="M21 3L10.5 13.5" /><path d="M21 3l-6.5 18-4-7.5L3 9.5z" /></>,
+  file: <><path d="M6 3h8.5L19 7.5V21H6z" /><path d="M14 3v5h5M9 13h7M9 17h7" /></>,
+  printer: <><path d="M7 9V3.5h10V9" /><rect x="3.5" y="9" width="17" height="8" rx="1.5" /><path d="M7 14h10v6.5H7z" /></>,
+  download: <><path d="M12 4v11M7 10l5 5 5-5" /><path d="M4.5 19.5h15" /></>,
+  mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3.5 6.5l8.5 6.5 8.5-6.5" /></>,
+  chevronLeft: <path d="M15 5l-7 7 7 7" />,
+  chevronRight: <path d="M9 5l7 7-7 7" />,
   monitor: <><rect x="3" y="4.5" width="18" height="12" rx="1.5" /><path d="M8 20h8M12 16.5V20" /></>,
 } satisfies Record<string, ReactNode>;
 
