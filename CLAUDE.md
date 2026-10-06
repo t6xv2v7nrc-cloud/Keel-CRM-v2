@@ -44,6 +44,21 @@ supabase/migrations/
 - Buttons say what they do ("Confirm and update Lubna", not "Submit"). Sentence case everywhere.
 - Stage moves are monotonic by default; regressions need an explicit user toggle.
 
+## House rules Ridwan has set (keep to these)
+
+- Keel works in London and the home counties only; area lists show those first, the rest of England behind one option.
+- Matching: anything over £1,300 pcm is always offered to clients on PIP or in full-time work (`premiumRent`). Clients on
+  UC alone (no PIP or LCWRA, not working) are never matched above £1,100 (`ucOnlyRentCap`), whatever budget they gave.
+  Studios and en-suite rooms count as 1 bed for LHA. "Central" means the zone 1 districts (`CENTRAL_DISTRICTS`).
+- Short lists, not endless ones: each property shows only its best few clients (`bestFew`), one line each. No kanban.
+- Nothing scrolls sideways, on a phone especially.
+- Properties go to clients, and requests go to providers, as WhatsApp links (wa.me) the person sends by hand; every
+  send is logged. Providers are greeted "Salam {name}".
+- Fees and incentives owed are called "Receivables", never "Money".
+- Two people use Keel: Ridwan (owner) and a co-worker. Ridwan invites people from the Supabase dashboard; Claude never
+  creates accounts or enters passwords.
+- Contacts was removed on request; do not bring it back unasked.
+
 ## Env vars
 
 | Var | Where |
