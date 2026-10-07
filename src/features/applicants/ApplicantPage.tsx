@@ -11,7 +11,7 @@ import { bestFew, brief, matchesForApplicant } from '../../lib/propertyMatch';
 import { money, timeAgo } from '../../lib/format';
 import { effectiveTier, isUrgent } from '../../lib/search';
 import { URGENCY_LABEL } from '../../lib/tiering';
-import { dayWord, OUTCOME_LABEL, todayIso } from '../../lib/calls';
+import { dayWord, todayIso } from '../../lib/calls';
 import type { Activity, Applicant, Call } from '../../lib/types';
 import { CallHistory, CallLogger } from '../calls/CallLogger';
 import { CallsNeedUpdate } from '../calls/CallsPage';
@@ -55,11 +55,6 @@ export function ApplicantPage() {
     });
   };
 
-  const startCall = () => {
-    setLogging(true);
-    setTimeout(() => callsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
-  };
-
   return (
     <div className="mx-auto flex max-w-[1060px] flex-col gap-6 p-6 pb-24">
       <div className="flex items-center justify-between gap-4">
@@ -71,7 +66,7 @@ export function ApplicantPage() {
         </Button>
       </div>
 
-      <HeroCard applicant={applicant} lastCall={mine[0]} onLogCall={startCall} />
+      <HeroCard applicant={applicant} />
 
       <ProgressCard applicant={applicant} />
 
@@ -83,7 +78,7 @@ export function ApplicantPage() {
 
       <div className="grid items-start gap-6 lg:grid-cols-2">
         <div ref={callsRef} className="min-w-0 scroll-mt-28 lg:scroll-mt-20">
-          <CallsCard applicant={applicant} calls={mine} ready={callsReady} open={logging} setOpen={setLogging} />
+          <NextStepCard applicant={applicant} calls={mine} ready={callsReady} open={logging} setOpen={setLogging} />
         </div>
 
           <Card>
@@ -129,24 +124,25 @@ function TimelineRow({ act }: { act: Activity }) {
   );
 }
 
-// ── Calls ──────────────────────────────────────────────────────────
+// ── Next step, and calls kept quietly underneath ───────────────────
 
-function CallsCard({ applicant, calls, ready, open, setOpen }: {
+function NextStepCard({ applicant, calls, ready, open, setOpen }: {
   applicant: Applicant; calls: Call[]; ready: boolean; open: boolean; setOpen: (v: boolean) => void;
 }) {
+  const [showCalls, setShowCalls] = useState(false);
   return (
     <Card>
-      <CardHeader icon="phone" title="Calls" sub={`${calls.length} logged`} help="logCall">
+      <CardHeader icon="calendar" title="Next step">
         {!open && ready && (
-          <Button variant="primary" className="min-h-0 px-3 py-1.5 text-[13px]" onClick={() => setOpen(true)}>
-            <Icon name="phoneOut" size={14} /> Log a call
+          <Button variant="ghost" className="min-h-0 px-2.5 py-1 text-[13px]" onClick={() => setOpen(true)}>
+            <Icon name="phone" size={14} /> Log a call
           </Button>
         )}
       </CardHeader>
       <div className="flex flex-col gap-4 p-5">
         {!ready && <CallsNeedUpdate />}
 
-        {ready && <NextStepRow key={`${applicant.next_step ?? ''}|${applicant.next_call_at ?? ''}`} applicant={applicant} hasCalls={calls.length > 0} />}
+        {ready && <NextStepRow key={`${applicant.next_step ?? ''}|${applicant.next_call_at ?? ''}`} applicant={applicant} />}
 
         {open && ready && (
           <div className="rounded-lg border border-[var(--accent)] bg-[var(--surface)] p-4 shadow-[0_0_0_4px_var(--accent-soft)]">
@@ -158,7 +154,17 @@ function CallsCard({ applicant, calls, ready, open, setOpen }: {
           </div>
         )}
 
-        {ready && <CallHistory calls={calls} />}
+        {ready && calls.length > 0 && (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-3 text-[13px]">
+              <button type="button" onClick={() => setShowCalls((v) => !v)} className="text-[var(--link)] hover:underline">
+                {showCalls ? 'Hide calls' : `Show ${calls.length} ${calls.length === 1 ? 'call' : 'calls'}`}
+              </button>
+              <Link to="/calls" className="text-[var(--ink-muted)] hover:text-[var(--ink)] hover:underline">Calls list</Link>
+            </div>
+            {showCalls && <CallHistory calls={calls} />}
+          </div>
+        )}
       </div>
     </Card>
   );
@@ -266,7 +272,7 @@ function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
 // ── Hero ───────────────────────────────────────────────────────────
 
 /** Client header: who they are, where they are, and the quick actions. */
-function HeroCard({ applicant, lastCall, onLogCall }: { applicant: Applicant; lastCall?: Call; onLogCall: () => void }) {
+function HeroCard({ applicant }: { applicant: Applicant }) {
   const tier = effectiveTier(applicant);
   const household = [
     applicant.adults ? `${applicant.adults} adult${applicant.adults > 1 ? 's' : ''}` : null,
@@ -305,15 +311,13 @@ function HeroCard({ applicant, lastCall, onLogCall }: { applicant: Applicant; la
           <div className="flex flex-wrap items-center gap-2">
             <AssignPicker applicant={applicant} />
             <Button onClick={() => document.getElementById('details')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="min-h-0 px-3 py-2 text-[13px]"><Icon name="pencil" size={14} />Edit details</Button>
-            <Button variant="primary" onClick={onLogCall} className="min-h-0 px-3 py-2 text-[13px]"><Icon name="phoneOut" size={14} />Log call</Button>
           </div>
         </div>
 
-        <dl className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <dl className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <Meta icon="users" label="Household" value={household || 'Not known'} />
           <Meta icon="flag" label="Budget" value={applicant.budget_pcm ? money(applicant.budget_pcm) : 'Not given'} mono />
-          <Meta icon="phone" label="Last call" value={lastCall ? `${OUTCOME_LABEL[lastCall.outcome]}, ${timeAgo(lastCall.created_at)}` : 'Not called yet'} />
-          <Meta icon="calendar" label="Next step" value={next ? `${applicant.next_step ? `${applicant.next_step}, ` : ''}${dayWord(next)}` : 'Not set'}
+          <Meta icon="calendar" label="Next step" wide value={next ? `${applicant.next_step ? `${applicant.next_step}, ` : ''}${dayWord(next)}` : 'Not set'}
             strong={!!next && next <= todayIso()} />
         </dl>
 
@@ -322,9 +326,9 @@ function HeroCard({ applicant, lastCall, onLogCall }: { applicant: Applicant; la
   );
 }
 
-function Meta({ icon, label, value, mono, strong }: { icon: Parameters<typeof Icon>[0]['name']; label: string; value: string; mono?: boolean; strong?: boolean }) {
+function Meta({ icon, label, value, mono, strong, wide }: { icon: Parameters<typeof Icon>[0]['name']; label: string; value: string; mono?: boolean; strong?: boolean; wide?: boolean }) {
   return (
-    <div className="flex items-start gap-2.5 rounded-lg bg-[var(--surface-2)] px-3 py-2.5">
+    <div className={`flex items-start gap-2.5 rounded-lg bg-[var(--surface-2)] px-3 py-2.5 ${wide ? 'col-span-2 sm:col-span-1' : ''}`}>
       <Icon name={icon} size={16} className="mt-0.5 text-[var(--ink-muted)]" />
       <div className="min-w-0">
         <dt className="text-[12px] text-[var(--ink-muted)]">{label}</dt>

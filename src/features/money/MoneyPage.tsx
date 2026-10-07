@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Button, Card, CardHeader, Empty, Icon, PageHeader } from '../../components/ui';
+import { Button, Card, CardHeader, Empty, Help, Icon, PageHeader } from '../../components/ui';
 import { useApplicants, useDeals, useProperties, useProviders, useReceivables } from '../../lib/hooks';
 import { money, moneyFee, moneyShort } from '../../lib/format';
-import { byMonth, incentiveFor, isOpen, lettingFeeFor, owed, placementOf, potentials, potentialTotals, totals } from '../../lib/money';
-import type { MonthTotal, ReceivableDraft } from '../../lib/money';
-import { councilOf } from '../../lib/search';
+import { byMonth, ghostTotal, incentiveFor, isOpen, lettingFeeFor, owed, placementOf, potentials, potentialTotals, totals } from '../../lib/money';
+import type { GhostTotal, MonthTotal, ReceivableDraft } from '../../lib/money';
+import { councilOf, isActive } from '../../lib/search';
 import type { ReceivableKind } from '../../lib/types';
 import { FinancesNeedsUpdate, MoneyNeedsUpdate, MoneyRow, ReceivableForm } from './Money';
 import { PotentialList } from './Potential';
@@ -40,6 +40,9 @@ export function MoneyPage() {
   const t = totals(receivables);
   const pots = useMemo(() => potentials(deals, receivables, properties, providers), [deals, receivables, properties, providers]);
   const pt = potentialTotals(pots);
+  const ghost = ghostTotal(receivables, pots);
+  // active clients nobody is going for a property with yet: they have no fee to count
+  const noProperty = applicants.filter((a) => isActive(a) && !deals.some((d) => d.applicant_id === a.id && d.status !== 'fell_through')).length;
   const months = useMemo(() => byMonth(receivables), [receivables]);
   const payers = [...new Set(receivables.map((r) => r.payer))].sort();
   const done = receivables.filter((r) => !isOpen(r));
@@ -72,6 +75,8 @@ export function MoneyPage() {
 
       {ready && (
         <>
+          <GhostCard g={ghost} noProperty={noProperty} onOpen={() => setView('potential')} />
+
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <Tile label="Owed" value={money(t.owed)} onClick={() => setView('owed')}
               hint={`${t.owedCount} ${t.owedCount === 1 ? 'item' : 'items'}${t.unpriced ? `, ${t.unpriced} with no amount yet` : ''}${t.waitingCount ? `, ${t.waitingCount} waiting for first rent` : ''}`} />
@@ -173,6 +178,45 @@ export function MoneyPage() {
         </>
       )}
     </div>
+  );
+}
+
+/** The whole pipeline as one number, and what it is made of, from solid (owed) to faint (only sent so far). */
+function GhostCard({ g, noProperty, onOpen }: { g: GhostTotal; noProperty: number; onOpen: () => void }) {
+  const parts: Array<{ label: string; value: number; swatch: CSSProperties }> = [
+    { label: 'Owed', value: g.owed, swatch: { background: 'var(--accent)' } },
+    { label: 'Offers', value: g.likely, swatch: { background: 'var(--accent)', opacity: 0.5 } },
+    { label: 'Viewings', value: g.viewings, swatch: { background: 'var(--ink-faint)', opacity: 0.7 } },
+    { label: 'Sent or interested', value: g.early, swatch: { background: 'var(--surface)', boxShadow: 'inset 0 0 0 1.5px var(--ink-faint)' } },
+  ];
+  return (
+    <Card className="flex flex-col gap-3 p-4 sm:p-5">
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-[13px] font-medium text-[var(--ink-muted)]">Ghost total <Help topic="ghost" /></div>
+          <div className="font-mono text-[30px] font-semibold leading-tight text-[var(--ink)] sm:text-[34px]">{money(g.total)}</div>
+          <div className="text-[13px] text-[var(--ink-muted)]">The whole pipeline, if every fee came in. Not money in the bank.</div>
+        </div>
+        <button type="button" onClick={onOpen} className="text-[13px] text-[var(--link)] hover:underline">See the pipeline</button>
+      </div>
+      <div className="flex h-3 w-full overflow-hidden rounded-full bg-[var(--paper-2)]" role="img"
+        aria-label={parts.map((p) => `${p.label} ${money(p.value)}`).join(', ')}>
+        {g.total > 0 && parts.map((p) => p.value > 0 && (
+          <div key={p.label} title={`${p.label}: ${money(p.value)}`} style={{ width: `${(p.value / g.total) * 100}%`, ...p.swatch }} />
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-[13px]">
+        {parts.map((p) => (
+          <span key={p.label} className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-sm" style={p.swatch} />
+            <span className="text-[var(--ink-muted)]">{p.label}</span>
+            <span className="font-mono text-[var(--ink)]">{money(p.value)}</span>
+          </span>
+        ))}
+        {g.unknown > 0 && <span className="text-[var(--ink-muted)]">{g.unknown} {g.unknown === 1 ? 'fee' : 'fees'} not known yet</span>}
+        {noProperty > 0 && <span className="text-[var(--ink-muted)]">{noProperty} {noProperty === 1 ? 'client has' : 'clients have'} no property yet</span>}
+      </div>
+    </Card>
   );
 }
 

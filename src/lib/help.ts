@@ -7,7 +7,7 @@ export const HELP = {
   home: {
     title: 'Home',
     body: [
-      'The team\'s day at a glance: who needs a call, how active clients split across tiers, calls made in the last 14 days, the pipeline and the latest activity.',
+      'The team\'s day at a glance: active clients, available properties, what is owed and the ghost total, this week\'s viewings, next steps due, how clients split across tiers, the pipeline and the latest activity.',
       'Click any tile, chart or row to open the list behind it.',
     ],
   },
@@ -44,8 +44,8 @@ export const HELP = {
     ],
   },
   pipelineCalls: {
-    title: 'Calls column',
-    body: ['The next call booked (or "Not called yet" for new clients), and the outcome of the last call with how long ago it was.'],
+    title: 'Next step column',
+    body: ['When the client\'s next step is due, and the outcome of the last call (if any) with how long ago it was.'],
   },
   tiers: {
     title: 'Tiers',
@@ -65,7 +65,7 @@ export const HELP = {
   calls: {
     title: 'Calls',
     body: [
-      'Keeps track of who to ring. To call now lists follow-ups due today or earlier, plus new clients nobody has called yet.',
+      'The calls list: follow-ups due today or earlier, plus new clients nobody has called yet. It is out of the top bar; open it from Calls list on a client\'s Next step card.',
       'Logging a call records the outcome and books the next call, so the client leaves the list until then.',
       'Use Mine to see only clients assigned to you, or Unassigned to pick up new ones. Each call shows who made it.',
     ],
@@ -82,7 +82,7 @@ export const HELP = {
     title: 'Next step',
     body: [
       'What to do next for this client and when: Call, Chase documents, Book a viewing. Leave it blank to mean a call.',
-      'On the day, they appear in To call now for both of you, with the step written next to their name.',
+      'On the day, they appear in Next steps due on Home for both of you, with the step written next to their name.',
       'Keel sets it for you as things move: logging a call sets the follow-up, booking a viewing sets the viewing day, an offer sets a chase two days later. It only replaces your own step if its date is sooner.',
     ],
   },
@@ -177,9 +177,17 @@ export const HELP = {
   potential: {
     title: 'Potential',
     body: [
-      'Letting fees that could come in from clients going for a property: a viewing booked, viewed, an offer made or accepted. Offers made and accepted are counted as likely.',
+      'Letting fees that could come in from clients going for a property: a viewing booked, viewed, an offer made or accepted. Offers made and accepted are counted as likely. Properties only sent, or clients only interested, are listed as early: they count in the ghost total but not in Potential.',
       'Each client is counted once, at the property they have got furthest with, and each property once, as it can only be let once. Clients who have moved in are on Owed instead.',
       'The fee is the provider\'s usual fee from Settings, Providers, worked out from the rent if they pay a percentage or weeks of rent. Fees from landlords, or from providers with no usual fee, show as not known.',
+    ],
+  },
+  ghost: {
+    title: 'Ghost total',
+    body: [
+      'The size of the whole pipeline as one number: everything still owed, plus a fee for every client going for a property, from a property just sent to an offer accepted. It is what would come in if every one of them came good, so it is a ghost, not money in the bank. Paid money is not in it.',
+      'The bar shows what it is made of, from solid to faint: owed (clients who have moved in), offers made or accepted, viewings, then properties only sent or clients only interested.',
+      'Each client counts once, at the property they have got furthest with, and each property once. Fees are the provider\'s usual fee, worked out from the rent where they pay that way; fees nobody can work out yet (a landlord, or no rent) are counted as not known, and clients with no property yet are not in it.',
     ],
   },
   moneyCalendar: {

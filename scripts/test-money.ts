@@ -2,7 +2,7 @@
 import {
   addRule, awaitingFirstRent, basisRule, basisWords, byMonth, calendarEntries, describe, dueDate, dueOn, dueRuleFor, dueWords, feeChaseText, feeFrom,
   firstRentExpected, firstRentLate, icsFile, incentiveFor, isOpen, lettingFeeFor, moneyEvents, monthGrid, nextMonth, overdueDays, owed, potentials,
-  potentialTotals, rentOf, ruleWords, totals, usualFee, usualFeeWords,
+  potentialTotals, rentOf, ruleWords, totals, usualFee, usualFeeWords, ghostTotal, isEarly,
 } from '../src/lib/money';
 import { DEFAULT_SETTINGS, setActiveSettings } from '../src/lib/settings';
 import type { Deal, Property, Provider, Receivable } from '../src/lib/types';
@@ -128,24 +128,38 @@ const deal = (d: Partial<Deal>): Deal => ({
   id: 'd', applicant_id: 'a', property_id: 'p1', address: 'Flat 6, 78 Thornton Avenue', status: 'viewing', viewing_at: null, move_in_on: null,
   fell_through_reason: null, notes: null, created_at: '2026-10-01', updated_at: '2026-10-01', ...d,
 });
-const props = [prop({}), prop({ id: 'p2', address_line: '2 Elm Road', provider_id: null, source_tag: null, rent_pcm: 1000 })];
+const props = [
+  prop({}), prop({ id: 'p2', address_line: '2 Elm Road', provider_id: null, source_tag: null, rent_pcm: 1000 }),
+  prop({ id: 'p3', address_line: '5 Ash Grove', rent_pcm: 1300 }),
+];
 const deals = [
   deal({ id: 'd1', applicant_id: 'anna', status: 'accepted' }),
   deal({ id: 'd2', applicant_id: 'ben', status: 'offered' }),                         // same flat as Anna: it only lets once
   deal({ id: 'd3', applicant_id: 'ben', property_id: 'p2', address: '2 Elm Road', status: 'viewing' }),
   deal({ id: 'd4', applicant_id: 'anna', property_id: 'p2', address: '2 Elm Road', status: 'viewed' }), // Anna counted once
-  deal({ id: 'd5', applicant_id: 'cara', property_id: null, address: '9 Oak Lane', status: 'sent' }),   // too early
+  deal({ id: 'd5', applicant_id: 'cara', property_id: null, address: '9 Oak Lane', status: 'sent' }),   // already let to Dan
   deal({ id: 'd6', applicant_id: 'dan', property_id: null, address: '9 Oak Lane', status: 'moved_in' }), // placed, not potential
+  deal({ id: 'd7', applicant_id: 'eve', property_id: 'p3', address: '5 Ash Grove', status: 'sent' }),    // early
+  deal({ id: 'd8', applicant_id: 'fin', property_id: 'p2', address: '2 Elm Road', status: 'fell_through' }),
 ];
 const pots = potentials(deals, [], props, [weekly]);
-check('potential: each client once at their furthest deal, each property once, viewings booked or further',
-  pots.map((p) => `${p.deal.applicant_id}:${p.deal.id}`).join(',') === 'anna:d1,ben:d3', pots.map((p) => `${p.deal.applicant_id}:${p.deal.id}`).join(','));
+check('pipeline: each client once at their furthest deal, each property once, let or fallen-through ones left out',
+  pots.map((p) => `${p.deal.applicant_id}:${p.deal.id}`).join(',') === 'anna:d1,ben:d3,eve:d7', pots.map((p) => `${p.deal.applicant_id}:${p.deal.id}`).join(','));
 check('potential fee worked out from the provider\'s usual fee and the rent', pots[0].amount === 300 && pots[0].payer === 'Weekly Homes', String(pots[0].amount));
 check('no provider: the landlord, fee not known', pots[1].payer === 'Landlord' && pots[1].amount === null);
+check('sent or interested is early', isEarly(pots[2]) && !isEarly(pots[0]) && !isEarly(pots[1]));
 const pt = potentialTotals(pots);
-check('potential totals: £300, one likely, one not priced', pt.total === 300 && pt.count === 2 && pt.likely === 300 && pt.likelyCount === 1 && pt.unpriced === 1, JSON.stringify(pt));
+check('potential totals: £300 from viewings or further, one likely, one not priced; the early one kept apart',
+  pt.total === 300 && pt.count === 2 && pt.likely === 300 && pt.likelyCount === 1 && pt.unpriced === 1 && pt.early === 300 && pt.earlyCount === 1, JSON.stringify(pt));
 check('a deal with a fee already on Finances is not potential any more',
   potentials(deals, [{ kind: 'letting_fee', deal_id: 'd1', applicant_id: 'anna', status: 'due' }], props, [weekly]).every((p) => p.deal.id !== 'd1'));
+
+// Ghost total: owed now plus the whole pipeline
+const ghost = ghostTotal(list, pots, today);
+check('ghost total: £1,600 owed + £300 likely + £300 early = £2,200; 2 not known (one pipeline fee, one owed item)',
+  ghost.total === 2200 && ghost.owed === 1600 && ghost.likely === 300 && ghost.viewings === 0 && ghost.early === 300 && ghost.unknown === 2, JSON.stringify(ghost));
+check('ghost total leaves paid money out', ghostTotal([r({ status: 'paid', paid_on: today, amount: 999 })], [], today).total === 0);
+check('viewings count as viewings', ghostTotal([], [{ ...pots[0], deal: { ...pots[0].deal, status: 'viewing' } }], today).viewings === 300);
 
 // By month and the calendar
 const months = byMonth(list, today, 2, 1);

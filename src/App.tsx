@@ -35,7 +35,6 @@ const NAV: Array<{ to: string; label: string; icon: IconName }> = [
   { to: '/', label: 'Home', icon: 'home' },
   { to: '/bin', label: 'Bin', icon: 'inbox' },
   { to: '/pipeline', label: 'Pipeline', icon: 'list' },
-  { to: '/calls', label: 'Calls', icon: 'phone' },
   { to: '/properties', label: 'Properties', icon: 'building' },
   { to: '/finances', label: 'Finances', icon: 'pound' },
 ];
@@ -149,6 +148,7 @@ function Shell() {
           <Route path="/pipeline" element={<PipelinePage />} />
           <Route path="/applicants/:id" element={<ApplicantPage />} />
           <Route path="/properties" element={<PropertiesPage />} />
+          {/* Out of the top bar on request; still reachable from a client's Next step card and bookmarks */}
           <Route path="/calls" element={<CallsPage />} />
           <Route path="/finances" element={<MoneyPage />} />
           <Route path="/finances/invoice/:id" element={<InvoicePage />} />

@@ -37,7 +37,7 @@ const PROGRESS_LABEL: Record<PipelineFilters['progress'], string> = {
 };
 
 const CALLS_LABEL: Record<PipelineFilters['calls'], string> = {
-  any: 'Any', due: 'Due a call now', never: 'Never called', scheduled: 'Call booked',
+  any: 'Any', due: 'Next step due', never: 'New, not contacted', scheduled: 'Next step booked',
 };
 
 const TYPE_SHORT: Record<string, string> = { single: 'Single', couple: 'Couple', family: 'Family', other: 'Other' };
@@ -255,7 +255,7 @@ export function PipelinePage() {
               options={[['any', 'Anyone'], ['me', 'Me'], ['none', 'Not assigned'],
                 ...people.members.filter((m) => m.id !== people.meId).map((m): [string, string] => [m.id, people.nameOf(m.id) ?? 'Someone'])]} />
           )}
-          <FilterSelect label="Calls" value={filters.calls} onChange={(v) => update({ calls: v as PipelineFilters['calls'] })}
+          <FilterSelect label="Next step" value={filters.calls} onChange={(v) => update({ calls: v as PipelineFilters['calls'] })}
             options={Object.entries(CALLS_LABEL) as Array<[string, string]>} />
           {progressReady && (
             <FilterSelect label="Progress" value={filters.progress} onChange={(v) => update({ progress: v as PipelineFilters['progress'] })}
@@ -351,7 +351,7 @@ export function PipelinePage() {
           <SortLabel k="name" sortKey={sortKey} dir={dir} onSort={toggleSort}>Client</SortLabel>
           <SortLabel k="area" sortKey={sortKey} dir={dir} onSort={toggleSort}>Looking for</SortLabel>
           <span className="inline-flex items-center gap-1.5">
-            <SortLabel k="officer" sortKey={sortKey} dir={dir} onSort={toggleSort}>Housing officer</SortLabel> and calls <Help topic="pipelineCalls" />
+            <SortLabel k="officer" sortKey={sortKey} dir={dir} onSort={toggleSort}>Housing officer</SortLabel> and next step <Help topic="pipelineCalls" />
           </span>
           <SortLabel k="stage" sortKey={sortKey} dir={dir} onSort={toggleSort}>Stage</SortLabel>
         </div>
@@ -417,7 +417,7 @@ export function PipelinePage() {
                   </div>
                 </div>
 
-                {/* Housing officer and calls */}
+                {/* Housing officer and next step */}
                 <div className="flex min-w-0 flex-col gap-1.5 pl-[46px] text-[14px] md:pl-[46px] xl:pl-0">
                   {hasOfficer(a) ? (
                     <div className="min-w-0" title={[a.officer_name, a.officer_email, a.officer_phone].filter(Boolean).join('\n')}>
@@ -522,18 +522,14 @@ function Highlight({ text, terms }: { text: string; terms: string[] }) {
   );
 }
 
-/** Last call and next call for a pipeline row. */
+/** When the next step is due, and the last call if there was one, for a pipeline row. Quiet on purpose: new clients show nothing. */
 function CallCell({ state, lastOutcome, lastAt }: { state: CallState; lastOutcome?: Call['outcome']; lastAt?: string }) {
   const today = todayIso();
   const next = state.kind === 'due' || state.kind === 'scheduled' ? state.date : null;
   const dueNow = state.kind === 'due' || (state.kind === 'first' && state.date <= today);
   return (
     <div className="flex min-w-[130px] flex-col gap-0.5 text-[13px]">
-      {state.kind === 'first' ? (
-        <span className={`inline-flex items-center gap-1 ${dueNow ? 'font-semibold text-[var(--ink)]' : 'text-[var(--ink-muted)]'}`}>
-          <Icon name="phoneOut" size={13} /> Not called yet
-        </span>
-      ) : next ? (
+      {next ? (
         <span className={`inline-flex items-center gap-1 ${dueNow ? 'font-semibold text-[var(--accent-ink)]' : 'text-[var(--ink)]'}`}>
           <Icon name="calendar" size={13} /> {next < today ? `Overdue, ${dayWord(next)}` : dayLabel(next)}
         </span>
@@ -541,7 +537,7 @@ function CallCell({ state, lastOutcome, lastAt }: { state: CallState; lastOutcom
       {lastOutcome && lastAt && (
         <span className="text-[var(--ink-muted)]">{OUTCOME_LABEL[lastOutcome]}, {timeAgo(lastAt)}</span>
       )}
-      {!lastOutcome && state.kind === 'none' && <span className="text-[var(--ink-muted)]">·</span>}
+      {!lastOutcome && !next && <span className="text-[var(--ink-muted)]">·</span>}
     </div>
   );
 }

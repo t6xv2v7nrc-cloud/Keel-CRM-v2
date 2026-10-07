@@ -335,12 +335,12 @@ function AddDeal({ applicant, tracked, onDone }: { applicant: Applicant; tracked
   );
 }
 
-// ── Next step (on the Calls card) ──────────────────────────────────
+// ── Next step (on the client's Next step card) ─────────────────────
 
 const STEP_IDEAS = ['Call', 'Chase documents', 'Send more properties', 'Book a viewing', 'Chase the landlord', 'Chase the council', 'Check in after move-in'];
 
-/** What to do next for a client, and when. The date is the one the Calls page works from. */
-export function NextStepRow({ applicant, hasCalls }: { applicant: Applicant; hasCalls: boolean }) {
+/** What to do next for a client, and when. It shows in Next steps due on Home on the day. */
+export function NextStepRow({ applicant }: { applicant: Applicant }) {
   const { ready } = useDeals();
   const setStep = useSetNextStep();
   const { toast } = useToast();
@@ -366,7 +366,7 @@ export function NextStepRow({ applicant, hasCalls }: { applicant: Applicant; has
             <datalist id="keel-step-ideas">{STEP_IDEAS.map((s) => <option key={s} value={s} />)}</datalist>
           </>
         ) : null}
-        <strong className="whitespace-nowrap">{date ? dayLabel(date) : hasCalls ? 'Not set' : 'Not called yet'}</strong>
+        <strong className="whitespace-nowrap">{date ? dayLabel(date) : 'Not set'}</strong>
         {overdue && <span className="text-[var(--note-fg)]">overdue</span>}
         <Help topic="nextCall" />
       </div>
