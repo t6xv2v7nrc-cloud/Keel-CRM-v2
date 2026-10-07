@@ -11,7 +11,7 @@ import { moneyFee, shortDate } from './format';
 import type {
   Activity, Applicant, Call, CallOutcome, Deal, DealStatus, Profile, Property, Provider, ProviderRequest, Receivable, RequestStatus, RequestType,
 } from './types';
-import { followUpFrom, providerFor, providerNumber, REQUEST_LABEL } from './requests';
+import { followUpFrom, PROVIDER_OFF, PROVIDER_ON, providerFor, providerNumber, REQUEST_LABEL, tagOf, withdrawnBySwitchOff } from './requests';
 import { basisWords, describe, KIND_LABEL, lettingFeeFor, rentOf, STATUS_LABEL } from './money';
 import { invoiceNumber } from './invoice';
 import type { ReceivableDraft } from './money';
@@ -254,15 +254,19 @@ export function useAddProperties() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ rows, source }: { rows: SavedProperty[]; source: string }): Promise<Property[]> => {
+      // a list from a provider that is switched off comes in withdrawn, like the rest of its properties (before 0010 nothing is off)
+      const offRes = await supabase.from('providers').select('tag').eq('active', false);
+      const off = new Set(((offRes.error ? [] : offRes.data ?? []) as Array<{ tag: string }>).map((x) => tagOf(x.tag)));
+      const isOff = (r: Pick<SavedProperty, 'source_tag'>) => off.has(tagOf(r.source_tag)) && tagOf(r.source_tag) !== '';
       // one insert, so the whole list shares a save time (that is how Saved lists groups it)
-      const { data, error } = await supabase.from('properties').insert(rows.map((r) => ({ status: 'void', ...r }))).select();
+      const { data, error } = await supabase.from('properties').insert(rows.map((r) => ({ status: 'void', ...r, ...(isOff(r) ? { status: 'withdrawn' } : {}) }))).select();
       if (error) throw isMissingColumn(error) ? new NeedsDatabaseUpdate() : error;
       const added = data as Property[];
       await supabase.from('activities').insert(added.map((p) => ({
         entity_type: 'property',
         entity_id: p.id,
-        kind: 'created',
-        body: `Added ${p.address_line} from a pasted list${source ? ` (${source})` : ''}`,
+        kind: isOff(p) ? PROVIDER_OFF : 'created',
+        body: `Added ${p.address_line} from a pasted list${source ? ` (${source})` : ''}${isOff(p) ? `, withdrawn: ${tagOf(p.source_tag)} is switched off` : ''}`,
       })));
       return added;
     },
@@ -813,11 +817,18 @@ export function useProviders() {
 
 export type ProviderDraft = Omit<Provider, 'id' | 'created_at' | 'updated_at'> & { id?: string };
 
-/** Add or change a provider, then link any properties carrying its tag. */
+/** A saved provider, and how many of its properties were withdrawn (switched off) or brought back (switched on). */
+export type SavedProvider = Provider & { withdrawn: number; restored: number };
+
+/**
+ * Add or change a provider, then link any properties carrying its tag.
+ * Switching it off withdraws its available properties (under offer and let are left alone); switching it
+ * back on brings back the ones that switching off withdrew. Each property's change goes on its activity.
+ */
 export function useSaveProvider() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (p: ProviderDraft): Promise<Provider> => {
+    mutationFn: async (p: ProviderDraft): Promise<SavedProvider> => {
       const tag = p.tag.trim().toUpperCase();
       if (!tag || !p.name.trim()) throw new Error('A provider needs a name and a tag.');
       const whatsapp = p.whatsapp?.trim() ? providerNumber(p.whatsapp) : null;
@@ -826,6 +837,7 @@ export function useSaveProvider() {
         name: p.name.trim(), contact_first_name: p.contact_first_name?.trim() || null, company: p.company?.trim() || null, tag, whatsapp,
         email: p.email?.trim() || null, rules: p.rules ?? {}, fee_terms: p.fee_terms?.trim() || null, notes: p.notes?.trim() || null, active: p.active,
       };
+      const before = p.id ? (await supabase.from('providers').select('active').eq('id', p.id).maybeSingle()).data as { active: boolean } | null : null;
       const res = p.id
         ? await supabase.from('providers').update(row).eq('id', p.id).select().single()
         : await supabase.from('providers').insert(row).select().single();
@@ -837,11 +849,46 @@ export function useSaveProvider() {
       const saved = res.data as Provider;
       // properties from lists tagged with it now belong to it
       await supabase.from('properties').update({ provider_id: saved.id }).is('provider_id', null).ilike('source_tag', tag);
-      await supabase.from('activities').insert({
-        entity_type: 'provider', entity_id: saved.id, kind: p.id ? 'updated' : 'created',
-        body: p.id ? `${p.active ? 'Updated' : 'Deactivated'} provider ${tag} (${row.name})` : `Added provider ${tag} (${row.name})`,
-      });
-      return saved;
+
+      let withdrawn = 0;
+      let restored = 0;
+      if (before?.active && !saved.active) {
+        // switched off: its available properties are withdrawn with it
+        const off = await supabase.from('properties').update({ status: 'withdrawn' }).eq('provider_id', saved.id).eq('status', 'void').select('id, address_line');
+        const rows = (off.data ?? []) as Array<{ id: string; address_line: string }>;
+        withdrawn = rows.length;
+        if (rows.length) {
+          await supabase.from('activities').insert(rows.map((x) => ({
+            entity_type: 'property', entity_id: x.id, kind: PROVIDER_OFF, body: `${x.address_line}: Available → Withdrawn (${tag} switched off)`,
+          })));
+        }
+      } else if (before && !before.active && saved.active) {
+        // switched back on: bring back what switching it off withdrew, not ones withdrawn by hand
+        const gone = await supabase.from('properties').select('id, address_line').eq('provider_id', saved.id).eq('status', 'withdrawn');
+        const rows = (gone.data ?? []) as Array<{ id: string; address_line: string }>;
+        const history: Array<{ entity_id: string; kind: string; body: string; created_at: string }> = [];
+        for (const ids of chunks(rows.map((x) => x.id))) {
+          const a = await supabase.from('activities').select('entity_id, kind, body, created_at').eq('entity_type', 'property').in('entity_id', ids);
+          history.push(...((a.data ?? []) as typeof history));
+        }
+        const back = new Set(withdrawnBySwitchOff(rows.map((x) => x.id), history));
+        for (const ids of chunks([...back])) await supabase.from('properties').update({ status: 'void' }).in('id', ids).eq('status', 'withdrawn');
+        const brought = rows.filter((x) => back.has(x.id));
+        restored = brought.length;
+        if (brought.length) {
+          await supabase.from('activities').insert(brought.map((x) => ({
+            entity_type: 'property', entity_id: x.id, kind: PROVIDER_ON, body: `${x.address_line}: Withdrawn → Available (${tag} switched back on)`,
+          })));
+        }
+      }
+
+      const what = p.id
+        ? before?.active && !saved.active ? `Switched off provider ${tag} (${row.name})${withdrawn ? `; ${withdrawn} available ${withdrawn === 1 ? 'property' : 'properties'} withdrawn` : ''}`
+          : before && !before.active && saved.active ? `Switched provider ${tag} (${row.name}) back on${restored ? `; ${restored} ${restored === 1 ? 'property' : 'properties'} available again` : ''}`
+          : `Updated provider ${tag} (${row.name})`
+        : `Added provider ${tag} (${row.name})`;
+      await supabase.from('activities').insert({ entity_type: 'provider', entity_id: saved.id, kind: p.id ? 'updated' : 'created', body: what });
+      return { ...saved, withdrawn, restored };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['providers'] });

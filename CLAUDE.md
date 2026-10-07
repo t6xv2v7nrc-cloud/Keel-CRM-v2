@@ -64,6 +64,9 @@ supabase/migrations/
 - Two people use Keel: Ridwan (owner) and a co-worker. Ridwan invites people from the Supabase dashboard; Claude never
   creates accounts or enters passwords.
 - Contacts was removed on request; do not bring it back unasked.
+- Switching a provider off withdraws its available properties (under offer and let stay); switching it back on brings back
+  only those (`provider_off` / `provider_on` property activities, `withdrawnBySwitchOff` in requests.ts). Lists pasted
+  while it is off come in withdrawn.
 - Calls are kept quiet on request: not in the top bar (the /calls page stays, linked from a client's Next step card),
   not on Home, no green "Log call" button. Home shows next steps due instead. Do not make calls prominent again unasked.
 - Finances leads with the ghost total: everything owed plus a fee for every client going for a property (sent to accepted),

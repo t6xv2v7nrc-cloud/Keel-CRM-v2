@@ -151,6 +151,8 @@ check('sent or interested is early', isEarly(pots[2]) && !isEarly(pots[0]) && !i
 const pt = potentialTotals(pots);
 check('potential totals: £300 from viewings or further, one likely, one not priced; the early one kept apart',
   pt.total === 300 && pt.count === 2 && pt.likely === 300 && pt.likelyCount === 1 && pt.unpriced === 1 && pt.early === 300 && pt.earlyCount === 1, JSON.stringify(pt));
+check('a withdrawn property (say its provider is switched off) brings in nothing',
+  potentials(deals, [], props.map((x) => (x.id === 'p3' ? { ...x, status: 'withdrawn' as const } : x)), [weekly]).every((p) => p.deal.id !== 'd7'));
 check('a deal with a fee already on Finances is not potential any more',
   potentials(deals, [{ kind: 'letting_fee', deal_id: 'd1', applicant_id: 'anna', status: 'due' }], props, [weekly]).every((p) => p.deal.id !== 'd1'));
 

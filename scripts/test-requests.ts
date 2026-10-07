@@ -1,5 +1,6 @@
 // Checks for provider requests. Run with: npx tsx scripts/test-requests.ts
 import {
+  changesStatus, PROVIDER_OFF, PROVIDER_ON, withdrawnBySwitchOff,
   awaitingProviders, benefitWords, followUpFrom, householdWords, needsConsent, propertyProblems, providerFor, providerNumber,
   requestMessage, ruleProblems, rulesSummary,
 } from '../src/lib/requests';
@@ -89,6 +90,25 @@ check('overdue first, oldest first', list.map((x) => x.request.id).join(',') ===
 setActiveSettings({ ...DEFAULT_SETTINGS, requestFollowUpHours: 48 });
 check('the chase wait comes from Team settings', followUpFrom(new Date(0)).getTime() === 48 * 3_600_000);
 setActiveSettings(DEFAULT_SETTINGS);
+
+// Switching a provider off and on again
+const act = (entity_id: string, kind: string, body: string, created_at: string) => ({ entity_id, kind, body, created_at });
+const acts = [
+  act('p1', PROVIDER_OFF, '1 Elm Road: Available → Withdrawn (ZUB switched off)', '2026-10-05T10:00:00Z'),
+  act('p2', PROVIDER_OFF, '2 Elm Road: Available → Withdrawn (ZUB switched off)', '2026-10-05T10:00:00Z'),
+  act('p2', 'updated', '2 Elm Road: Withdrawn → Available', '2026-10-05T11:00:00Z'),          // brought back by hand
+  act('p2', 'updated', '2 Elm Road: Available → Withdrawn', '2026-10-05T12:00:00Z'),          // then withdrawn by hand
+  act('p3', 'updated', '3 Elm Road: Available → Withdrawn', '2026-10-01T10:00:00Z'),          // withdrawn by hand before
+  act('p1', 'updated', 'LHA area set to Inner North London', '2026-10-06T10:00:00Z'),         // not a status change
+  act('p4', PROVIDER_OFF, '4 Elm Road: Available → Withdrawn (ZUB switched off)', '2026-09-01T10:00:00Z'),
+  act('p4', PROVIDER_ON, '4 Elm Road: Withdrawn → Available (ZUB switched back on)', '2026-09-10T10:00:00Z'),
+  act('p4', 'updated', 'Let: Ben Sample moved in', '2026-09-20T10:00:00Z'),
+];
+check('switching back on brings back only what switching off withdrew',
+  withdrawnBySwitchOff(['p1', 'p2', 'p3', 'p4'], acts).join(',') === 'p1', withdrawnBySwitchOff(['p1', 'p2', 'p3', 'p4'], acts).join(','));
+check('status changes are recognised; other notes are not',
+  changesStatus({ kind: 'updated', body: 'Flat 2: Available → Under offer' }) && changesStatus({ kind: 'updated', body: 'Under offer: accepted for Ben' })
+  && !changesStatus({ kind: 'updated', body: 'LHA area set to Brent' }) && !changesStatus({ kind: 'created', body: 'Added 1 Elm Road from a pasted list' }));
 
 console.log(failed ? `\n${failed} failed` : '\nAll passed');
 process.exit(failed ? 1 : 0);

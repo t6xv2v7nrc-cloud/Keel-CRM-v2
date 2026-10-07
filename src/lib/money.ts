@@ -308,7 +308,7 @@ export interface Potential {
  * The letting fees that could come in from clients going for a property, from
  * a property sent to them up to an offer accepted: each client counted once,
  * at their furthest deal (they only move in once), and each property once (it
- * only lets once). Deals that already have a fee on Finances are left out.
+ * only lets once). Deals that already have a fee on Finances, or whose property is withdrawn, are left out.
  * Furthest along first. Sent and interested ones are early (see isEarly).
  */
 export function potentials(deals: Deal[], receivables: Array<Pick<Receivable, 'kind' | 'deal_id' | 'applicant_id' | 'status'>>, properties: Property[], providers: Provider[]): Potential[] {
@@ -329,6 +329,7 @@ export function potentials(deals: Deal[], receivables: Array<Pick<Receivable, 'k
     clients.add(d.applicant_id);
     places.add(place);
     const property = (d.property_id ? properties.find((p) => p.id === d.property_id) : undefined) ?? properties.find((p) => p.address_line === d.address) ?? null;
+    if (property?.status === 'withdrawn') continue; // taken off (by hand, or with its provider): nothing to come from it
     const provider = property ? providerFor(property, providers) : null;
     const rent = rentOf(property);
     const fee = usualFee(provider?.rules);

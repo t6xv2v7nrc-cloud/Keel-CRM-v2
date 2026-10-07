@@ -42,7 +42,30 @@ export const REQUEST_PLACEHOLDERS: ReadonlyArray<[string, string]> = [
 /** Digits only, as wa.me wants: "07700 900123" becomes "447700900123". */
 export const providerNumber = (raw: string | null | undefined) => waNumber(raw);
 
-const tagOf = (s: string | null | undefined) => (s ?? '').trim().toUpperCase();
+export const tagOf = (s: string | null | undefined) => (s ?? '').trim().toUpperCase();
+
+// Switching a provider off withdraws its available properties (under offer and let are left alone: a client may be
+// moving in). Each one gets a 'provider_off' activity, so switching it back on can bring back exactly those, and not
+// ones withdrawn by hand since.
+
+/** Activity kinds for a property withdrawn, or brought back, by switching its provider off or on. */
+export const PROVIDER_OFF = 'provider_off';
+export const PROVIDER_ON = 'provider_on';
+
+const STATUS_WORDS = '(Available|Under offer|Let|Withdrawn)';
+const STATUS_CHANGE = new RegExp(`^${STATUS_WORDS}: | → ${STATUS_WORDS}(\\s|$)`);
+
+/** Whether a property activity records its status changing (by hand, by a deal, or by its provider). */
+export const changesStatus = (a: { kind: string; body: string }) => a.kind === PROVIDER_OFF || a.kind === PROVIDER_ON || STATUS_CHANGE.test(a.body);
+
+/** Of these withdrawn properties, the ones whose last status change was their provider being switched off. */
+export function withdrawnBySwitchOff(ids: string[], activities: Array<{ entity_id: string; kind: string; body: string; created_at: string }>): string[] {
+  const latest = new Map<string, string>();
+  for (const a of [...activities].sort((x, y) => y.created_at.localeCompare(x.created_at))) {
+    if (!latest.has(a.entity_id) && changesStatus(a)) latest.set(a.entity_id, a.kind);
+  }
+  return ids.filter((id) => latest.get(id) === PROVIDER_OFF);
+}
 
 /** A property's provider: the one it is linked to, or the one whose tag is its source tag. */
 export function providerFor(p: { provider_id?: string | null; source_tag?: string | null }, providers: Provider[]): Provider | null {

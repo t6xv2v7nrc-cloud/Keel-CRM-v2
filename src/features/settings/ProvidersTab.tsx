@@ -90,6 +90,8 @@ export function ProvidersTab() {
 function ProviderForm({ initial, onDone }: { initial: ProviderDraft | Provider; onDone: () => void }) {
   const save = useSaveProvider();
   const { toast } = useToast();
+  const { data: properties = [] } = useProperties();
+  const { providers } = useProviders();
   const [d, setD] = useState<ProviderDraft>({ ...initial, rules: { ...(initial.rules ?? {}) } });
   const [boroughText, setBoroughText] = useState((initial.rules?.boroughs ?? []).join(', '));
   const set = <K extends keyof ProviderDraft>(k: K, v: ProviderDraft[K]) => setD((x) => ({ ...x, [k]: v }));
@@ -115,8 +117,28 @@ function ProviderForm({ initial, onDone }: { initial: ProviderDraft | Provider; 
       ...(feeBasis !== 'fixed' && d.rules.fee_rate ? { fee_basis: feeBasis, fee_rate: d.rules.fee_rate } : {}),
       ...(d.rules.fee_due && (d.rules.fee_due.n > 0 || d.rules.fee_due.from === 'first_rent') ? { fee_due: d.rules.fee_due } : {}),
     };
+    const switchingOff = !isNew && initial.active && !active;
+    if (switchingOff) {
+      const id = 'id' in initial ? initial.id : undefined;
+      const mine = properties.filter((x) => providerFor(x, providers)?.id === id);
+      const available = mine.filter((x) => x.status === 'void').length;
+      const held = mine.filter((x) => x.status === 'under_offer').length;
+      const ok = window.confirm([
+        `Switch off ${initial.tag}?`,
+        available ? `Its ${available} available ${available === 1 ? 'property' : 'properties'} will be withdrawn too, so ${available === 1 ? 'it stops' : 'they stop'} matching and cannot be sent.` : 'It has no available properties to withdraw.',
+        held ? `${held} under offer ${held === 1 ? 'stays' : 'stay'} as ${held === 1 ? 'it is' : 'they are'}, as a client may be moving in.` : '',
+        'Switch it back on to bring them back.',
+      ].filter(Boolean).join('\n\n'));
+      if (!ok) return;
+    }
     save.mutate({ ...d, active, rules }, {
-      onSuccess: (p) => { toast(isNew ? `Added ${p.tag}` : active ? `Saved ${p.tag}` : `${p.tag} switched off`, 'success'); onDone(); },
+      onSuccess: (p) => {
+        toast(isNew ? `Added ${p.tag}`
+          : switchingOff ? `${p.tag} switched off${p.withdrawn ? `. ${p.withdrawn} ${p.withdrawn === 1 ? 'property' : 'properties'} withdrawn` : ''}`
+          : !initial.active && active ? `${p.tag} switched back on${p.restored ? `. ${p.restored} ${p.restored === 1 ? 'property' : 'properties'} available again` : ''}`
+          : `Saved ${p.tag}`, 'success');
+        onDone();
+      },
       onError: (e) => toast((e as Error).message, 'danger'),
     });
   };

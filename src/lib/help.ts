@@ -222,7 +222,7 @@ export const HELP = {
     body: [
       'Who supplies your properties, by the tag on their stock lists (BP, SR, ZUB...). Properties from a list with that tag belong to them.',
       'Rules are what they will take: benefits (any of those ticked), household, the councils they take clients from, a maximum rent and furnished or not. Requests warn you when a client does not fit.',
-      'Switching a provider off keeps their history but stops new requests. Only the owner can change providers.',
+      'Switching a provider off keeps their history but stops new requests, and withdraws their available properties so they stop matching and cannot be sent (ones under offer or let are left alone). A list of theirs pasted while they are off comes in withdrawn. Switching them back on brings back the properties that switching off withdrew, but not ones you withdrew by hand. Only the owner can change providers.',
       'A property belongs to the provider whose tag is on its list. To change it, pick the provider on the property card, or tick several properties and use Set provider. The Provider filter on Properties shows who supplies what.',
       'Letting fee they pay Keel: a set amount, a percentage of a month\'s rent, or weeks of rent (say 1 week\'s rent). When their fee is due counts from sign up, or from when the client\'s first month\'s rent is paid if they only pay after it.',
     ],
