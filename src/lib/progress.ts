@@ -162,3 +162,15 @@ export function viewingsBetween(deals: Deal[], from: Date, to: Date): Deal[] {
     .filter((d) => d.status === 'viewing' && d.viewing_at && new Date(d.viewing_at) >= from && new Date(d.viewing_at) < to)
     .sort((a, b) => a.viewing_at!.localeCompare(b.viewing_at!));
 }
+
+// ── Move-in checklist (0015) ────────────────────────────────────────
+
+/** Deals the move-in checklist applies to: accepted, or moved in. */
+export const needsChecklist = (d: Pick<Deal, 'status'>) => d.status === 'accepted' || d.status === 'moved_in';
+
+/** How far a deal's move-in checklist has got against the team's current list (checks since removed are ignored). */
+export function checklistProgress(d: Pick<Deal, 'checklist'>, items: string[]): { done: number; total: number; left: string[] } {
+  const ticked = d.checklist ?? {};
+  const left = items.filter((i) => !ticked[i]);
+  return { done: items.length - left.length, total: items.length, left };
+}

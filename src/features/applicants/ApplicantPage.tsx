@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   Avatar, Button, Card, CardHeader, Empty, Help, Icon, StageBadge, TierBadge, UrgentChip, useToast,
 } from '../../components/ui';
 import {
-  sentKey, useActivities, useApplicant, useAssign, useCalls, useDeals, useDeleteApplicant, usePeople, useProperties, useProviders, useRequests,
+  sentKey, useActivities, useApplicant, useApplicants, useAssign, useCalls, useDeals, useDeleteApplicant, usePeople, useProperties, useProviders, useRequests,
   useSentOnWhatsApp,
 } from '../../lib/hooks';
 import { bestFew, brief, matchesForApplicant } from '../../lib/propertyMatch';
@@ -23,6 +23,7 @@ import { NextStepRow, ProgressCard, StuckChip } from '../progress/Progress';
 import { RequestButton, RequestChip } from '../requests/RequestSheet';
 import { MoneyCard } from '../money/Money';
 import { stuckDays } from '../../lib/progress';
+import { openGroups } from '../../lib/duplicates';
 import { clientAreas, placeKey } from '../../lib/geo';
 
 export function ApplicantPage() {
@@ -67,6 +68,8 @@ export function ApplicantPage() {
       </div>
 
       <HeroCard applicant={applicant} />
+
+      <DuplicateNote applicant={applicant} />
 
       <ProgressCard applicant={applicant} />
 
@@ -121,6 +124,28 @@ function TimelineRow({ act }: { act: Activity }) {
         </div>
       </div>
     </li>
+  );
+}
+
+// ── Possibly the same person as another client ─────────────────────
+
+function DuplicateNote({ applicant }: { applicant: Applicant }) {
+  const { data: all = [] } = useApplicants();
+  const group = useMemo(() => openGroups(all).find((g) => g.clients.some((c) => c.id === applicant.id)), [all, applicant.id]);
+  if (!group) return null;
+  const others = group.clients.filter((c) => c.id !== applicant.id);
+  return (
+    <div role="note" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-[var(--line-strong)] bg-[var(--note-bg)] px-4 py-3 text-[14px] text-[var(--note-fg)]">
+      <Icon name="layers" size={16} className="shrink-0" />
+      <span className="min-w-0 flex-1 basis-[220px]">
+        {group.sure ? 'Looks like the same person as ' : 'May be the same person as '}
+        {others.map((c, i) => (
+          <span key={c.id}>{i ? ' and ' : ''}<Link to={`/applicants/${c.id}`} className="font-medium underline">{c.full_name}</Link></span>
+        ))}
+        {' '}({group.reasons.join(', ')}).
+      </span>
+      <Link to="/pipeline?duplicates=1" className="font-medium underline">Review and merge</Link>
+    </div>
   );
 }
 

@@ -5,7 +5,7 @@ import { isLocalProperty, localProperties, useLocalProperties } from './localPro
 import { DEFAULT_SETTINGS, mergeSettings, myPart, teamPart } from './settings';
 import type { AppSettings } from './settings';
 import { addDays, OUTCOME_LABEL, todayIso } from './calls';
-import { DEAL_LABEL, isLive, shouldAdvance, stageFromDeals, stepAfter, takesOver, viewingWords } from './progress';
+import { DEAL_LABEL, isLive, shortAddress, shouldAdvance, stageFromDeals, stepAfter, takesOver, viewingWords } from './progress';
 import { computeTier } from './tiering';
 import { moneyFee, shortDate } from './format';
 import type {
@@ -132,6 +132,36 @@ export function useMarkCold() {
       qc.invalidateQueries({ queryKey: ['applicants'] });
       qc.invalidateQueries({ queryKey: ['activities'] });
     },
+  });
+}
+
+// ── Duplicate clients (0014) ────────────────────────────────────────
+const MERGE_UPDATE = 'Merging needs a one-off database update: run supabase/migrations/0014_merge_clients.sql in the Supabase SQL Editor.';
+const noFunction = (e: { message?: string; code?: string }) => e.code === 'PGRST202' || /function|schema cache/i.test(e.message ?? '');
+const NOBODY = '00000000-0000-0000-0000-000000000000';
+
+/** Whether 0014 is in: merging a nobody into themselves does nothing, or fails if the function is missing. */
+export function useMergeReady() {
+  const q = useQuery({
+    queryKey: ['merge-ready'],
+    staleTime: 10 * 60_000,
+    queryFn: async () => !(await supabase.rpc('merge_applicants', { keep: NOBODY, gone: NOBODY })).error,
+  });
+  return q.data ?? false;
+}
+
+/** Fold duplicate records into the one kept, in the database in one step each (see 0014). */
+export function useMergeClients() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ keep, gone }: { keep: string; gone: string[] }) => {
+      for (const id of gone) {
+        const { error } = await supabase.rpc('merge_applicants', { keep, gone: id });
+        if (error) throw noFunction(error) ? new Error(MERGE_UPDATE) : error;
+      }
+      return gone.length;
+    },
+    onSuccess: () => { void qc.invalidateQueries(); },
   });
 }
 
@@ -754,6 +784,48 @@ export function useRemoveDeal() {
       await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: deal.applicant_id, kind: 'progress', body: `Stopped tracking ${deal.address}` });
     },
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['deals'] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+const CHECKLIST_UPDATE =
+  'The move-in checklist needs a one-off database update: run supabase/migrations/0015_move_in_checklist.sql in the Supabase SQL Editor.';
+
+/** Tick or untick one move-in check on a deal ("Gas safety certificate given"). */
+export function useTickMoveInCheck() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ deal, item, done }: { deal: Deal; item: string; done: boolean }) => {
+      const next = { ...(deal.checklist ?? {}) };
+      if (done) next[item] = todayIso(); else delete next[item];
+      const { error } = await supabase.from('deals').update({ checklist: next }).eq('id', deal.id);
+      if (error) throw isMissingColumn(error) ? new Error(CHECKLIST_UPDATE) : error;
+      await supabase.from('activities').insert({
+        entity_type: 'applicant', entity_id: deal.applicant_id, kind: 'progress',
+        body: `Move-in check ${done ? 'ticked' : 'unticked'} for ${shortAddress(deal.address)}: ${item}`,
+      });
+    },
+    onMutate: async ({ deal, item, done }) => {
+      // tick straight away; the refetch afterwards confirms it
+      await qc.cancelQueries({ queryKey: ['deals'] });
+      const before = qc.getQueryData<{ deals: Deal[]; ready: boolean }>(['deals']);
+      if (before) {
+        qc.setQueryData(['deals'], {
+          ...before,
+          deals: before.deals.map((d) => {
+            if (d.id !== deal.id) return d;
+            const checklist = { ...(d.checklist ?? {}) };
+            if (done) checklist[item] = todayIso(); else delete checklist[item];
+            return { ...d, checklist };
+          }),
+        });
+      }
+      return { before };
+    },
+    onError: (_e, _v, ctx) => { if (ctx?.before) qc.setQueryData(['deals'], ctx.before); },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: ['deals'] });
       qc.invalidateQueries({ queryKey: ['activities'] });
     },

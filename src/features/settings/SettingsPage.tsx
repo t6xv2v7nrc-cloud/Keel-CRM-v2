@@ -7,7 +7,7 @@ import {
   useApplicants, useBulkShare, useCalls, useHandOver, usePeople, useProviders, useSaveProfile, useSaveSettings, useSettings,
 } from '../../lib/hooks';
 import type { Applicant, DueFrom, DueRule } from '../../lib/types';
-import { DEFAULT_FEE_CHASE, DEFAULT_INVOICE_MESSAGE, DEFAULT_SETTINGS, myPart, teamPart } from '../../lib/settings';
+import { DEFAULT_FEE_CHASE, DEFAULT_INVOICE_MESSAGE, DEFAULT_MOVE_IN_CHECKLIST, DEFAULT_SETTINGS, myPart, teamPart } from '../../lib/settings';
 import type { AppSettings, InvoiceSettings } from '../../lib/settings';
 import { URGENCY_LABEL } from '../../lib/tiering';
 import { TierLogicEditor } from './TierLogicEditor';
@@ -287,6 +287,8 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
         </div>
       </Card>
 
+      <ChecklistSettings draft={draft} set={set} />
+
       <Card>
         <CardHeader icon="phone" title="Calls" help="calls" />
         <div className="flex flex-col gap-5 p-5">
@@ -349,6 +351,36 @@ function MoneySettings({ draft, set }: { draft: AppSettings; set: <K extends key
 }
 
 /** Team settings: Keel's details and bank details printed on invoices, numbering, VAT, and the WhatsApp wording. */
+const lines = (t: string) => t.split('\n').map((l) => l.trim()).filter(Boolean);
+
+/** The checks ticked off for every move-in, one per line. */
+function ChecklistSettings({ draft, set }: { draft: AppSettings; set: <K extends keyof AppSettings>(k: K, v: AppSettings[K]) => void }) {
+  const [text, setText] = useState(draft.moveInChecklist.join('\n'));
+  // a reset (or the saved settings arriving) replaces what is typed
+  useEffect(() => {
+    setText((t) => (same(lines(t), draft.moveInChecklist) ? t : draft.moveInChecklist.join('\n')));
+  }, [draft.moveInChecklist]);
+  const standard = same(draft.moveInChecklist, DEFAULT_MOVE_IN_CHECKLIST);
+
+  return (
+    <Card>
+      <CardHeader icon="list" title="Move-in checklist" help="checklist" />
+      <div className="flex flex-col gap-2 p-5">
+        <label htmlFor="move-in-checklist" className="text-[15px] text-[var(--ink-muted)]">
+          What to tick off for every move-in, once an offer is accepted. One check per line, in the order you do them.
+        </label>
+        <textarea id="move-in-checklist" rows={Math.max(6, lines(text).length + 1)} value={text}
+          onChange={(e) => { setText(e.target.value); set('moveInChecklist', lines(e.target.value)); }}
+          className="w-full rounded-md border border-[var(--line-strong)] bg-[var(--surface)] p-3 text-[14px] text-[var(--ink)] outline-none focus:border-[var(--accent)]" />
+        <p className="m-0 text-[12px] text-[var(--ink-muted)]">Renaming a check starts it unticked again for clients already moving in.</p>
+        {!standard && (
+          <button type="button" onClick={() => set('moveInChecklist', DEFAULT_MOVE_IN_CHECKLIST)} className="self-start text-[13px] text-[var(--link)] hover:underline">Use the standard checklist</button>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 function InvoiceSettingsCard({ draft, set }: { draft: AppSettings; set: <K extends keyof AppSettings>(k: K, v: AppSettings[K]) => void }) {
   const inv = draft.invoice;
   const put = <K extends keyof InvoiceSettings>(k: K, v: InvoiceSettings[K]) => set('invoice', { ...inv, [k]: v });

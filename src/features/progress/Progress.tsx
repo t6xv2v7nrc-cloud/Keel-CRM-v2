@@ -2,13 +2,14 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button, Card, CardHeader, Help, Icon, UpdateNote, useToast } from '../../components/ui';
 import {
-  useAddDeals, useDeals, useMoveDeal, usePeople, useProperties, useRemoveDeal, useSetNextStep,
+  useAddDeals, useDeals, useMoveDeal, usePeople, useProperties, useRemoveDeal, useSetNextStep, useSettings, useTickMoveInCheck,
 } from '../../lib/hooks';
 import { addDays, dayLabel, dayWord, todayIso } from '../../lib/calls';
 import { timeAgo, shortDate } from '../../lib/format';
 import { matchesForApplicant } from '../../lib/propertyMatch';
 import {
-  DEAL_LABEL, DEAL_STEPS, FELL_THROUGH_REASONS, isLive, isPlaced, nextMove, shortAddress, stuckDays, viewingShort, viewingWords,
+  checklistProgress, DEAL_LABEL, DEAL_STEPS, FELL_THROUGH_REASONS, isLive, isPlaced, needsChecklist, nextMove, shortAddress, stuckDays,
+  viewingShort, viewingWords,
 } from '../../lib/progress';
 import { reminderMessage, waLink, waNumber } from '../../lib/whatsapp';
 import { openViewingChange } from './ViewingChange';
@@ -207,7 +208,7 @@ function DealRow({ applicant, deal, all, property }: { applicant: Applicant; dea
   return (
     <li className="flex flex-col gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-[220px]">
           <div className="text-[15px] font-medium text-[var(--ink)]">{deal.address}</div>
           <div className="text-[13px] text-[var(--ink-muted)]">
             <span className={deal.status === 'viewing' || deal.status === 'offered' || deal.status === 'accepted' ? 'font-semibold text-[var(--accent-ink)]' : ''}>{dealWords(deal)}</span>
@@ -236,6 +237,7 @@ function DealRow({ applicant, deal, all, property }: { applicant: Applicant; dea
         </select>
       </div>
       <DealSteps status={deal.status} />
+      {needsChecklist(deal) && <MoveInChecklist deal={deal} />}
 
       {mode === 'viewing' && (
         <div className="flex flex-wrap items-center gap-2 text-[13px]">
@@ -272,6 +274,51 @@ function DealRow({ applicant, deal, all, property }: { applicant: Applicant; dea
         </div>
       )}
     </li>
+  );
+}
+
+/** The checks to tick off for a move-in (right to rent, deposit, gas safety...), from the team's list in Settings. */
+function MoveInChecklist({ deal }: { deal: Deal }) {
+  const { settings } = useSettings();
+  const tick = useTickMoveInCheck();
+  const { toast } = useToast();
+  const items = settings.moveInChecklist;
+  const { done, total } = checklistProgress(deal, items);
+  const [open, setOpen] = useState(deal.status === 'accepted' && done < total);
+  if (total === 0) return null;
+  const ready = deal.checklist !== undefined;
+  const complete = done === total;
+
+  return (
+    <div className="rounded-md border border-[var(--line)] bg-[var(--surface)] text-[13px]">
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2">
+        <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left font-medium text-[var(--ink)]">
+          <Icon name={complete ? 'check' : 'list'} size={14} />
+          <span>Move-in checklist</span>
+          <span className={complete ? 'font-semibold text-[var(--accent-ink)]' : 'text-[var(--ink-muted)]'}>{done} of {total}</span>
+          <span className="text-[var(--link)]">{open ? 'Hide' : 'Show'}</span>
+        </button>
+        <Help topic="checklist" />
+      </div>
+      {open && (
+        <div className="flex flex-col gap-1 border-t border-[var(--line)] px-3 py-2">
+          {!ready && <UpdateNote title="Ticking these off needs a one-off database update." file="0015_move_in_checklist.sql" />}
+          {items.map((item) => {
+            const on = deal.checklist?.[item];
+            return (
+              <label key={item} className="flex items-start gap-2 py-1">
+                <input type="checkbox" checked={!!on} disabled={!ready}
+                  onChange={(e) => tick.mutate({ deal, item, done: e.target.checked }, { onError: (err) => toast((err as Error).message, 'danger') })}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent)]" />
+                <span className={`min-w-0 flex-1 ${on ? 'text-[var(--ink-muted)]' : 'text-[var(--ink)]'}`}>{item}</span>
+                {on && <span className="shrink-0 text-[12px] text-[var(--ink-muted)]">{shortDate(on)}</span>}
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -100,6 +100,8 @@ export interface AppSettings {
   stuckAfterDays: { lead: number; referred: number; viewing: number; offer: number };
   /** A lead or referral with nothing moving for this many days has gone cold, and can be moved to Lost in one go (0 = never). */
   coldAfterDays: number;
+  /** What to tick off for every move-in, in order. */
+  moveInChecklist: string[];
   /** Saved property lists older than this can be purged in one click. */
   purgeAfterDays: number;
   /** LHA rates loaded from a CSV (a newer year); null uses the built-in rates. */
@@ -191,6 +193,18 @@ export const DEFAULT_FEE_CHASE = [
   'Thanks, {my_name}, Keel Lettings',
 ].join('\n');
 
+export const DEFAULT_MOVE_IN_CHECKLIST = [
+  'Right to rent checked',
+  'Tenancy agreement signed',
+  'Deposit protected, or none taken',
+  'Gas safety certificate given',
+  'Energy performance certificate (EPC) given',
+  'Electrical safety report (EICR) given',
+  'Government information sheet given',
+  'Inventory and meter readings done',
+  'Council and housing officer told about the move',
+];
+
 export const DEFAULT_INVOICE_MESSAGE = [
   'Salam {provider_first_name}, here is invoice {invoice_number} for {amount}: the letting fee for {client_first_name} at {property_address}, due {due_date}.',
   'Bank: {account_name}, sort code {sort_code}, account {account_number}. Please quote {invoice_number}.',
@@ -261,6 +275,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   firstCallWithinDays: 1,
   stuckAfterDays: { lead: 3, referred: 7, viewing: 7, offer: 10 },
   coldAfterDays: 30,
+  moveInChecklist: DEFAULT_MOVE_IN_CHECKLIST,
   purgeAfterDays: 14,
   lhaRates: null,
   lhaAreaOverrides: {},

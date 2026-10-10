@@ -1,5 +1,5 @@
 // Checks for client progress: stage from deals, next steps, stuck. Run with: npx tsx scripts/test-progress.ts
-import { coldDays, lastMoved, nextMove, shouldAdvance, stageFromDeals, stepAfter, stuckDays, takesOver, viewingsBetween, viewingShort } from '../src/lib/progress';
+import { checklistProgress, coldDays, lastMoved, needsChecklist, nextMove, shouldAdvance, stageFromDeals, stepAfter, stuckDays, takesOver, viewingsBetween, viewingShort } from '../src/lib/progress';
 import { queueLabel } from '../src/lib/calls';
 import { isActive, isHoused } from '../src/lib/search';
 import { DEFAULT_SETTINGS, setActiveSettings } from '../src/lib/settings';
@@ -80,6 +80,14 @@ check('only leads and referrals go cold', coldDays(client({ ...old, stage: 'view
 setActiveSettings({ ...DEFAULT_SETTINGS, coldAfterDays: 0 });
 check('0 in Team settings turns it off', coldDays(client(old), []) === null);
 setActiveSettings(DEFAULT_SETTINGS);
+
+// Move-in checklist: shown once accepted, counted against the team's current list
+const items = DEFAULT_SETTINGS.moveInChecklist;
+check('the checklist shows for accepted and moved in only', needsChecklist(deal('accepted')) && needsChecklist(deal('moved_in')) && !needsChecklist(deal('offered')) && !needsChecklist(deal('fell_through')));
+check('nothing ticked before 0015 is run', checklistProgress(deal('accepted'), items).done === 0 && checklistProgress(deal('accepted'), items).total === items.length);
+const ticked = checklistProgress(deal('accepted', { checklist: { [items[0]]: '2026-10-01', [items[3]]: '2026-10-02', 'A check since removed': '2026-09-01' } }), items);
+check('ticks count, a check since removed does not', ticked.done === 2 && ticked.left.length === items.length - 2, `${ticked.done} of ${ticked.total}`);
+check('what is left keeps the list order', ticked.left[0] === items[1]);
 
 console.log(failed ? `\n${failed} failed` : '\nAll passed');
 process.exit(failed ? 1 : 0);

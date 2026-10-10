@@ -3,6 +3,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApplicants, useCalls, useDeals, useMoveStage, useDeleteApplicant, usePeople, useProviders, useRequests } from '../../lib/hooks';
 import { Avatar, Button, Card, Help, Icon, PageHeader, TierBadge, UrgentChip, useToast } from '../../components/ui';
 import { HousingOfficersBox } from './Officers';
+import { DuplicatesBox } from './Duplicates';
+import { openGroups } from '../../lib/duplicates';
 import { callState, dayLabel, dayWord, lastCallMap, OUTCOME_LABEL, todayIso } from '../../lib/calls';
 import { readNotes } from '../../lib/readNotes';
 import type { CallState } from '../../lib/calls';
@@ -104,6 +106,9 @@ export function PipelinePage() {
   const [sort, setSort] = useState(() => sortFromParams(params));
   const [moreOpen, setMoreOpen] = useState(false);
   const [officersOpen, setOfficersOpen] = useState(() => params.get('officers') === '1');
+  const [dupesOpen, setDupesOpen] = useState(() => params.get('duplicates') === '1');
+  const [dupesSeen, setDupesSeen] = useState(0); // bumped when a group is merged or dismissed
+  const dupes = useMemo(() => openGroups(applicants), [applicants, dupesSeen]); // eslint-disable-line react-hooks/exhaustive-deps
   const written = useRef(params.toString());
 
   useEffect(() => {
@@ -229,10 +234,17 @@ export function PipelinePage() {
   return (
     <div className="mx-auto flex max-w-[1240px] flex-col gap-4 p-4 pb-24 sm:p-6 sm:pb-24">
       <PageHeader icon="list" title="Pipeline" help="pipeline" sub={`${activeCount} active of ${applicants.length} clients`}>
+        {dupes.length > 0 && (
+          <Button className="min-h-0 px-3 py-2 text-[14px]" aria-expanded={dupesOpen} onClick={() => setDupesOpen((v) => !v)}>
+            <Icon name="layers" size={16} />Duplicates ({dupes.length})
+          </Button>
+        )}
         <Button className="min-h-0 px-3 py-2 text-[14px]" aria-expanded={officersOpen} onClick={() => setOfficersOpen((v) => !v)}>
           <Icon name="users" size={16} />Housing officers
         </Button>
       </PageHeader>
+
+      {dupesOpen && <DuplicatesBox groups={dupes} onClose={() => setDupesOpen(false)} onChange={() => setDupesSeen((n) => n + 1)} />}
 
       {officersOpen && <HousingOfficersBox applicants={applicants} onClose={() => setOfficersOpen(false)} />}
 

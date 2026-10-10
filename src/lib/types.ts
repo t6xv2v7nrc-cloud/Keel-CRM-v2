@@ -106,6 +106,8 @@ export interface Deal {
   move_in_on: string | null;
   fell_through_reason: string | null;
   notes: string | null;
+  /** 0015: move-in checks ticked, check → the day it was ticked (YYYY-MM-DD) */
+  checklist?: Record<string, string>;
   created_by?: string | null;
   created_at: string;
   updated_at: string;

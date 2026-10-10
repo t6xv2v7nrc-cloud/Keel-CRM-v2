@@ -227,6 +227,22 @@ export const HELP = {
       'If a booked viewing moves or is cancelled, use Move or cancel on the client\'s Progress (or the calendar button on Home). Keel saves it, then writes the message for the client and for the provider.',
     ],
   },
+  duplicates: {
+    title: 'Possible duplicates',
+    body: [
+      'Clients who look like the same person entered twice: the same phone number (07700 900123 and +44 7700 900123 count as the same), the same email, or the same name in any order. A shared phone or email is almost certainly one person; a shared name is only a question, as two people can have the same name.',
+      'Merge keeps the record you pick (Keel suggests the one furthest along) and moves everything from the other onto it: calls, properties and their progress, fees and incentives, requests to providers and the timeline. Details the kept record is missing are filled in, notes are joined, and the other record is deleted. It cannot be undone.',
+      'A phone number or email on more than three clients is taken to be shared (a support worker\'s, or an office line) and is left out.',
+      'Not the same person hides the pair on this device.',
+    ],
+  },
+  checklist: {
+    title: 'Move-in checklist',
+    body: [
+      'Once an offer is accepted, each property shows the checks to tick off before and at the move-in: right to rent, the tenancy signed, the deposit protected, the gas safety certificate, EPC and electrical report given, and so on. Each tick is dated and goes on the client\'s timeline, so you can show it was done.',
+      'The list is the same for every move-in. The owner can change it under Settings, Team rules: one check per line.',
+    ],
+  },
   officers: {
     title: 'Housing officers',
     body: [
