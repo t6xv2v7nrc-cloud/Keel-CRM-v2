@@ -15,6 +15,7 @@ export const HELP = {
     title: 'The Bin',
     body: [
       'Where new information comes in. Paste a screenshot anywhere with Ctrl+V, drop an image here, or paste a website enquiry email.',
+      'On an iPhone: take the screenshot, tap it, tap Copy (or share it and choose Copy), then open Keel and tap Paste screenshot here. Tap Paste when the phone asks. From WhatsApp, press and hold a photo and choose Copy.',
       'Keel reads it, suggests which client it belongs to and waits for you to check. Nothing is saved until you confirm a card.',
       'Referrals from the website form arrive here on their own. Confirm all saves every card exactly as shown, including your edits.',
     ],
@@ -174,6 +175,13 @@ export const HELP = {
       'An amount can be typed in, or worked out from the property\'s rent: a percentage of a month\'s rent, or a number of weeks\' rent (a week is the monthly rent times 12, divided by 52). Change the rent if the listing was wrong.',
       'The due date is worked out from the sign-up date: the provider\'s own rule if it has one (say 1 month after sign up), otherwise the standard in Team settings. Some providers only pay once the client\'s first month\'s rent is in: those fees wait for it, with the date it is expected on the calendar. Press First rent paid when it arrives and the fee falls due. You can change any date by hand.',
       'Letting fees go Due, Chased, Paid. Incentives go To claim, Claim submitted, Chased, Paid (or Declined). Chase opens WhatsApp to the provider with the message written; Paid takes it off the list. Each step is on the client\'s timeline.',
+    ],
+  },
+  accountant: {
+    title: 'For your accountant',
+    body: [
+      'Downloads every letting fee and incentive in the period as a spreadsheet that Excel or Numbers opens: date, invoice number, type, who pays, client, property, amount, status, paid, due and signed-up dates, and how the fee was worked out. Totals paid and still owed are underneath.',
+      'Each fee falls in a period by the day it was paid, or if not yet paid, the day it is due. Tax years run 6 April to 5 April.',
     ],
   },
   potential: {

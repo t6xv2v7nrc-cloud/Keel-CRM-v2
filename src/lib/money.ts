@@ -502,3 +502,54 @@ export function icsFile(entries: CalendarEntry[], stamp = new Date()): string {
   lines.push('END:VCALENDAR');
   return `${lines.map(fold).join('\r\n')}\r\n`;
 }
+
+// ── For the accountant ─────────────────────────────────────────────
+
+/** A span of days, both ends included (YYYY-MM-DD). */
+export interface Period { key: string; label: string; from: string; to: string }
+
+const lastDayOf = (ym: string) => { const [y, m] = ym.split('-').map(Number); return isoDay(new Date(y, m, 0)); };
+
+/** The periods an accountant asks for: UK tax years (6 April to 5 April), months, or everything. This tax year first. */
+export function periods(today = todayIso()): Period[] {
+  const [y, m, d] = today.split('-').map(Number);
+  const start = m > 4 || (m === 4 && d >= 6) ? y : y - 1;
+  const taxYear = (s: number): Period => ({ key: `tax-${s}`, label: `${s} to ${s + 1} tax year`, from: `${s}-04-06`, to: `${s + 1}-04-05` });
+  const month = (ym: string, label: string): Period => ({ key: `month-${ym}`, label, from: `${ym}-01`, to: lastDayOf(ym) });
+  const now = today.slice(0, 7);
+  return [
+    taxYear(start), taxYear(start - 1),
+    month(now, `This month (${monthName(now)})`), month(shiftMonth(now, -1), `Last month (${monthName(shiftMonth(now, -1))})`),
+    { key: 'all', label: 'Everything', from: '0000-01-01', to: '9999-12-31' },
+  ];
+}
+
+/** The day that puts a fee in a period: when it was paid, else when it falls due, else when they signed up. */
+export const periodDay = (r: Receivable) => r.paid_on ?? r.due_on ?? r.sign_up_on ?? r.created_at.slice(0, 10);
+
+const csvCell = (v: string | number | null | undefined) => {
+  if (v == null) return '';
+  const s = String(v);
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+
+/**
+ * Letting fees and incentives in a period as a spreadsheet (CSV, which Excel and Numbers open), one row each, oldest
+ * first, with the totals paid and still owed underneath. Amounts are plain numbers so they add up in Excel.
+ */
+export function financesCsv(list: Receivable[], period: Pick<Period, 'from' | 'to'>, clientName: (applicantId: string) => string): string {
+  const rows = list.filter((r) => { const day = periodDay(r); return day >= period.from && day <= period.to; })
+    .sort((a, b) => periodDay(a).localeCompare(periodDay(b)));
+  const sum = (xs: Receivable[]) => xs.reduce((s, r) => s + (r.amount ?? 0), 0).toFixed(2);
+  const lines: Array<Array<string | number | null>> = [
+    ['Date', 'Invoice', 'Type', 'From', 'Client', 'Property', 'Amount', 'Status', 'Paid on', 'Due on', 'Signed up', 'How it was worked out', 'Notes'],
+    ...rows.map((r) => [
+      periodDay(r), r.invoice_number ?? '', KIND_LABEL[r.kind], r.payer, clientName(r.applicant_id), r.property_address ?? '',
+      r.amount != null ? r.amount.toFixed(2) : '', STATUS_LABEL[r.status], r.paid_on ?? '', r.due_on ?? '', r.sign_up_on ?? '', basisWords(r) ?? '', r.notes ?? '',
+    ]),
+    [],
+    ['', '', '', '', '', 'Total paid', sum(rows.filter((r) => r.status === 'paid'))],
+    ['', '', '', '', '', 'Total still owed', sum(rows.filter(isOpen))],
+  ];
+  return `﻿${lines.map((l) => l.map(csvCell).join(',')).join('\r\n')}\r\n`;
+}

@@ -4,10 +4,11 @@ import { useSearchParams } from 'react-router-dom';
 import { Button, Card, CardHeader, Empty, Help, Icon, PageHeader } from '../../components/ui';
 import { useApplicants, useDeals, useProperties, useProviders, useReceivables } from '../../lib/hooks';
 import { money, moneyFee, moneyShort } from '../../lib/format';
-import { byMonth, ghostTotal, incentiveFor, isOpen, lettingFeeFor, owed, placementOf, potentials, potentialTotals, totals } from '../../lib/money';
+import { byMonth, financesCsv, ghostTotal, incentiveFor, isOpen, lettingFeeFor, owed, periodDay, periods, placementOf, potentials, potentialTotals, totals } from '../../lib/money';
+import { saveFile } from '../../lib/files';
 import type { GhostTotal, MonthTotal, ReceivableDraft } from '../../lib/money';
 import { councilOf, isActive } from '../../lib/search';
-import type { ReceivableKind } from '../../lib/types';
+import type { Receivable, ReceivableKind } from '../../lib/types';
 import { FinancesNeedsUpdate, MoneyNeedsUpdate, MoneyRow, ReceivableForm } from './Money';
 import { PotentialList } from './Potential';
 import { MoneyCalendar } from './Calendar';
@@ -175,9 +176,36 @@ export function MoneyPage() {
               </Card>
             </>
           )}
+
+          <AccountantExport receivables={receivables} nameOf={(id) => byId.get(id)?.full_name ?? ''} />
         </>
       )}
     </div>
+  );
+}
+
+/** Fees and incentives in a period as a spreadsheet for the accountant. */
+function AccountantExport({ receivables, nameOf }: { receivables: Receivable[]; nameOf: (id: string) => string }) {
+  const options = useMemo(() => periods(), []);
+  const [key, setKey] = useState(options[0].key);
+  const period = options.find((p) => p.key === key) ?? options[0];
+  const count = receivables.filter((r) => { const d = periodDay(r); return d >= period.from && d <= period.to; }).length;
+  const download = () => saveFile(`keel-finances-${period.key === 'all' ? 'all' : `${period.from}-to-${period.to}`}.csv`,
+    financesCsv(receivables, period, nameOf), 'text/csv;charset=utf-8');
+  return (
+    <Card>
+      <CardHeader icon="file" title="For your accountant" help="accountant" />
+      <div className="flex flex-wrap items-end gap-3 p-4 sm:px-5">
+        <label className="flex min-w-0 flex-col gap-1">
+          <span className="text-[13px] font-medium text-[var(--ink-muted)]">Period</span>
+          <select value={key} onChange={(e) => setKey(e.target.value)} className={`${select} max-w-full`}>
+            {options.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+          </select>
+        </label>
+        <Button disabled={!count} onClick={download}><Icon name="download" size={16} />Download spreadsheet</Button>
+        <span className="pb-2.5 text-[13px] text-[var(--ink-muted)]">{count} {count === 1 ? 'fee or incentive' : 'fees and incentives'}</span>
+      </div>
+    </Card>
   );
 }
 

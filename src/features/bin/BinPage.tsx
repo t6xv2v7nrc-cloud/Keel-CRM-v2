@@ -83,6 +83,20 @@ export function BinPage() {
     setStage('staging');
   }, []);
 
+  // On a phone there is no Ctrl+V: read a copied screenshot from the clipboard on a tap
+  const canReadClipboard = typeof navigator !== 'undefined' && typeof navigator.clipboard?.read === 'function';
+  const pasteFromClipboard = async () => {
+    try {
+      for (const item of await navigator.clipboard.read()) {
+        const type = item.types.find((t) => t.startsWith('image/'));
+        if (type) { stageImage(await item.getType(type)); return; }
+      }
+      toast('There is no picture on the clipboard. Copy a screenshot first, then tap Paste screenshot.', 'danger');
+    } catch {
+      toast('Keel could not read the clipboard. Tap Paste when your phone asks, or use Choose image.', 'danger');
+    }
+  };
+
   // Paste-anywhere (§5.1)
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
@@ -202,7 +216,10 @@ export function BinPage() {
               className="hidden"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) stageImage(f); }}
             />
-            <Button variant="primary" className="mt-4" onClick={() => fileRef.current?.click()}><Icon name="plus" size={16} />Choose image</Button>
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              {canReadClipboard && <Button variant="primary" onClick={pasteFromClipboard}><Icon name="inbox" size={16} />Paste screenshot</Button>}
+              <Button variant={canReadClipboard ? 'secondary' : 'primary'} onClick={() => fileRef.current?.click()}><Icon name="plus" size={16} />Choose image</Button>
+            </div>
           </div>
         </div>
       )}

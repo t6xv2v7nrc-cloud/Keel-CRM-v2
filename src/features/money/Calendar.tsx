@@ -7,18 +7,7 @@ import { awaitingFirstRent, calendarEntries, eventTitle, icsFile, moneyEvents, m
 import type { MoneyEvent } from '../../lib/money';
 import type { Applicant, Provider, Receivable } from '../../lib/types';
 import { MoneyRow } from './Money';
-
-/** Hand the browser a file to save (or, on a phone, to open: a calendar file goes straight into the calendar). */
-function saveFile(name: string, text: string, type: string) {
-  const url = URL.createObjectURL(new Blob([text], { type }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
-}
+import { saveFile } from '../../lib/files';
 
 const KIND_WORDS: Record<MoneyEvent['kind'], string> = { due: 'Due', first_rent: 'First month\'s rent expected', paid: 'Paid' };
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];

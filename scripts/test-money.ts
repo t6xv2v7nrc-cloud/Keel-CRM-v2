@@ -2,7 +2,7 @@
 import {
   addRule, awaitingFirstRent, basisRule, basisWords, byMonth, calendarEntries, describe, dueDate, dueOn, dueRuleFor, dueWords, feeChaseText, feeFrom,
   firstRentExpected, firstRentLate, icsFile, incentiveFor, isOpen, lettingFeeFor, moneyEvents, monthGrid, nextMonth, overdueDays, owed, potentials,
-  potentialTotals, rentOf, ruleWords, totals, usualFee, usualFeeWords, ghostTotal, isEarly,
+  potentialTotals, rentOf, ruleWords, totals, usualFee, usualFeeWords, ghostTotal, isEarly, periods, financesCsv,
 } from '../src/lib/money';
 import { DEFAULT_SETTINGS, setActiveSettings } from '../src/lib/settings';
 import type { Deal, Property, Provider, Receivable } from '../src/lib/types';
@@ -184,6 +184,21 @@ const ics = icsFile(entries, new Date('2026-10-06T09:00:00Z'));
 check('calendar file: all-day entries with a 9am reminder', ics.startsWith('BEGIN:VCALENDAR\r\n') && ics.includes('DTSTART;VALUE=DATE:20261001\r\n') && ics.includes('DTEND;VALUE=DATE:20261002\r\n')
   && ics.includes('TRIGGER;RELATED=START:PT9H') && ics.includes('DTSTAMP:20261006T090000Z') && ics.trimEnd().endsWith('END:VCALENDAR'));
 check('calendar file escapes commas and folds long lines', ics.includes('Broadfield Close\\, London') && ics.split('\r\n').every((l) => new TextEncoder().encode(l).length <= 75));
+
+// For the accountant
+const ps = periods('2026-10-06');
+check('this tax year runs 6 April to 5 April', ps[0].label === '2026 to 2027 tax year' && ps[0].from === '2026-04-06' && ps[0].to === '2027-04-05');
+check('before 6 April it is still last year\'s tax year', periods('2026-04-05')[0].from === '2025-04-06' && periods('2026-04-06')[0].from === '2026-04-06');
+check('months, and everything', ps[2].from === '2026-10-01' && ps[2].to === '2026-10-31' && ps[3].from === '2026-09-01' && ps[3].to === '2026-09-30' && ps[4].key === 'all');
+const csv = financesCsv(list, ps[3], (id) => (id === 'a1' ? 'Anna Mecani' : ''));
+const csvLines = csv.replace('\uFEFF', '').trim().split('\r\n');
+check('September: each fee by the day it was paid, else due, else added; oldest first; the address quoted',
+  csvLines.length === 7 && csvLines[3].startsWith('2026-09-25,,Letting fee,Watermint,Anna Mecani,"Broadfield Close, London NW2 6NR",450.00,Paid,2026-09-25'), csvLines.join(' / '));
+check('a fee with no amount yet is still listed, with the amount blank', csvLines[1].includes(',,Due,'));
+check('totals paid and still owed', csvLines[5].endsWith('Total paid,450.00') && csvLines[6].endsWith('Total still owed,0.00'), csvLines.slice(5).join(' / '));
+check('starts with a byte-order mark so Excel reads the £ sign', csv.startsWith('\uFEFF'));
+const allCsv = financesCsv(list, ps[4], () => 'X').trim().split('\r\n');
+check('everything: every fee, oldest first', allCsv.length === 1 + list.length + 3 && allCsv[1].startsWith('2026-09-01'), allCsv[1]);
 
 console.log(failed ? `\n${failed} failed` : '\nAll passed');
 process.exit(failed ? 1 : 0);
