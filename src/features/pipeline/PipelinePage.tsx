@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApplicants, useCalls, useDeals, useMoveStage, useDeleteApplicant, usePeople, useProviders, useRequests } from '../../lib/hooks';
-import { Avatar, Card, Help, Icon, PageHeader, TierBadge, UrgentChip, useToast } from '../../components/ui';
+import { Avatar, Button, Card, Help, Icon, PageHeader, TierBadge, UrgentChip, useToast } from '../../components/ui';
+import { HousingOfficersBox } from './Officers';
 import { callState, dayLabel, dayWord, lastCallMap, OUTCOME_LABEL, todayIso } from '../../lib/calls';
 import { readNotes } from '../../lib/readNotes';
 import type { CallState } from '../../lib/calls';
@@ -102,6 +103,7 @@ export function PipelinePage() {
   const [filters, setFilters] = useState<PipelineFilters>(() => filtersFromParams(params));
   const [sort, setSort] = useState(() => sortFromParams(params));
   const [moreOpen, setMoreOpen] = useState(false);
+  const [officersOpen, setOfficersOpen] = useState(() => params.get('officers') === '1');
   const written = useRef(params.toString());
 
   useEffect(() => {
@@ -224,8 +226,14 @@ export function PipelinePage() {
   if (isLoading) return <div className="grid min-h-[50vh] place-items-center text-[var(--ink-muted)]">Loading…</div>;
 
   return (
-    <div className="mx-auto flex max-w-[1240px] flex-col gap-4 p-6 pb-24">
-      <PageHeader icon="list" title="Pipeline" help="pipeline" sub={`${activeCount} active of ${applicants.length} clients`} />
+    <div className="mx-auto flex max-w-[1240px] flex-col gap-4 p-4 pb-24 sm:p-6 sm:pb-24">
+      <PageHeader icon="list" title="Pipeline" help="pipeline" sub={`${activeCount} active of ${applicants.length} clients`}>
+        <Button className="min-h-0 px-3 py-2 text-[14px]" aria-expanded={officersOpen} onClick={() => setOfficersOpen((v) => !v)}>
+          <Icon name="users" size={16} />Housing officers
+        </Button>
+      </PageHeader>
+
+      {officersOpen && <HousingOfficersBox applicants={applicants} onClose={() => setOfficersOpen(false)} />}
 
       {/* Search + filters */}
       <Card className="flex flex-col gap-4 p-4">

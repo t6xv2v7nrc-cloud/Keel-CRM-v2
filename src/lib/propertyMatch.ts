@@ -93,7 +93,7 @@ function premiumReason(a: Applicant): string | null {
 }
 
 /** The most a client can afford if they are on UC alone (no PIP or LCWRA, not working), per Settings; otherwise null. */
-export function ucOnlyCap(a: Applicant): number | null {
+function ucOnlyCap(a: Applicant): number | null {
   const cap = activeSettings().ucOnlyRentCap;
   if (!cap) return null;
   const has = (k: string) => benefitsOf(a).some((b) => b.key === k);

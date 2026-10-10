@@ -8,7 +8,7 @@ import type { Applicant } from '../../lib/types';
 const MAX_TIERS = 6;
 
 /** A tier set by hand stays (if that tier still exists); everyone else follows the logic being edited. */
-export function tierUnder(a: Applicant, logic: TierLogic): number {
+function tierUnder(a: Applicant, logic: TierLogic): number {
   const n = logic.tiers.length;
   const stored = typeof a.tier === 'number' && a.tier >= 1 && a.tier <= n ? a.tier : null;
   if (stored && (a.tier_locked || a.tier_locked === undefined)) return stored;

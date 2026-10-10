@@ -5,8 +5,9 @@ import {
 } from '../../components/ui';
 import type { IconName } from '../../components/ui';
 import { useApplicants, useCalls, useDeals, usePeople, useProperties, useProviders, useReceivables, useRecentActivity } from '../../lib/hooks';
-import { money, timeAgo } from '../../lib/format';
+import { longDay, money, timeAgo } from '../../lib/format';
 import { ghostTotal, potentials, totals as moneyTotals } from '../../lib/money';
+import { isPlaced } from '../../lib/progress';
 import { effectiveTier, isActive, isUrgent } from '../../lib/search';
 import { matchesForProperty } from '../../lib/propertyMatch';
 import { addDays, callQueue, isoDay, lastCallMap, queueLabel } from '../../lib/calls';
@@ -73,18 +74,18 @@ export function DashboardPage() {
     [available, applicants],
   );
 
-  const byStage = (s: ApplicantStage) => applicants.filter((a) => a.stage === s || (s === 'placed' && (a.stage === 'fee_invoiced' || a.stage === 'fee_paid'))).length;
+  const byStage = (s: ApplicantStage) => applicants.filter((a) => (s === 'placed' ? isPlaced(a.stage) : a.stage === s)).length;
   const funnelMax = Math.max(1, ...FUNNEL.map((f) => byStage(f.stage)));
 
   return (
-    <div className="mx-auto flex max-w-[1120px] flex-col gap-6 p-6 pb-24">
+    <div className="mx-auto flex max-w-[1120px] flex-col gap-6 p-4 pb-24 sm:p-6 sm:pb-24">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="m-0 text-[13px] font-medium uppercase tracking-wider text-[var(--ink-muted)]">
-            {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+            {longDay(new Date())}
           </p>
           <div className="mt-1 flex items-center gap-2">
-            <h1 className="m-0 text-[30px] font-bold text-[var(--ink)]">
+            <h1 className="m-0 text-[24px] font-bold leading-tight text-[var(--ink)] sm:text-[30px]">
               {greeting()}{people.myName ? `, ${people.myName}` : ''}
             </h1>
             <Help topic="home" />

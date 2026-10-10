@@ -7,6 +7,7 @@ import { useMoveStage, usePeople, useProviders, useUpdateTriage } from '../../li
 import { activeSettings } from '../../lib/settings';
 import { computeTier, HOUSEHOLD_LABEL, tierLabel, tierNumbers, tierReason, tierStyle, URGENCY_LABEL, WORK_STATUS_LABEL } from '../../lib/tiering';
 import { effectiveTier } from '../../lib/search';
+import { STAGE_ORDER } from '../../lib/progress';
 import { confidenceWord, readNotes } from '../../lib/readNotes';
 import type { Evidence, Flag, Suggestion } from '../../lib/readNotes';
 import type { Applicant } from '../../lib/types';
@@ -15,7 +16,6 @@ import type { ApplicantStage } from '../../types/extraction';
 const STAGES: Array<[ApplicantStage, string]> = [
   ['lead', 'Lead'], ['referred', 'Referred'], ['viewing', 'Viewing'], ['offer', 'Offer'], ['placed', 'Placed'], ['lost', 'Lost'],
 ];
-const STAGE_ORDER: ApplicantStage[] = ['lead', 'referred', 'viewing', 'offer', 'placed', 'fee_invoiced', 'fee_paid'];
 const yesNoWord = (b: boolean | null | undefined) => (b === true ? 'yes' : b === false ? 'no' : 'not known');
 
 /** Everything about a client, edited in one place. Each box saves when you
@@ -73,7 +73,7 @@ export function ClientDetails({ applicant }: { applicant: Applicant }) {
       </CardHeader>
 
       {/* Stage and tier */}
-      <div className="grid gap-5 border-b border-[var(--line)] p-5 md:grid-cols-[220px_1fr]">
+      <div className="grid grid-cols-1 gap-5 border-b border-[var(--line)] p-4 sm:p-5 md:grid-cols-[220px_1fr]">
         <div className="flex flex-col gap-1.5">
           <span className="flex items-center gap-1.5 text-[13px] font-medium text-[var(--ink-muted)]">Stage <Help topic="stage" /></span>
           <select value={a.stage} onChange={(e) => changeStage(e.target.value as ApplicantStage)} disabled={moveStage.isPending} aria-label="Stage"
@@ -120,7 +120,7 @@ export function ClientDetails({ applicant }: { applicant: Applicant }) {
         <NotesReader applicant={a} save={save} busy={triage.isPending} />
       </Section>
 
-      <div className="grid md:grid-cols-2">
+      <div className="grid grid-cols-1 md:grid-cols-2">
         <Section icon="phone" title="Contact" border="md:border-r">
           <Box label="Full name" value={a.full_name} onSave={(v) => {
             if (!v.trim()) { toast('A client needs a name', 'danger'); return; }
@@ -183,7 +183,7 @@ export function ClientDetails({ applicant }: { applicant: Applicant }) {
       </div>
 
       <Section icon="user" title="Housing officer" last>
-        <div className="grid gap-x-6 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-x-6 md:grid-cols-3">
           <Box label="Name" value={a.officer_name ?? ''} placeholder="Not given" onSave={text('Officer name', 'officer_name')} />
           <Box label="Email" value={a.officer_email ?? ''} placeholder="Not given" onSave={text('Officer email', 'officer_email')} />
           <Box label="Phone" value={a.officer_phone ?? ''} placeholder="Not given" mono onSave={text('Officer phone', 'officer_phone')} />
@@ -317,7 +317,7 @@ function Quote({ e }: { e: Evidence }) {
 
 function Section({ icon, title, children, border = '', last = false }: { icon: IconName; title: string; children: ReactNode; border?: string; last?: boolean }) {
   return (
-    <section className={`flex flex-col gap-1 p-5 ${last ? '' : 'border-b border-[var(--line)]'} ${border} border-[var(--line)]`}>
+    <section className={`flex min-w-0 flex-col gap-1 p-4 sm:p-5 ${last ? '' : 'border-b border-[var(--line)]'} ${border} border-[var(--line)]`}>
       <h4 className="m-0 mb-1 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
         <Icon name={icon} size={14} /> {title}
       </h4>
@@ -328,9 +328,9 @@ function Section({ icon, title, children, border = '', last = false }: { icon: I
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex min-h-[44px] items-center justify-between gap-3">
-      <span className="shrink-0 text-[15px] text-[var(--ink)]">{label}</span>
-      <div className="flex min-w-0 justify-end">{children}</div>
+    <div className="flex min-h-[44px] flex-wrap items-center justify-between gap-x-3 gap-y-1">
+      <span className="min-w-0 text-[15px] text-[var(--ink)]">{label}</span>
+      <div className="ml-auto flex min-w-0 max-w-full justify-end">{children}</div>
     </div>
   );
 }
@@ -343,9 +343,9 @@ function Box({ label, value, onSave, placeholder, mono = false, type = 'text', p
   const [was, setWas] = useState(value);
   if (value !== was) { setWas(value); setV(value); }
   return (
-    <label className={`flex min-h-[44px] items-center justify-between gap-3 ${wide ? 'flex-wrap' : ''}`}>
-      <span className="shrink-0 text-[15px] text-[var(--ink)]">{label}</span>
-      <span className={`flex items-center rounded-md border border-[var(--line-strong)] bg-[var(--surface)] focus-within:border-[var(--accent)] ${wide ? 'min-w-[240px] flex-1' : 'w-[220px]'}`}>
+    <label className="flex min-h-[44px] flex-wrap items-center justify-between gap-x-3 gap-y-1">
+      <span className="min-w-0 text-[15px] text-[var(--ink)]">{label}</span>
+      <span className={`ml-auto flex max-w-full items-center rounded-md border border-[var(--line-strong)] bg-[var(--surface)] focus-within:border-[var(--accent)] ${wide ? 'min-w-0 flex-1 basis-[240px]' : 'w-[220px]'}`}>
         {prefix && <span className="pl-2.5 font-mono text-[15px] text-[var(--ink-muted)]">{prefix}</span>}
         <input value={v} type={type} min={type === 'number' ? 0 : undefined} placeholder={placeholder} aria-label={label}
           onChange={(e) => setV(e.target.value)} onBlur={() => v !== value && onSave(v)}
@@ -372,7 +372,7 @@ function Area({ label, value, onSave, placeholder, rows = 3 }: { label: string; 
 function Choice({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: Array<[string, string]> }) {
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)}
-      className="h-9 w-[220px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]">
+      className="h-9 w-[220px] max-w-full rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]">
       {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
     </select>
   );

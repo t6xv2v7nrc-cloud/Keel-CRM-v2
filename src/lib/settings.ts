@@ -281,7 +281,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 };
 
 /** Settings each person sets for themselves; everything else is shared by the team. */
-export const PERSONAL_KEYS = ['showPossibleMatches', 'callAgainAfterNoAnswer', 'callAgainAfterAnswered', 'startPage', 'callsView'] as const;
+const PERSONAL_KEYS = ['showPossibleMatches', 'callAgainAfterNoAnswer', 'callAgainAfterAnswered', 'startPage', 'callsView'] as const;
 type PersonalKey = (typeof PERSONAL_KEYS)[number];
 export type MySettings = Pick<AppSettings, PersonalKey>;
 export type TeamSettings = Omit<AppSettings, PersonalKey>;
@@ -311,7 +311,7 @@ export const setActiveSettings = (s: AppSettings) => { active = s; };
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** Saved values over the defaults, so a setting added later still has a value. */
-export function withDefaults<T>(base: T, saved: unknown): T {
+function withDefaults<T>(base: T, saved: unknown): T {
   // an open-ended map (empty by default) keeps whatever was saved
   if (isObject(base) && Object.keys(base).length === 0 && isObject(saved)) return saved as T;
   if (!isObject(base) || !isObject(saved)) {

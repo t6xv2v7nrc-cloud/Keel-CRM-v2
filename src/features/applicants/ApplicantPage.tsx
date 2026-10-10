@@ -56,7 +56,7 @@ export function ApplicantPage() {
   };
 
   return (
-    <div className="mx-auto flex max-w-[1060px] flex-col gap-6 p-6 pb-24">
+    <div className="mx-auto flex max-w-[1060px] flex-col gap-6 p-4 pb-24 sm:p-6 sm:pb-24">
       <div className="flex items-center justify-between gap-4">
         <button onClick={() => navigate('/pipeline')} className="inline-flex items-center gap-1.5 text-[15px] text-[var(--link)] hover:underline">
           <Icon name="arrowRight" size={16} className="rotate-180" /> Pipeline

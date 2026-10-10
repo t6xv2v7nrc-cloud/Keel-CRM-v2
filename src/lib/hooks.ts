@@ -44,25 +44,6 @@ export function useApplicant(id: string | undefined) {
   });
 }
 
-export function useUpdateApplicant() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, ...patch }: Partial<Applicant> & { id: string }) => {
-      const { data, error } = await supabase
-        .from('applicants')
-        .update(patch)
-        .eq('id', id)
-        .select()
-        .single();
-      if (error) throw error;
-      return data as Applicant;
-    },
-    onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ['applicants'] });
-      qc.invalidateQueries({ queryKey: ['applicants', data.id] });
-    },
-  });
-}
 
 /** Change triage answers or the tier, keep the stored tier in step with the
  *  rules (unless it was set by hand), and note the change on the timeline. */
@@ -91,7 +72,7 @@ export function useUpdateTriage() {
   });
 }
 
-/** Delete an applicant and its activities. Calls and placements cascade via their FKs. */
+/** Delete an applicant and its activities. Calls, deals and receivables go with it (they cascade). */
 export function useDeleteApplicant() {
   const qc = useQueryClient();
   return useMutation({
@@ -103,7 +84,6 @@ export function useDeleteApplicant() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['applicants'] });
-      qc.invalidateQueries({ queryKey: ['placements'] });
       qc.invalidateQueries({ queryKey: ['activities'] });
     },
   });
@@ -336,7 +316,6 @@ export function useDeleteProperties() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['properties'] });
-      qc.invalidateQueries({ queryKey: ['placements'] });
     },
   });
 }
@@ -403,7 +382,7 @@ const TEAM_UPDATE =
   'Working as a team needs a one-off database update: run supabase/migrations/0006_team.sql in the Supabase SQL Editor.';
 
 /** Everyone who can sign in. `ready` is false until the 0006 update has been run. */
-export function useTeam() {
+function useTeam() {
   const q = useQuery({
     queryKey: ['team'],
     staleTime: 5 * 60_000,
@@ -420,7 +399,7 @@ export function useTeam() {
 }
 
 /** A friendly default name from an email address: "sam.jones@..." → "Sam". */
-export const nameFromEmail = (email: string | null | undefined) => {
+const nameFromEmail = (email: string | null | undefined) => {
   const first = (email ?? '').split('@')[0].split(/[._\-+]/)[0];
   return first ? first.charAt(0).toUpperCase() + first.slice(1) : 'Someone';
 };
@@ -580,25 +559,6 @@ export function useLogCall() {
   });
 }
 
-/** Set or clear when to call a client next, without logging a call. */
-export function useSetNextCall() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ applicant, date }: { applicant: Applicant; date: string | null }) => {
-      const { error } = await supabase.from('applicants').update({ next_call_at: date }).eq('id', applicant.id);
-      if (error) throw /next_call_at|schema cache/i.test(error.message) ? new Error(CALLS_UPDATE) : error;
-      await supabase.from('activities').insert({
-        entity_type: 'applicant', entity_id: applicant.id, kind: 'updated',
-        body: date ? `Next call set for ${shortDate(date)}` : 'Next call cleared',
-      });
-    },
-    onSuccess: (_d, { applicant }) => {
-      qc.invalidateQueries({ queryKey: ['applicants'] });
-      qc.invalidateQueries({ queryKey: ['activities'] });
-      qc.invalidateQueries({ queryKey: ['applicants', applicant.id] });
-    },
-  });
-}
 
 // ── Client progress (0009) ──────────────────────────────────────────
 const PROGRESS_UPDATE =

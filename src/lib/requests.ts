@@ -164,7 +164,7 @@ export function rulesSummary(r: ProviderRules | null | undefined): string {
 
 /** "Wed 30 Sep, 2pm" */
 export const slotWords = (iso: string) => `${shortDay(iso)}, ${clockTime(iso)}`;
-export const slotsWords = (slots: string[]) => (slots.length ? list(slots.map(slotWords), 'or') : 'any time that suits you');
+const slotsWords = (slots: string[]) => (slots.length ? list(slots.map(slotWords), 'or') : 'any time that suits you');
 
 const rentWords = (p: { rent_pcm: number | null; rent_text: string | null }) =>
   p.rent_pcm ? `${money(p.rent_pcm)} pcm` : p.rent_text?.trim() || 'rent to confirm';
@@ -226,5 +226,3 @@ export function awaitingProviders(requests: ProviderRequest[], now = new Date())
     .map((request) => ({ request, overdue: !!request.follow_up_at && new Date(request.follow_up_at) <= now }))
     .sort((a, b) => Number(b.overdue) - Number(a.overdue) || (a.request.follow_up_at ?? a.request.sent_at).localeCompare(b.request.follow_up_at ?? b.request.sent_at));
 }
-
-export const isOpen = (r: Pick<ProviderRequest, 'status'>) => r.status === 'sent';

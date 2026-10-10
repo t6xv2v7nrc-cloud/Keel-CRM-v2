@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Avatar, Card, CardHeader, DayBars, Empty, Icon, Meter, PageHeader, Sparkline, StatTile, TierBadge, UrgentChip, useToast,
+  Avatar, Card, CardHeader, DayBars, Empty, Icon, Meter, PageHeader, Sparkline, StatTile, TierBadge, UpdateNote, UrgentChip, useToast,
 } from '../../components/ui';
 import { useApplicants, useAssign, useCalls, usePeople, useSettings } from '../../lib/hooks';
 import { addDays, callQueue, callsPerDay, callState, dayLabel, isoDay, lastCallMap, OUTCOME_LABEL, queueLabel, todayIso } from '../../lib/calls';
 import { effectiveTier, isUrgent } from '../../lib/search';
 import { URGENCY_LABEL } from '../../lib/tiering';
-import { timeAgo } from '../../lib/format';
+import { clockTime, shortDay, timeAgo, weekdayName } from '../../lib/format';
 import type { Applicant, Call } from '../../lib/types';
 import { CallLogger, OUTCOME_ICON, useCallWho } from './CallLogger';
 
@@ -15,13 +15,7 @@ type View = 'everyone' | 'mine' | 'unassigned';
 
 export function CallsNeedUpdate() {
   return (
-    <div role="alert" className="flex gap-3 rounded-lg border border-[var(--line-strong)] bg-[var(--note-bg)] p-4 text-[15px] text-[var(--note-fg)]">
-      <Icon name="alert" size={20} className="mt-0.5" />
-      <div>
-        <strong>Call tracking needs a one-off database update.</strong> In Supabase, open the SQL Editor, paste in{' '}
-        <code className="font-mono text-[13px]">supabase/migrations/0005_calls_settings.sql</code> and click Run. Then reload this page.
-      </div>
-    </div>
+    <UpdateNote title="Call tracking needs a one-off database update." file="0005_calls_settings.sql" />
   );
 }
 
@@ -63,7 +57,7 @@ export function CallsPage() {
   const overdue = queue.filter((q) => 'overdue' in q.state && q.state.overdue).length;
 
   return (
-    <div className="mx-auto flex max-w-[1100px] flex-col gap-6 p-6 pb-24">
+    <div className="mx-auto flex max-w-[1100px] flex-col gap-6 p-4 pb-24 sm:p-6 sm:pb-24">
       <PageHeader icon="phone" title="Calls" help="calls" sub={`${queue.length} to call now · ${weekTotal} logged in the last 7 days`}>
         <div className="inline-flex rounded-lg bg-[var(--paper-2)] p-1" role="group" aria-label="Whose clients">
           {([['everyone', 'Everyone'], ['mine', 'Mine'], ['unassigned', 'Unassigned']] as Array<[View, string]>).map(([v, l]) => (
@@ -144,8 +138,8 @@ export function CallsPage() {
             <CardHeader icon="trend" title="Last 14 days" />
             <div className="p-5">
               <DayBars bars={days.map((d) => ({
-                label: new Date(`${d.date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'narrow' }),
-                sub: new Date(`${d.date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
+                label: weekdayName(d.date).slice(0, 1),
+                sub: shortDay(`${d.date}T12:00:00`),
                 value: d.total, highlight: d.answered, today: d.date === today,
               }))} height={90} />
               <div className="mt-3 flex gap-4 text-[13px] text-[var(--ink-muted)]">
@@ -243,7 +237,7 @@ function RecentRow({ c, a }: { c: Call; a?: Applicant }) {
         {c.notes && <p className="m-0 mt-0.5 truncate text-[13px] text-[var(--ink)]" title={c.notes}>{c.notes}</p>}
       </div>
       <span className="shrink-0 font-mono text-[13px] text-[var(--ink-muted)]">
-        {sameDay ? new Date(c.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : timeAgo(c.created_at)}
+        {sameDay ? clockTime(c.created_at) : timeAgo(c.created_at)}
       </span>
     </li>
   );

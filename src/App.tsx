@@ -21,7 +21,6 @@ import { ViewingChangeHost } from './features/progress/ViewingChange';
 import { useEnsureProfile, usePeople, useSettings } from './lib/hooks';
 import { setActiveSettings } from './lib/settings';
 import { ThemeToggle } from './components/ThemeToggle';
-import DevTokens from './routes/DevTokens';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
@@ -45,8 +44,6 @@ export default function App() {
       <ToastProvider>
         <BrowserRouter>
           <Routes>
-            {/* Styleguide is data-free; public so token drift is checkable on any deploy */}
-            <Route path="/dev/tokens" element={<DevTokens />} />
             <Route
               path="*"
               element={

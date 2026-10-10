@@ -217,6 +217,15 @@ export const HELP = {
       'If a booked viewing moves or is cancelled, use Move or cancel on the client\'s Progress (or the calendar button on Home). Keel saves it, then writes the message for the client and for the provider.',
     ],
   },
+  officers: {
+    title: 'Housing officers',
+    body: [
+      'Every housing officer named on a client\'s details, once each. Keel joins the same person across referrals by their email, then their phone, then their name, and fills in whatever one referral missed.',
+      'Copy emails puts them all on the clipboard, ready to paste into the To or Bcc box of an email (semicolons between, which Outlook, Gmail and Apple Mail all take). Email them (Bcc) opens a new email with them all in Bcc, so they cannot see each other.',
+      'Copy details as text gives a block per officer (name, council, email, phone) for the body of an email or a note. Search, the council choice and Only with active clients narrow what is copied.',
+      'Where they work comes from their email address. To correct an officer\'s details, change them on their client\'s page.',
+    ],
+  },
   providers: {
     title: 'Providers',
     body: [

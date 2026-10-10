@@ -25,12 +25,3 @@ export function StageBadge({ stage }: { stage: ApplicantStage }) {
     </span>
   );
 }
-
-/** Generic neutral badge for everything that is not a stage. */
-export function Badge({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="inline-flex items-center rounded border border-[var(--line)] bg-[var(--surface)] px-2 py-0.5 text-[13px] text-[var(--ink-muted)]">
-      {children}
-    </span>
-  );
-}

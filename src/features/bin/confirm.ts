@@ -1,11 +1,12 @@
 import { supabase } from '../../lib/supabase';
 import { computeTier } from '../../lib/tiering';
+import { STAGE_ORDER } from '../../lib/progress';
+import { shortDate } from '../../lib/format';
 import type { Extraction, ApplicantStage } from '../../types/extraction';
 
 /** The user's decision on the review card, per entity. */
 export interface ConfirmChoice {
   applicantTarget: 'create' | 'note_only' | string; // string = existing applicant id
-  contactTarget: 'create' | 'none' | string;
   advanceStage?: ApplicantStage | null;
 }
 
@@ -21,9 +22,6 @@ interface ConfirmOutcome {
   activityCount: number;
 }
 
-const STAGE_ORDER: ApplicantStage[] = [
-  'lead', 'referred', 'viewing', 'offer', 'placed', 'fee_invoiced', 'fee_paid',
-];
 
 function logActivity(
   rows: Array<Record<string, unknown>>,
@@ -46,30 +44,6 @@ export async function confirmInboxItem({
   const activities: Array<Record<string, unknown>> = [];
   const outcome: ConfirmOutcome = { activityCount: 0 };
 
-  // ── Contact (officer/landlord) — resolve first so we can link the applicant ──
-  let contactId: string | undefined;
-  if (choice.contactTarget === 'create' && extraction.contact?.full_name) {
-    const c = extraction.contact;
-    const { data, error } = await supabase
-      .from('contacts')
-      .insert({
-        type: 'housing_officer',
-        full_name: c.full_name,
-        organisation: c.organisation ?? null,
-        borough: c.borough ?? null,
-        email: c.email ?? null,
-        phone: c.phone ?? null,
-        notes: c.notes?.trim() || null,
-      })
-      .select('id')
-      .single();
-    if (error) throw error;
-    contactId = data.id as string;
-    logActivity(activities, 'contact', contactId, 'created', `Added contact ${c.full_name} (from screenshot)`, inboxItemId);
-  } else if (choice.contactTarget !== 'create' && choice.contactTarget !== 'none') {
-    contactId = choice.contactTarget;
-  }
-
   // ── Applicant ──
   if (choice.applicantTarget === 'create' && extraction.applicant?.full_name) {
     const a = extraction.applicant;
@@ -89,7 +63,6 @@ export async function confirmInboxItem({
         requirements: a.requirements ?? null,
         notes: a.notes?.trim() || null,
         source: a.officer_name ? 'officer' : 'website',
-        referred_by: contactId ?? null,
         stage,
         // Referral triage fields
         household_type: a.household_type ?? null,
@@ -132,14 +105,13 @@ export async function confirmInboxItem({
     if (a.phone) patch.phone = a.phone;
     if (a.benefit_type) patch.benefit_type = a.benefit_type;
     if (a.referring_borough) patch.referring_borough = a.referring_borough;
-    if (contactId) patch.referred_by = contactId;
 
     // A new message from an existing client is added to their notes with the
     // date, never replacing what is already there.
     const newNote = a.notes?.trim();
     const oldNotes = (current?.notes as string | null) ?? '';
     if (newNote && !oldNotes.includes(newNote)) {
-      const stamp = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      const stamp = shortDate(new Date());
       patch.notes = oldNotes ? `${oldNotes}\n\n[${stamp}] ${newNote}` : newNote;
     }
 
@@ -167,11 +139,8 @@ export async function confirmInboxItem({
     }
   } else if (choice.applicantTarget === 'note_only' && outcome.applicantId == null) {
     // A note changes no client. It stays in the Bin under Notes (full text kept on the item)
-    // and shows in recent activity; log it against the contact too if there is one.
+    // and shows in recent activity.
     logActivity(activities, 'inbox', inboxItemId, 'note', `Note filed from the Bin: ${extraction.summary}`, inboxItemId);
-    if (contactId) {
-      logActivity(activities, 'contact', contactId, 'note', extraction.summary, inboxItemId);
-    }
   }
 
   // ── Write the activity trail ──

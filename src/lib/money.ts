@@ -43,7 +43,7 @@ const dayNumber = (iso: string) => Math.round(new Date(`${iso}T12:00:00`).getTim
 export const BASIS_LABEL: Record<FeeBasis, string> = { fixed: '£ amount', percent: '% of rent', weeks: 'Weeks of rent' };
 
 /** A week's rent from a monthly one: pcm × 12 ÷ 52. */
-export const weeklyRent = (pcm: number) => (pcm * 12) / 52;
+const weeklyRent = (pcm: number) => (pcm * 12) / 52;
 
 /** The fee: a set amount, a percentage of a month's rent, or a number of weeks' rent. Null when the rent it needs is not known. */
 export function feeFrom(basis: FeeBasis, rate: number | null | undefined, rentPcm: number | null | undefined): number | null {

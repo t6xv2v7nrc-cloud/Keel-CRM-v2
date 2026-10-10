@@ -18,16 +18,30 @@ export function money(amount: number | null | undefined): string {
   }).format(amount);
 }
 
-/** ISO date → "12 Jun 2026" */
-export function shortDate(iso: string | null | undefined): string {
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const WEEKDAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** A YYYY-MM-DD day is read as that day wherever the phone is; anything else as the moment it names. */
+const asDate = (iso: string | Date) => (iso instanceof Date ? iso : new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T12:00:00` : iso));
+
+/** "12 Jun 2026", written the same on every phone and browser. */
+export function shortDate(iso: string | Date | null | undefined): string {
   if (!iso) return '·';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const d = asDate(iso);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** "Saturday 10 October" */
+export function longDay(iso: string | Date): string {
+  const d = asDate(iso);
+  return `${WEEKDAYS_LONG[d.getDay()]} ${d.getDate()} ${MONTHS_LONG[d.getMonth()]}`;
+}
+
+/** "Saturday" */
+export const weekdayName = (iso: string | Date) => WEEKDAYS_LONG[asDate(iso).getDay()];
 
 /** "Wed 30 Sep", written the same on every phone and browser (they disagree on "Sept" and commas). */
 export function shortDay(iso: string | Date): string {
@@ -35,11 +49,9 @@ export function shortDay(iso: string | Date): string {
   return `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
 
-const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-
-/** "6 October 2026", for invoices; a YYYY-MM-DD day is read as that day wherever the phone is. */
+/** "6 October 2026", for invoices. */
 export function fullDate(iso: string): string {
-  const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T12:00:00` : iso);
+  const d = asDate(iso);
   return `${d.getDate()} ${MONTHS_LONG[d.getMonth()]} ${d.getFullYear()}`;
 }
 

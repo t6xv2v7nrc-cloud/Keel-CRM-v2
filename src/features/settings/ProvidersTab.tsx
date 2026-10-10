@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { Button, Card, CardHeader, Icon, useToast } from '../../components/ui';
+import { Button, Card, CardHeader, Icon, UpdateNote, useToast } from '../../components/ui';
 import { usePeople, useProperties, useProviders, useRequests, useSaveProvider } from '../../lib/hooks';
 import type { ProviderDraft } from '../../lib/hooks';
 import { providerFor, rulesSummary } from '../../lib/requests';
@@ -28,13 +28,9 @@ export function ProvidersTab() {
 
   if (!ready) {
     return (
-      <div role="alert" className="flex gap-3 rounded-lg border border-[var(--line-strong)] bg-[var(--note-bg)] p-4 text-[15px] text-[var(--note-fg)]">
-        <Icon name="alert" size={20} className="mt-0.5" />
-        <div>
-          <strong>Providers need a one-off database update.</strong> In Supabase, open the SQL Editor, paste in{' '}
-          <code className="font-mono text-[13px]">supabase/migrations/0010_providers_requests.sql</code> and click Run. It adds your existing tags (BP, SR, ZUB and the rest) ready to fill in.
-        </div>
-      </div>
+      <UpdateNote title="Providers need a one-off database update." file="0010_providers_requests.sql">
+        It adds your existing tags (BP, SR, ZUB and the rest) ready to fill in.
+      </UpdateNote>
     );
   }
 

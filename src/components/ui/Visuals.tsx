@@ -43,7 +43,7 @@ export function PageHeader({ icon, title, sub, help, children }: {
         </span>
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="m-0 text-[28px] font-bold leading-tight text-[var(--ink)]">{title}</h1>
+            <h1 className="m-0 text-[24px] font-bold leading-tight text-[var(--ink)] sm:text-[28px]">{title}</h1>
             {help && <Help topic={help} />}
           </div>
           {sub && <p className="m-0 mt-0.5 text-[15px] text-[var(--ink-muted)]">{sub}</p>}
@@ -114,7 +114,7 @@ export function Donut({ slices, size = 140, thickness = 18, centre, centreSub }:
 export function Legend({ slices, onPick }: { slices: Slice[]; onPick?: (label: string) => void }) {
   const total = slices.reduce((s, x) => s + x.value, 0) || 1;
   return (
-    <ul className="m-0 flex min-w-0 flex-1 list-none flex-col gap-2 p-0">
+    <ul className="m-0 flex min-w-0 flex-1 basis-[170px] list-none flex-col gap-2 p-0">
       {slices.map((s) => (
         <li key={s.label}>
           <button onClick={() => onPick?.(s.label)} disabled={!onPick}
@@ -213,5 +213,21 @@ export function UrgentChip({ reason, showReason = false }: { reason?: string; sh
       <Icon name="alert" size={12} strokeWidth={2.2} /> <span className="uppercase tracking-wide">Urgent</span>
       {showReason && reason && <span className="font-medium">· {reason}</span>}
     </span>
+  );
+}
+
+// ── Database update note ───────────────────────────────────────────
+
+/** "This needs a one-off database update": what it is for, and the file to run in the Supabase SQL Editor. */
+export function UpdateNote({ file, title, children }: { file: string; title: ReactNode; children?: ReactNode }) {
+  return (
+    <div role="alert" className="flex gap-3 rounded-lg border border-[var(--line-strong)] bg-[var(--note-bg)] p-4 text-[15px] text-[var(--note-fg)]">
+      <Icon name="alert" size={20} className="mt-0.5 shrink-0" />
+      <div className="min-w-0">
+        <strong>{title}</strong> In Supabase, open the SQL Editor, paste in{' '}
+        <code className="break-all font-mono text-[13px]">supabase/migrations/{file}</code> and click Run. Then reload this page.
+        {children && <> {children}</>}
+      </div>
+    </div>
   );
 }

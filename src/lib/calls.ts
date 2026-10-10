@@ -6,6 +6,7 @@
 import type { Applicant, Call, CallOutcome } from './types';
 import { activeSettings } from './settings';
 import { effectiveTier, isActive, isUrgent } from './search';
+import { weekdayName } from './format';
 
 export const OUTCOMES: ReadonlyArray<{ key: CallOutcome; label: string }> = [
   { key: 'answered', label: 'Answered' },
@@ -34,7 +35,7 @@ export function dayLabel(iso: string): string {
   if (diff === 0) return 'Today';
   if (diff === 1) return 'Tomorrow';
   if (diff === -1) return 'Yesterday';
-  if (diff > 1 && diff < 7) return new Date(`${iso}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long' });
+  if (diff > 1 && diff < 7) return weekdayName(iso);
   return diff > 0 ? `in ${diff} days` : `${-diff} days ago`;
 }
 

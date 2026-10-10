@@ -120,7 +120,7 @@ export function MoneyPage() {
             </div>
           )}
 
-          <div role="tablist" aria-label="Finances" className="flex w-full rounded-lg border border-[var(--line)] bg-[var(--paper-2)] p-1 sm:w-fit">
+          <div role="tablist" aria-label="Finances" className="flex w-full flex-wrap rounded-lg border border-[var(--line)] bg-[var(--paper-2)] p-1 sm:w-fit">
             {VIEWS.map((v) => {
               const count = v.key === 'owed' ? t.owedCount : v.key === 'potential' ? pt.count : v.key === 'paid' ? done.length : null;
               return (

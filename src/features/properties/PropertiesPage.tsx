@@ -181,7 +181,7 @@ export function PropertiesPage() {
   );
 
   return (
-    <div className="mx-auto flex max-w-[1100px] flex-col gap-5 p-6 pb-24">
+    <div className="mx-auto flex max-w-[1100px] flex-col gap-5 p-4 pb-24 sm:p-6 sm:pb-24">
       <PageHeader icon="building" title="Properties" help="properties" sub={<>
         {counts.available} available · {counts.under_offer} under offer · {counts.let} let
         {totalMatches > 0 && <> · <strong className="text-[var(--ink)]">{totalMatches}</strong> client matches <span className="ml-0.5 inline-flex align-middle"><Help topic="matchStrength" /></span></>}

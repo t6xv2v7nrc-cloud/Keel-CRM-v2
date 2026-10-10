@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { Button, Card, CardHeader, Icon, useToast } from '../../components/ui';
+import { Button, Card, CardHeader, Icon, UpdateNote, useToast } from '../../components/ui';
 import {
   useDeals, useDeleteReceivable, usePeople, useProperties, useProviders, useReceivables, useSaveReceivable,
 } from '../../lib/hooks';
@@ -22,18 +22,6 @@ import type { Applicant, DueFrom, FeeBasis, Provider, Receivable, ReceivableStat
 const input = 'h-10 w-full rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-3 text-[15px] text-[var(--ink)] outline-none focus:border-[var(--accent)]';
 const small = 'min-h-0 px-3 py-1.5 text-[13px]';
 
-function UpdateNote({ title, file, children }: { title: string; file: string; children?: ReactNode }) {
-  return (
-    <div role="alert" className="flex gap-3 rounded-lg border border-[var(--line-strong)] bg-[var(--note-bg)] p-4 text-[15px] text-[var(--note-fg)]">
-      <Icon name="alert" size={20} className="mt-0.5 shrink-0" />
-      <div>
-        <strong>{title}</strong> In Supabase, open the SQL Editor, paste in{' '}
-        <code className="break-all font-mono text-[13px]">supabase/migrations/{file}</code> and click Run. Then reload this page.{children}
-      </div>
-    </div>
-  );
-}
-
 export function MoneyNeedsUpdate() {
   return <UpdateNote title="Finances need a one-off database update." file="0012_money.sql" />;
 }
@@ -42,13 +30,13 @@ export function MoneyNeedsUpdate() {
 export function FinancesNeedsUpdate() {
   return (
     <UpdateNote title="One more database update for invoices and first-rent dates." file="0013_finances.sql">
-      {' '}Until then, fees worked out from the rent save as plain amounts, and invoices cannot be raised.
+      Until then, fees worked out from the rent save as plain amounts, and invoices cannot be raised.
     </UpdateNote>
   );
 }
 
 /** "Overdue 5 days" in amber, "Waiting for first rent", or the due date. */
-export function DueChip({ r }: { r: Receivable }) {
+function DueChip({ r }: { r: Receivable }) {
   const late = overdueDays(r) !== null || firstRentLate(r) !== null;
   const paid = r.status === 'paid';
   return (

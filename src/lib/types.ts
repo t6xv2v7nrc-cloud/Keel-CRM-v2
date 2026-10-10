@@ -46,18 +46,6 @@ export interface Applicant {
   updated_at: string;
 }
 
-export interface Contact {
-  id: string;
-  type: 'housing_officer' | 'partner' | 'landlord' | 'other';
-  full_name: string;
-  organisation: string | null;
-  borough: string | null;
-  email: string | null;
-  phone: string | null;
-  notes: string | null;
-  created_at: string;
-}
-
 export interface Property {
   id: string;
   address_line: string;
@@ -79,23 +67,6 @@ export interface Property {
   source_tag: string | null;
   lha_area?: string | null; // 0008: LHA area (BRMA) chosen by hand
   provider_id?: string | null; // 0010: who supplied it
-  created_at: string;
-  updated_at: string;
-}
-
-export interface Placement {
-  id: string;
-  applicant_id: string;
-  property_id: string | null;
-  council: string | null;
-  officer_id: string | null;
-  move_in_date: string | null;
-  rent_pcm: number | null;
-  incentive_amount: number | null;
-  fee_amount: number | null;
-  fee_splits: Array<{ partner: string; pct: number }>;
-  fee_status: 'pending' | 'invoiced' | 'paid';
-  notes: string | null;
   created_at: string;
   updated_at: string;
 }

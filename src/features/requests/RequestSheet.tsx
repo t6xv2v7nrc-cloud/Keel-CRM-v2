@@ -20,7 +20,7 @@ interface OpenDetail { property: Property; clientIds?: string[] }
 const EVENT = 'keel:request';
 
 /** Open the request sheet for a property, optionally with clients already picked. */
-export const openRequest = (detail: OpenDetail) => window.dispatchEvent(new CustomEvent<OpenDetail>(EVENT, { detail }));
+const openRequest = (detail: OpenDetail) => window.dispatchEvent(new CustomEvent<OpenDetail>(EVENT, { detail }));
 
 /** Mounted once in the app shell. */
 export function RequestSheetHost() {

@@ -174,7 +174,7 @@ export function BinPage() {
   const reviewItems = inbox.filter((i) => i.status === 'review');
 
   return (
-    <div className="mx-auto flex max-w-[1000px] flex-col gap-6 p-6 pb-24">
+    <div className="mx-auto flex max-w-[1000px] flex-col gap-6 p-4 pb-24 sm:p-6 sm:pb-24">
       <PageHeader icon="inbox" title="The Bin" help="bin" sub="Paste a screenshot anywhere with Ctrl/Cmd+V. It gets read, classified and matched to your records." />
 
       {/* Capture zone */}

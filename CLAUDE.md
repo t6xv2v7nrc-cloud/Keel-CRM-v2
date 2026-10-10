@@ -19,10 +19,12 @@ src/
                         first month's rent, overdue, potential fees from deals, by month, calendar and .ics file;
                         the app says "Finances", files and the activity kind keep the name "money"),
               invoice.ts (invoice wording, numbering, VAT split, WhatsApp and email text; client first name only to providers),
+              officers.ts (housing officers gathered from clients' details, joined on email, phone, name; copy formats),
+              clipboard.ts (copy with a fallback for older phones),
               help.ts (words behind the "?" help buttons)
-  components/ ui primitives on tokens (Button, Badge, Card, Field, Toast, KeelLine,
-              Icon, Visuals: avatars, page headers, stat tiles, SVG charts)
-  features/   dashboard/ bin/ pipeline/ calls/ applicants/ properties/ settings/ map/ (Leaflet, lazy-loaded) progress/ requests/ (request sheet, Awaiting providers) money/ (the Finances page at /finances: Owed, Potential, Calendar, Paid; invoice page at /finances/invoice/:id;
+  components/ ui primitives on tokens (Button, StageBadge, Card, Field, Toast, Icon,
+              Visuals: avatars, page headers, stat tiles, SVG charts, UpdateNote for "run this migration")
+  features/   dashboard/ bin/ pipeline/ (with the Housing officers box) calls/ applicants/ properties/ settings/ map/ (Leaflet, lazy-loaded) progress/ requests/ (request sheet, Awaiting providers) money/ (the Finances page at /finances: Owed, Potential, Calendar, Paid; invoice page at /finances/invoice/:id;
               client card, Home summary)
   types/      extraction.ts (shared contract, imported by netlify functions)
 netlify/functions/ extract.ts, lib/prompt.ts, lib/claude.ts
@@ -63,7 +65,8 @@ supabase/migrations/
 - Invoices to providers or landlords name the client by first name only; a council incentive claim carries the full name.
 - Two people use Keel: Ridwan (owner) and a co-worker. Ridwan invites people from the Supabase dashboard; Claude never
   creates accounts or enters passwords.
-- Contacts was removed on request; do not bring it back unasked.
+- Contacts was removed on request; do not bring it back unasked. Housing officers live on each client (officer_*); the
+  Pipeline's Housing officers box gathers them for copying into emails. The Bin no longer creates or matches contacts.
 - Switching a provider off withdraws its available properties (under offer and let stay); switching it back on brings back
   only those (`provider_off` / `provider_on` property activities, `withdrawnBySwitchOff` in requests.ts). Lists pasted
   while it is off come in withdrawn.
@@ -123,13 +126,21 @@ it answers every Supabase request from sample rows in memory.
 5. Never commit the harness: its sample rows may look like real clients.
 
 Check pages at phone width (375px) as well as desktop. Nothing may scroll sideways: below `lg` the page links sit on
-their own row under the top bar, and the Pipeline is a row list, not a wide table.
+their own row under the top bar, and the Pipeline is a row list, not a wide table. `&big=1` loads a busy account (about
+255 clients, long names) for layout checks; Google Fonts cannot load here, so measure with local copies of the real fonts.
+
+Phones (index.css): the page clips sideways overflow, never rubber-bands sideways, and every typing box is 16px on touch
+screens (an iPhone zooms in on smaller ones and stays zoomed, which is what let the page be dragged out of shape).
+Page containers are `p-4 sm:p-6`; a fixed width (`w-[220px]`) needs `max-w-full` and a wrapping parent. Keel opens
+full screen from the home screen (manifest `display: standalone`); icons are in `public/` (apple-touch-icon 180, 192,
+512 and a maskable 512). In the home-screen app, sign in with a password: an email link opens in Safari instead.
 
 ## Pitfalls
 
 - Never put code containing backslashes in a bash heredoc: `\n` turns into a line break and `\b` into a stray control
   byte. Use the Edit and Write tools, or write a script file and run it.
-- Dates must read the same everywhere: use `shortDay` / `clockTime` in `lib/format.ts`, not `toLocaleDateString`.
+- Dates must read the same everywhere: use `shortDate` / `shortDay` / `longDay` / `weekdayName` / `fullDate` / `clockTime`
+  in `lib/format.ts`, never `toLocaleDateString` (browsers disagree on "Sep" and "Sept").
 - Messages to providers carry a client's first name, household and benefits only: never phone, surname or anything
   medical. Sending details needs `applicants.share_with_landlords`.
 - Keel's public website must never mention council incentives. Tracking them inside the CRM is fine.

@@ -101,7 +101,7 @@ export function opsFor(field: CondField): Array<[Condition['op'], string]> {
   }
 }
 
-export function conditionHolds(c: Condition, i: TierInputs): boolean {
+function conditionHolds(c: Condition, i: TierInputs): boolean {
   const v = FIELDS[c.field].get(i);
   switch (c.op) {
     case 'yes': return v === true;
@@ -118,7 +118,7 @@ const money = (n: number) => `£${n.toLocaleString('en-GB')}`;
 const orList = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} or ${xs[xs.length - 1]}` : xs[0] ?? 'nothing chosen');
 
 /** A condition in plain English: "on UC", "household is single or couple", "budget at least £1,300". */
-export function describeCondition(c: Condition): string {
+function describeCondition(c: Condition): string {
   const f = FIELDS[c.field];
   const name = f.label.toLowerCase();
   if (c.op === 'unknown') return `${name} not known`;

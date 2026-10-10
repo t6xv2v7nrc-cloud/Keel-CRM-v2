@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Button, Card, CardHeader, Help, Icon, useToast } from '../../components/ui';
+import { Button, Card, CardHeader, Help, Icon, UpdateNote, useToast } from '../../components/ui';
 import {
   useAddDeals, useDeals, useMoveDeal, usePeople, useProperties, useRemoveDeal, useSetNextStep,
 } from '../../lib/hooks';
@@ -8,7 +8,7 @@ import { addDays, dayLabel, dayWord, todayIso } from '../../lib/calls';
 import { timeAgo, shortDate } from '../../lib/format';
 import { matchesForApplicant } from '../../lib/propertyMatch';
 import {
-  DEAL_LABEL, DEAL_STEPS, FELL_THROUGH_REASONS, isLive, nextMove, shortAddress, stuckDays, viewingShort, viewingWords,
+  DEAL_LABEL, DEAL_STEPS, FELL_THROUGH_REASONS, isLive, isPlaced, nextMove, shortAddress, stuckDays, viewingShort, viewingWords,
 } from '../../lib/progress';
 import { reminderMessage, waLink, waNumber } from '../../lib/whatsapp';
 import { openViewingChange } from './ViewingChange';
@@ -24,8 +24,8 @@ const first = (name: string) => name.split(' ')[0];
 const short = shortAddress;
 
 /** Lead · Referred · Viewing · Offer · Placed, filled up to where the client is. */
-export function StageStrip({ stage }: { stage: ApplicantStage }) {
-  const at = STRIP.indexOf(stage === 'fee_invoiced' || stage === 'fee_paid' ? 'placed' : stage);
+function StageStrip({ stage }: { stage: ApplicantStage }) {
+  const at = STRIP.indexOf(isPlaced(stage) ? 'placed' : stage);
   return (
     <ol className="m-0 grid list-none grid-cols-5 gap-1 p-0" aria-label={`Stage: ${STAGE_NAME[stage]}`}>
       {STRIP.map((s, i) => (
@@ -124,13 +124,7 @@ export function ProgressCard({ applicant }: { applicant: Applicant }) {
         <StageStrip stage={applicant.stage} />
 
         {!ready && (
-          <div role="alert" className="flex gap-3 rounded-lg border border-[var(--line-strong)] bg-[var(--note-bg)] p-4 text-[15px] text-[var(--note-fg)]">
-            <Icon name="alert" size={20} className="mt-0.5" />
-            <div>
-              <strong>Tracking each property needs a one-off database update.</strong> In Supabase, open the SQL Editor, paste in{' '}
-              <code className="font-mono text-[13px]">supabase/migrations/0009_progress.sql</code> and click Run. Then reload this page.
-            </div>
-          </div>
+          <UpdateNote title="Tracking each property needs a one-off database update." file="0009_progress.sql" />
         )}
 
         {stuck !== null && (

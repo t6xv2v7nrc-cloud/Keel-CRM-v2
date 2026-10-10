@@ -13,7 +13,7 @@ import type { Applicant, Deal, DealStatus } from './types';
 import { activeSettings } from './settings';
 import { isActive } from './search';
 import { addDays, dayLabel, isoDay } from './calls';
-import { clockTime, shortDay } from './format';
+import { clockTime, longDay, shortDay } from './format';
 
 export const DEAL_STEPS: ReadonlyArray<{ key: Exclude<DealStatus, 'fell_through'>; label: string }> = [
   { key: 'sent', label: 'Sent' },
@@ -64,7 +64,9 @@ export function nextMove(status: DealStatus): { to: DealStatus; label: string } 
 
 // ── Stage ──────────────────────────────────────────────────────────
 
-const STAGE_ORDER: ApplicantStage[] = ['lead', 'referred', 'viewing', 'offer', 'placed', 'fee_invoiced', 'fee_paid'];
+/** Stages in order, for moving forwards only. The fee stages are from before Finances; a client at one counts as placed. */
+export const STAGE_ORDER: ApplicantStage[] = ['lead', 'referred', 'viewing', 'offer', 'placed', 'fee_invoiced', 'fee_paid'];
+export const isPlaced = (s: ApplicantStage) => s === 'placed' || s === 'fee_invoiced' || s === 'fee_paid';
 const DEAL_STAGE: Partial<Record<DealStatus, ApplicantStage>> = {
   viewing: 'viewing', viewed: 'viewing', offered: 'offer', accepted: 'offer', moved_in: 'placed',
 };
@@ -87,8 +89,7 @@ const time = clockTime;
 
 /** "Thursday 2 October, 2pm" */
 export function viewingWords(iso: string): string {
-  const d = new Date(iso);
-  return `${d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}, ${time(iso)}`;
+  return `${longDay(new Date(iso))}, ${time(iso)}`;
 }
 
 /** "Thu 2 Oct, 2pm" (or "Today, 2pm") */

@@ -30,7 +30,7 @@ export function waNumber(phone: string | null | undefined): string | null {
 }
 
 /** A property as two or three short lines, the first in bold. */
-export function propertyText(p: PropertyForMessage): string {
+function propertyText(p: PropertyForMessage): string {
   const title = [p.property_type, p.address_line].filter(Boolean).join(', ');
   const lha = lhaCheck(p);
   const rent = p.rent_pcm ? `${money(p.rent_pcm)} pcm`

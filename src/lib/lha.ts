@@ -26,7 +26,7 @@ export interface LhaTable { year: string; rates: Record<string, number[]> }
 
 /** The rates in use: a year loaded in Team settings, or the built-in one. */
 export const lhaTable = (): LhaTable => activeSettings().lhaRates ?? { year: LHA_YEAR, rates: LHA_RATES };
-export const brmaNames = () => Object.keys(lhaTable().rates).sort((a, b) => a.localeCompare(b));
+const brmaNames = () => Object.keys(lhaTable().rates).sort((a, b) => a.localeCompare(b));
 
 // Keel works London and the home counties, so lists show those first; the rest of England is one click away.
 const LONDON_BRMAS = new Set([

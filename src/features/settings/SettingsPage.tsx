@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Avatar, Button, Card, CardHeader, Help, Icon, PageHeader, useToast } from '../../components/ui';
+import { Avatar, Button, Card, CardHeader, Help, Icon, PageHeader, UpdateNote, useToast } from '../../components/ui';
 import type { IconName } from '../../components/ui';
 import {
   useApplicants, useBulkShare, useCalls, useHandOver, usePeople, useProviders, useSaveProfile, useSaveSettings, useSettings,
@@ -66,11 +66,11 @@ export function SettingsPage() {
   });
 
   return (
-    <div className="mx-auto flex max-w-[980px] flex-col gap-6 p-6 pb-32">
+    <div className="mx-auto flex max-w-[980px] flex-col gap-6 p-4 pb-32 sm:p-6 sm:pb-32">
       <PageHeader icon="sliders" title="Settings" sub="Your own preferences, the rules you both work to, and who is on the team." />
 
       {!ready && (
-        <UpdateNote file="0005_calls_settings.sql">Settings cannot be saved yet. The standard rules apply until then.</UpdateNote>
+        <UpdateNote file="0005_calls_settings.sql" title="Settings cannot be saved yet.">The standard rules apply until then.</UpdateNote>
       )}
 
       {/* Tabs */}
@@ -137,7 +137,7 @@ function MySettingsTab({ draft, set, name, setName, teamReady, email }: {
             <input value={name} onChange={(e) => setName(e.target.value)} disabled={!teamReady} placeholder="e.g. Ridwan" aria-label="Your name"
               className="h-10 w-48 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-3 text-[15px] text-[var(--ink)] outline-none focus:border-[var(--accent)] disabled:opacity-50" />
           </Row>
-          {!teamReady && <UpdateNote file="0006_team.sql">Names, assigning clients and "who did what" need a one-off database update.</UpdateNote>}
+          {!teamReady && <UpdateNote file="0006_team.sql" title={'Names, assigning clients and "who did what" need a one-off database update.'} />}
           <Row icon="home" title="Start page" text="The page Keel opens on when you sign in.">
             <select value={draft.startPage} onChange={(e) => set('startPage', e.target.value as AppSettings['startPage'])} aria-label="Start page"
               className="h-10 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]">
@@ -198,7 +198,7 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
       ) : (
         <WhoNote icon="key">Only {ownerName ?? 'the owner'} can change team settings. You can see them here, and set your own preferences under My settings.</WhoNote>
       )}
-      {!rolesReady && <UpdateNote file="0007_owner.sql">Right now anyone signed in can change team settings. To make them yours alone, run a one-off database update.</UpdateNote>}
+      {!rolesReady && <UpdateNote file="0007_owner.sql" title="To make team settings yours alone, run a one-off database update.">Until then anyone signed in can change them.</UpdateNote>}
 
       <Card>
         <CardHeader icon="layers" title="Referral triage: tier logic" help="tiers" />
@@ -474,7 +474,7 @@ function PeopleTab() {
 
   return (
     <>
-      {!people.ready && <UpdateNote file="0006_team.sql">The team list, names and assigning clients need a one-off database update.</UpdateNote>}
+      {!people.ready && <UpdateNote file="0006_team.sql" title="The team list, names and assigning clients need a one-off database update." />}
 
       <Card>
         <CardHeader icon="users" title="Who can sign in" sub={String(people.members.length)} help="team" />
@@ -546,17 +546,6 @@ function WhoNote({ icon, children }: { icon: IconName; children: ReactNode }) {
     <div className="flex items-center gap-3 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-4 py-3 text-[15px] text-[var(--ink)]">
       <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--accent-soft)] text-[var(--accent-ink)]"><Icon name={icon} size={16} /></span>
       {children}
-    </div>
-  );
-}
-
-function UpdateNote({ file, children }: { file: string; children: ReactNode }) {
-  return (
-    <div role="alert" className="flex gap-3 rounded-lg border border-[var(--line-strong)] bg-[var(--note-bg)] p-4 text-[15px] text-[var(--note-fg)]">
-      <Icon name="alert" size={20} className="mt-0.5" />
-      <div>
-        {children} In Supabase, open the SQL Editor, paste in <code className="font-mono text-[13px]">supabase/migrations/{file}</code> and click Run.
-      </div>
     </div>
   );
 }

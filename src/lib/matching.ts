@@ -11,16 +11,16 @@ export interface MatchCandidate {
 
 export interface MatchResult {
   applicant: MatchCandidate[];
-  contact: MatchCandidate[];
   property: MatchCandidate[];
 }
 
 const STRONG = 0.95;
 
 /** Run the matching engine for an extraction (§6).
- *  Order: exact phone, exact postcode, then trigram name via RPC. */
+ *  Order: exact phone, exact postcode, then trigram name via RPC. Housing officers are not
+ *  matched: their details are kept on the client, not in a separate contacts list. */
 export async function runMatching(ex: Extraction): Promise<MatchResult> {
-  const result: MatchResult = { applicant: [], contact: [], property: [] };
+  const result: MatchResult = { applicant: [], property: [] };
 
   // ── Applicant: phone first, then fuzzy name ──
   const appPhone = ex.applicant?.phone;
@@ -54,40 +54,6 @@ export async function runMatching(ex: Extraction): Promise<MatchResult> {
         sub: [a.referring_borough, a.stage].filter(Boolean).join(' · '),
         score: Math.min(0.99, (a.score as number) + boroughBoost),
         reason: `name ${(a.score as number).toFixed(2)}${boroughBoost ? ' + borough' : ''}`,
-      });
-    }
-  }
-
-  // ── Contact: phone first, then fuzzy name ──
-  const conPhone = ex.contact?.phone;
-  if (conPhone) {
-    const { data } = await supabase
-      .from('contacts')
-      .select('id, full_name, organisation, borough')
-      .eq('phone', conPhone)
-      .limit(3);
-    for (const c of data ?? []) {
-      result.contact.push({
-        id: c.id,
-        label: c.full_name,
-        sub: [c.organisation, c.borough].filter(Boolean).join(' · '),
-        score: STRONG,
-        reason: 'phone match',
-      });
-    }
-  }
-  if (result.contact.length === 0 && ex.contact?.full_name) {
-    const { data } = await supabase.rpc('match_contacts', {
-      query: ex.contact.full_name,
-      threshold: 0.45,
-    });
-    for (const c of (data ?? []) as Array<Record<string, unknown>>) {
-      result.contact.push({
-        id: c.id as string,
-        label: c.full_name as string,
-        sub: [c.organisation, c.borough].filter(Boolean).join(' · '),
-        score: c.score as number,
-        reason: `name ${(c.score as number).toFixed(2)}`,
       });
     }
   }

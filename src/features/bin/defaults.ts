@@ -19,7 +19,6 @@ export function defaultChoice(ex: Extraction, matches: MatchResult | null): Conf
   const bestApplicant = matches?.applicant[0];
   return {
     applicantTarget: bestApplicant ? bestApplicant.id : ex.applicant?.full_name ? 'create' : 'note_only',
-    contactTarget: 'none', // contacts are no longer kept; officer details stay on the client
     advanceStage: null,
   };
 }

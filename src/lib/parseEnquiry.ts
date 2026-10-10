@@ -6,7 +6,7 @@ import { toE164 } from './format';
 export type EnquiryFields = Record<string, string>;
 
 /** Pull "Label: value" pairs out of a pasted enquiry email body. */
-export function fieldsFromEmail(text: string): EnquiryFields {
+function fieldsFromEmail(text: string): EnquiryFields {
   const out: EnquiryFields = {};
   const labels = ['First Name', 'Last Name', 'Email', 'Phone', 'Enquiry Type', 'Message'];
   for (const label of labels) {
@@ -62,7 +62,7 @@ function parseBeds(message: string): string | undefined {
 
 /** Turn raw enquiry fields into the shared Extraction contract.
  *  No OCR, no AI — the data is already structured at source. */
-export function enquiryToExtraction(fields: EnquiryFields): Extraction {
+function enquiryToExtraction(fields: EnquiryFields): Extraction {
   const first = fields['First Name'] ?? '';
   const last = fields['Last Name'] ?? '';
   const full_name = `${first} ${last}`.trim();

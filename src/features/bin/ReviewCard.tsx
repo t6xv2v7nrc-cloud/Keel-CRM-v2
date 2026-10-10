@@ -41,13 +41,12 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
 
   // Match choices: start from the shared default (best match, else create)
   const [applicantTarget, setApplicantTarget] = useState<string>(() => defaultChoice(draft, matches).applicantTarget);
-  const contactTarget = 'none'; // contacts are no longer kept; officer details stay on the client
   const [advanceStage, setAdvanceStage] = useState<ApplicantStage | ''>('');
 
   useEffect(() => {
-    onStateChange?.(itemId, { extraction: draft, choice: { applicantTarget, contactTarget, advanceStage: advanceStage || null } });
+    onStateChange?.(itemId, { extraction: draft, choice: { applicantTarget, advanceStage: advanceStage || null } });
     return () => onStateChange?.(itemId, null);
-  }, [itemId, draft, applicantTarget, contactTarget, advanceStage, onStateChange]);
+  }, [itemId, draft, applicantTarget, advanceStage, onStateChange]);
 
   useEffect(() => {
     if (imagePath) signedBinUrl(imagePath).then(setImgUrl);
@@ -70,7 +69,6 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
     try {
       const choice: ConfirmChoice = {
         applicantTarget,
-        contactTarget,
         advanceStage: advanceStage || null,
       };
       const out = await confirmInboxItem({ inboxItemId: itemId, extraction: draft, choice });
