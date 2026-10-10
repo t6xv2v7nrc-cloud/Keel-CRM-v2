@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button, Card, CardHeader, Field, Icon, PageHeader, useToast } from '../../components/ui';
 import { extractFromText } from '../../lib/extract';
+import { readWithClaude } from '../../lib/claudeRead';
 import { parseEnquiryEmail } from '../../lib/parseEnquiry';
 import { runMatching } from '../../lib/matching';
 import { compressImage, uploadToBin } from './capture';
@@ -118,15 +119,22 @@ export function BinPage() {
       setProgressLabel('Compressing…');
       const blob = await compressImage(staged.file);
 
-      // 2. OCR (the slow step on first run — downloads language data).
-      //    Lazy-loaded so Tesseract is not in the main bundle.
-      setProgressLabel('Reading text…');
-      const { ocrImage } = await import('../../lib/ocr');
-      const text = await ocrImage(blob, (f) => setProgress(f));
+      // 2. Claude reads it when it is set up; otherwise (or if it does not answer) it is read on the device.
+      //    Tesseract is lazy-loaded so it is not in the main bundle; its first run downloads language data.
+      setProgressLabel('Reading with Claude…');
+      let extraction = await readWithClaude(blob, hint || undefined);
+      const byClaude = extraction !== null;
+      if (!extraction) {
+        setProgressLabel('Reading text…');
+        const { ocrImage } = await import('../../lib/ocr');
+        const ocr = await ocrImage(blob, (f) => setProgress(f));
+        setProgressLabel('Extracting…');
+        extraction = extractFromText(ocr, hint || undefined);
+      }
+      const text = extraction.transcription;
 
-      // 3. Extract + match
-      setProgressLabel('Extracting…');
-      const extraction = extractFromText(text, hint || undefined);
+      // 3. Match
+      setProgressLabel('Matching…');
       const matches = await runMatching(extraction);
 
       // 4. Upload + persist
@@ -142,7 +150,7 @@ export function BinPage() {
         matches,
       });
 
-      toast('Screenshot read. Review it below', 'success');
+      toast(byClaude ? 'Screenshot read by Claude. Review it below' : 'Screenshot read. Review it below', 'success');
       reset();
     } catch (e) {
       toast(`Failed: ${(e as Error).message}`, 'danger');

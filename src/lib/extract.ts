@@ -127,7 +127,7 @@ function classify(text: string): { doc_type: DocType; confidence: number } {
 
 // ── Default suggested actions per doc_type ──────────────────────────
 
-const ACTIONS_BY_TYPE: Record<DocType, SuggestedAction[]> = {
+export const ACTIONS_BY_TYPE: Record<DocType, SuggestedAction[]> = {
   applicant_referral: ['create_applicant', 'advance_stage'],
   property_details: ['create_property'],
   officer_message: ['log_note_only'],
@@ -235,4 +235,20 @@ function buildSummary(
     default:
       return 'Could not confidently classify this screenshot. Pick a target below.';
   }
+}
+
+/** Claude's reading tidied the way Keel stores things: +44 phones, spaced postcodes, the usual actions for its type. */
+export function tidyReading(e: Extraction): Extraction {
+  const out: Extraction = { ...e };
+  if (e.applicant) {
+    const a = { ...e.applicant };
+    if (a.phone) a.phone = toE164(a.phone) ?? a.phone;
+    if (a.officer_phone) a.officer_phone = toE164(a.officer_phone) ?? a.officer_phone;
+    if (a.email) a.email = a.email.toLowerCase();
+    if (a.officer_email) a.officer_email = a.officer_email.toLowerCase();
+    out.applicant = a;
+  }
+  if (e.property?.postcode) out.property = { ...e.property, postcode: normalisePostcode(e.property.postcode) };
+  if (!e.suggested_actions?.length) out.suggested_actions = ACTIONS_BY_TYPE[e.doc_type];
+  return out;
 }

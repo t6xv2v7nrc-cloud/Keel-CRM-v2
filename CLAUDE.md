@@ -24,13 +24,18 @@ src/
               clipboard.ts (copy with a fallback for older phones), files.ts (save a file, share sheet on phones),
               duplicates.ts (clients entered twice: same phone, email or name; a contact on more than 3 clients is shared,
                              not a duplicate; merging is the `merge_applicants` database function, 0014),
+              digest.ts (the Today summary on Home: first names and short addresses only, as it goes to WhatsApp),
+              claudeRead.ts (Bin screenshots read by Claude through /api/read-screenshot; null means read on the device),
               help.ts (words behind the "?" help buttons)
   components/ ui primitives on tokens (Button, StageBadge, Card, Field, Toast, Icon,
               Visuals: avatars, page headers, stat tiles, SVG charts, UpdateNote for "run this migration")
   features/   dashboard/ bin/ pipeline/ (with the Housing officers and Possible duplicates boxes) calls/ applicants/ properties/ settings/ map/ (Leaflet, lazy-loaded) progress/ requests/ (request sheet, Awaiting providers) money/ (the Finances page at /finances: Owed, Potential, Calendar, Paid; invoice page at /finances/invoice/:id;
               client card, Home summary)
-  types/      extraction.ts (shared contract, imported by netlify functions)
-netlify/functions/ extract.ts, lib/prompt.ts, lib/claude.ts
+  types/      extraction.ts (shared contract, imported by netlify functions; also EXTRACTION_SCHEMA for Claude's
+              structured output and cleanExtraction(), run on every answer by the function and again by the Bin)
+netlify/functions/ intake.mjs (website form to the Bin), read-screenshot.ts (Claude reads a Bin screenshot; checks the
+              caller's Supabase token, answers 501 until ANTHROPIC_API_KEY is set), lib/prompt.ts (what Claude is told).
+              Type-checked strictly by `tsconfig.functions.json` as part of `npm run build`.
 supabase/migrations/
 ```
 
@@ -88,7 +93,7 @@ supabase/migrations/
 | `VITE_SUPABASE_URL` | client (.env.local + Netlify) |
 | `VITE_SUPABASE_ANON_KEY` | client (.env.local + Netlify) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Netlify function env ONLY |
-| `ANTHROPIC_API_KEY` | Netlify function env ONLY |
+| `ANTHROPIC_API_KEY` | Netlify function env ONLY; turns on Claude reading Bin screenshots (off without it) |
 | `OWNER_EMAIL` | Netlify function env |
 
 Never commit `.env.local`. Never expose the service role key or Anthropic key to the client.
@@ -143,6 +148,9 @@ screens (an iPhone zooms in on smaller ones and stays zoomed, which is what let 
 Page containers are `p-4 sm:p-6`; a fixed width (`w-[220px]`) needs `max-w-full` and a wrapping parent. Keel opens
 full screen from the home screen (manifest `display: standalone`); icons are in `public/` (apple-touch-icon 180, 192,
 512 and a maskable 512). In the home-screen app, sign in with a password: an email link opens in Safari instead.
+`public/sw.js` (registered in `main.tsx`, production only) keeps `/assets/` on the device and fetches the page
+network first (3 seconds, then the kept copy); it never touches Supabase, `/api` or other sites. Bump `CACHE` if its
+rules change.
 
 ## Pitfalls
 

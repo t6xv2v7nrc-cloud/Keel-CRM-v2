@@ -15,6 +15,7 @@ import { tierColor, tierCount, tierLabel, tierNumbers, URGENCY_LABEL } from '../
 import type { ApplicantStage } from '../../types/extraction';
 import type { Activity } from '../../lib/types';
 import { ThisWeek } from './ThisWeek';
+import { MorningSummary } from './MorningSummary';
 import { AwaitingProviders } from '../requests/AwaitingProviders';
 import { MoneyOwedSummary } from '../money/Money';
 
@@ -103,6 +104,8 @@ export function DashboardPage() {
           <Button variant="primary" onClick={() => navigate('/bin')}><Icon name="inbox" size={16} />Paste a screenshot</Button>
         </div>
       </header>
+
+      <MorningSummary applicants={applicants} />
 
       {/* Stat tiles */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

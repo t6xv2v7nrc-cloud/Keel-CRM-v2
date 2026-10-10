@@ -17,6 +17,7 @@ export const HELP = {
       'Where new information comes in. Paste a screenshot anywhere with Ctrl+V, drop an image here, or paste a website enquiry email.',
       'On an iPhone: take the screenshot, tap it, tap Copy (or share it and choose Copy), then open Keel and tap Paste screenshot here. Tap Paste when the phone asks. From WhatsApp, press and hold a photo and choose Copy.',
       'Keel reads it, suggests which client it belongs to and waits for you to check. Nothing is saved until you confirm a card.',
+      'Once an Anthropic key is added in Netlify, Claude reads screenshots: it understands chats and forms far better than reading the letters alone. The screenshot goes to Claude (Anthropic) to be read. Without the key, or if Claude does not answer, it is read on this device as before.',
       'Referrals from the website form arrive here on their own. Confirm all saves every card exactly as shown, including your edits.',
     ],
   },
@@ -234,6 +235,13 @@ export const HELP = {
       'Merge keeps the record you pick (Keel suggests the one furthest along) and moves everything from the other onto it: calls, properties and their progress, fees and incentives, requests to providers and the timeline. Details the kept record is missing are filled in, notes are joined, and the other record is deleted. It cannot be undone.',
       'A phone number or email on more than three clients is taken to be shared (a support worker\'s, or an office line) and is left out.',
       'Not the same person hides the pair on this device.',
+    ],
+  },
+  summary: {
+    title: 'Today',
+    body: [
+      'Today in a few lines: viewings, next steps due, providers to chase, money overdue or due this week, first rents to check, move-in checks still open, and who has stopped moving. Tap a line to open the list behind it.',
+      'Send to WhatsApp opens WhatsApp with the summary written out: pick your own chat (Message yourself) or your co-worker\'s. It carries first names and short addresses only, never phone numbers.',
     ],
   },
   checklist: {
