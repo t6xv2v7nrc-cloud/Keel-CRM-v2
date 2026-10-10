@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, CardHeader, Empty, Icon } from '../../components/ui';
-import { useDeals } from '../../lib/hooks';
+import { Button, Card, CardHeader, Empty, Icon, useToast } from '../../components/ui';
+import { useDeals, useMarkCold } from '../../lib/hooks';
+import { activeSettings } from '../../lib/settings';
 import { dayLabel, isoDay } from '../../lib/calls';
 import { clockTime } from '../../lib/format';
-import { isLive, shortAddress, stuckDays, viewingsBetween } from '../../lib/progress';
+import { coldDays, isLive, shortAddress, stuckDays, viewingsBetween } from '../../lib/progress';
 import { isActive } from '../../lib/search';
 import type { Applicant, Deal } from '../../lib/types';
 import { ReminderLink, STAGE_NAME, StuckChip, dealWords } from '../progress/Progress';
@@ -29,10 +30,27 @@ export function ThisWeek({ applicants }: { applicants: Applicant[] }) {
   }, [deals]);
   const viewingCount = viewings.reduce((s, [, ds]) => s + ds.length, 0);
 
-  const stuck = useMemo(() => applicants.filter(isActive)
-    .map((a) => ({ a, days: stuckDays(a, deals) }))
-    .filter((x): x is { a: Applicant; days: number } => x.days !== null)
-    .sort((x, y) => y.days - x.days), [applicants, deals]);
+  // Gone cold (nothing for the team's cold limit) are offered as one tap to Lost; the rest are worth a push
+  const cold = useMemo(() => applicants.filter(isActive)
+    .map((a) => ({ a, days: coldDays(a, deals) }))
+    .filter((x): x is { a: Applicant; days: number } => x.days !== null), [applicants, deals]);
+  const stuck = useMemo(() => {
+    const coldIds = new Set(cold.map((x) => x.a.id));
+    return applicants.filter((a) => isActive(a) && !coldIds.has(a.id))
+      .map((a) => ({ a, days: stuckDays(a, deals) }))
+      .filter((x): x is { a: Applicant; days: number } => x.days !== null)
+      .sort((x, y) => y.days - x.days);
+  }, [applicants, deals, cold]);
+  const markCold = useMarkCold();
+  const { toast } = useToast();
+  const moveColdToLost = () => {
+    const limit = activeSettings().coldAfterDays;
+    if (!window.confirm(`Move ${cold.length} ${cold.length === 1 ? 'client' : 'clients'} to Lost? Nothing has moved for them in ${limit} days or more and no next step is booked. Each gets a line on their timeline, and you can set any of them back on their page.`)) return;
+    markCold.mutate(cold.map(({ a, days }) => ({ id: a.id, stage: a.stage, days })), {
+      onSuccess: (n) => toast(`Moved ${n} to Lost. Find them in Pipeline under Stage: Lost.`, 'success'),
+      onError: (e) => toast((e as Error).message, 'danger'),
+    });
+  };
 
   const month = useMemo(() => {
     const since = Date.now() - 30 * 86_400_000;
@@ -50,7 +68,7 @@ export function ThisWeek({ applicants }: { applicants: Applicant[] }) {
 
   return (
     <Card>
-      <CardHeader icon="calendar" title="This week" sub={`${viewingCount} ${viewingCount === 1 ? 'viewing' : 'viewings'} · ${stuck.length} stuck`} help="progress" />
+      <CardHeader icon="calendar" title="This week" sub={`${viewingCount} ${viewingCount === 1 ? 'viewing' : 'viewings'} · ${stuck.length} stuck${cold.length ? ` · ${cold.length} cold` : ''}`} help="progress" />
       <div className="grid gap-6 p-5 lg:grid-cols-2">
         <section className="flex min-w-0 flex-col gap-3">
           <h3 className="m-0 text-[13px] font-medium uppercase tracking-wider text-[var(--ink-muted)]">Viewings</h3>
@@ -87,8 +105,19 @@ export function ThisWeek({ applicants }: { applicants: Applicant[] }) {
             <h3 className="m-0 text-[13px] font-medium uppercase tracking-wider text-[var(--ink-muted)]">Needs a push</h3>
             {stuck.length > 6 && <Link to="/pipeline?progress=stuck" className="text-[13px] text-[var(--link)] hover:underline">See all {stuck.length}</Link>}
           </div>
+          {cold.length > 0 && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg bg-[var(--surface-2)] px-3 py-2.5 text-[14px] text-[var(--ink)]">
+              <span className="min-w-0 flex-1 basis-[180px]">
+                <Link to="/pipeline?progress=cold" className="font-medium hover:underline">{cold.length} {cold.length === 1 ? 'lead has' : 'leads have'} gone cold</Link>
+                <span className="text-[var(--ink-muted)]">: nothing for {activeSettings().coldAfterDays}+ days</span>
+              </span>
+              <Button className="min-h-0 px-3 py-1.5 text-[13px]" disabled={markCold.isPending} onClick={moveColdToLost}>
+                {markCold.isPending ? 'Moving…' : 'Move them to Lost'}
+              </Button>
+            </div>
+          )}
           {stuck.length === 0 ? (
-            <Empty icon="check" title="Everyone is moving">Nobody has been stuck at a stage for longer than Team settings allow.</Empty>
+            <Empty icon="check" title={cold.length ? 'Nobody else is stuck' : 'Everyone is moving'}>Nobody has been stuck at a stage for longer than Team settings allow.</Empty>
           ) : (
             <ul className="m-0 flex list-none flex-col gap-1 p-0">
               {stuck.slice(0, 6).map(({ a, days }) => {

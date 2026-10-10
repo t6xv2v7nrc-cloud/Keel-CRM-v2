@@ -132,6 +132,8 @@ export const HELP = {
       'The client\'s stage follows their furthest property, forwards only: a viewing booked makes them Viewing, an offer makes them Offer, a move-in makes them Placed. You can still change the stage by hand in Client details.',
       'When an offer is accepted the property goes under offer; when they move in it is marked as let, and anyone else going for it is told it was let to someone else.',
       'Stuck means nothing has moved for longer than Team settings allow at that stage. A viewing coming up always counts as moving.',
+      'Gone cold means a lead or referral with no property in play, no next step booked and nothing moving for 30 days (Team settings). Home offers to move them all to Lost in one tap; each gets a line on their timeline, and you can set any back on their page.',
+      'Active clients are the ones still being housed: lead, referred, viewing or offer. Clients who have moved in are counted as housed.',
     ],
   },
   timeline: {

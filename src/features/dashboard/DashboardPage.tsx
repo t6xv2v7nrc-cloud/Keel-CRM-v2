@@ -8,7 +8,7 @@ import { useApplicants, useCalls, useDeals, usePeople, useProperties, useProvide
 import { longDay, money, timeAgo } from '../../lib/format';
 import { ghostTotal, potentials, totals as moneyTotals } from '../../lib/money';
 import { isPlaced } from '../../lib/progress';
-import { effectiveTier, isActive, isUrgent } from '../../lib/search';
+import { effectiveTier, isActive, isHoused, isUrgent } from '../../lib/search';
 import { matchesForProperty } from '../../lib/propertyMatch';
 import { addDays, callQueue, isoDay, lastCallMap, queueLabel } from '../../lib/calls';
 import { tierColor, tierCount, tierLabel, tierNumbers, URGENCY_LABEL } from '../../lib/tiering';
@@ -69,10 +69,12 @@ export function DashboardPage() {
   const ghost = useMemo(() => ghostTotal(receivables, potentials(deals, receivables, properties, providers)), [receivables, deals, properties, providers]);
 
   const available = properties.filter((p) => p.status === 'void' || p.status === 'under_offer');
-  const matchCount = useMemo(
-    () => available.reduce((s, p) => s + matchesForProperty(p, applicants).length, 0),
+  // properties at least one client is a strong match for: the ones worth sending today
+  const strongCount = useMemo(
+    () => available.filter((p) => matchesForProperty(p, applicants).some((m) => m.strength === 'strong')).length,
     [available, applicants],
   );
+  const housed = applicants.filter(isHoused).length;
 
   const byStage = (s: ApplicantStage) => applicants.filter((a) => (s === 'placed' ? isPlaced(a.stage) : a.stage === s)).length;
   const funnelMax = Math.max(1, ...FUNNEL.map((f) => byStage(f.stage)));
@@ -104,11 +106,11 @@ export function DashboardPage() {
 
       {/* Stat tiles */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Link to="/pipeline"><StatTile icon="users" label="Active clients" value={active.length} hint={`${newThisWeek} new this week`}>
+        <Link to="/pipeline"><StatTile icon="users" label="Active clients" value={active.length} hint={`${newThisWeek} new this week${housed ? `, ${housed} housed` : ''}`}>
           <Sparkline values={newPerDay} />
         </StatTile></Link>
         <Link to="/properties"><StatTile icon="building" label="Available properties" value={available.length}
-          hint={`${matchCount} client ${matchCount === 1 ? 'match' : 'matches'}`} /></Link>
+          hint={`${strongCount} with a strong match`} /></Link>
         <Link to="/finances"><StatTile icon="pound" label="Owed" value={moneyReady ? money(owedNow.owed) : '·'}
           hint={!moneyReady ? 'Finances not set up yet' : owedNow.overdueCount ? `${money(owedNow.overdue)} overdue` : `${owedNow.owedCount} ${owedNow.owedCount === 1 ? 'item' : 'items'}, none overdue`} /></Link>
         <Link to="/finances?view=potential"><StatTile icon="trend" label="Ghost total" value={moneyReady ? money(ghost.total) : '·'} accent={moneyReady && ghost.total > 0}

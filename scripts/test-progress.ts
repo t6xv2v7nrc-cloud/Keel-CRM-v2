@@ -1,6 +1,8 @@
 // Checks for client progress: stage from deals, next steps, stuck. Run with: npx tsx scripts/test-progress.ts
-import { lastMoved, nextMove, shouldAdvance, stageFromDeals, stepAfter, stuckDays, takesOver, viewingsBetween, viewingShort } from '../src/lib/progress';
+import { coldDays, lastMoved, nextMove, shouldAdvance, stageFromDeals, stepAfter, stuckDays, takesOver, viewingsBetween, viewingShort } from '../src/lib/progress';
 import { queueLabel } from '../src/lib/calls';
+import { isActive, isHoused } from '../src/lib/search';
+import { DEFAULT_SETTINGS, setActiveSettings } from '../src/lib/settings';
 import { addDays, todayIso } from '../src/lib/calls';
 import type { Applicant, Deal, DealStatus } from '../src/lib/types';
 
@@ -60,6 +62,24 @@ const start = new Date(); start.setHours(0, 0, 0, 0);
 const end = new Date(start); end.setDate(end.getDate() + 7);
 const soon = viewingsBetween([deal('viewing', { viewing_at: at.toISOString() }), deal('viewing', { viewing_at: addDays(10) + 'T10:00:00Z' }), deal('viewed', { viewing_at: at.toISOString() })], start, end);
 check('the week shows booked viewings in the next 7 days only', soon.length === 1);
+
+// Active means still being housed; moved in is housed
+check('lead, referred, viewing and offer are active', ['lead', 'referred', 'viewing', 'offer'].every((st) => isActive(client({ stage: st as Applicant['stage'] }))));
+check('placed (and the old fee stages) are housed, not active', ['placed', 'fee_invoiced', 'fee_paid'].every((st) => !isActive(client({ stage: st as Applicant['stage'] })) && isHoused(client({ stage: st as Applicant['stage'] }))));
+check('lost is neither', !isActive(client({ stage: 'lost' })) && !isHoused(client({ stage: 'lost' })));
+
+// Gone cold: a lead or referral with nothing for 30 days (Team settings), no property in play, no next step booked
+const old = { stage_changed_at: daysAgo(45), created_at: daysAgo(60) };
+check('45 days at Referred with nothing is cold', coldDays(client(old), []) === 45);
+check('10 days is stuck, not cold', coldDays(client(), []) === null);
+check('a property still in play is not cold', coldDays(client(old), [deal('sent', { updated_at: daysAgo(40) })]) === null);
+check('a fallen-through property does not keep them warm', coldDays(client(old), [deal('fell_through', { updated_at: daysAgo(40) })]) === 40);
+check('a next step booked for later is not cold', coldDays(client({ ...old, next_call_at: addDays(3) }), []) === null);
+check('an old next step does not keep them warm', coldDays(client({ ...old, next_call_at: addDays(-20) }), []) === 45);
+check('only leads and referrals go cold', coldDays(client({ ...old, stage: 'viewing' }), []) === null && coldDays(client({ ...old, stage: 'lost' }), []) === null);
+setActiveSettings({ ...DEFAULT_SETTINGS, coldAfterDays: 0 });
+check('0 in Team settings turns it off', coldDays(client(old), []) === null);
+setActiveSettings(DEFAULT_SETTINGS);
 
 console.log(failed ? `\n${failed} failed` : '\nAll passed');
 process.exit(failed ? 1 : 0);

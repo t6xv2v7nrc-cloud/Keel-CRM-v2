@@ -70,6 +70,9 @@ supabase/migrations/
 - Switching a provider off withdraws its available properties (under offer and let stay); switching it back on brings back
   only those (`provider_off` / `provider_on` property activities, `withdrawnBySwitchOff` in requests.ts). Lists pasted
   while it is off come in withdrawn.
+- "Active" means still being housed (lead, referred, viewing, offer: `isActive`); moved-in clients are housed (`isHoused`).
+  Leads and referrals with nothing for `coldAfterDays` (no live property, no next step booked) have gone cold: Home offers
+  one tap to move them to Lost, and they are left out of "Needs a push". Home counts properties with a strong match.
 - Calls are kept quiet on request: not in the top bar (the /calls page stays, linked from a client's Next step card),
   not on Home, no green "Log call" button. Home shows next steps due instead. Do not make calls prominent again unasked.
 - Finances leads with the ghost total: everything owed plus a fee for every client going for a property (sent to accepted),

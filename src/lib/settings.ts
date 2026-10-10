@@ -98,6 +98,8 @@ export interface AppSettings {
   firstCallWithinDays: number;
   /** A client counts as stuck after this many days at a stage with nothing moving (0 = never). */
   stuckAfterDays: { lead: number; referred: number; viewing: number; offer: number };
+  /** A lead or referral with nothing moving for this many days has gone cold, and can be moved to Lost in one go (0 = never). */
+  coldAfterDays: number;
   /** Saved property lists older than this can be purged in one click. */
   purgeAfterDays: number;
   /** LHA rates loaded from a CSV (a newer year); null uses the built-in rates. */
@@ -258,6 +260,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   callAgainAfterAnswered: 7,
   firstCallWithinDays: 1,
   stuckAfterDays: { lead: 3, referred: 7, viewing: 7, offer: 10 },
+  coldAfterDays: 30,
   purgeAfterDays: 14,
   lhaRates: null,
   lhaAreaOverrides: {},

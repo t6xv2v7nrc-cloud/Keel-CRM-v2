@@ -110,6 +110,31 @@ export function useMoveStage() {
   });
 }
 
+/** Move clients who have gone cold to Lost in one go, each with a line on their timeline saying why. */
+export function useMarkCold() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (clients: Array<{ id: string; stage: ApplicantStage; days: number }>) => {
+      const now = new Date().toISOString();
+      for (const ids of chunks(clients.map((c) => c.id))) {
+        let res = await supabase.from('applicants').update({ stage: 'lost', stage_changed_at: now }).in('id', ids);
+        if (res.error && isMissingColumn(res.error)) res = await supabase.from('applicants').update({ stage: 'lost' }).in('id', ids);
+        if (res.error) throw res.error;
+      }
+      for (const part of chunks(clients, 200)) {
+        await supabase.from('activities').insert(part.map((c) => ({
+          entity_type: 'applicant', entity_id: c.id, kind: 'stage_change', body: `Stage ${c.stage} → lost (went cold: nothing for ${c.days} days)`,
+        })));
+      }
+      return clients.length;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['applicants'] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
 // ── Activities (per entity) ─────────────────────────────────────────
 export function useActivities(entityType: string, entityId: string | undefined) {
   return useQuery({

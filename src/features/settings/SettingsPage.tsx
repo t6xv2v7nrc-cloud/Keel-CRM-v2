@@ -281,6 +281,9 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
               </div>
             ))}
           </div>
+          <Row icon="clock" title="Leads go cold after" text="A lead or referral with no property in play, no next step booked and nothing moving for this long. Home offers to move them all to Lost in one tap (0 means never).">
+            <NumberField label="Days" value={draft.coldAfterDays} min={0} onChange={(v) => set('coldAfterDays', v)} />
+          </Row>
         </div>
       </Card>
 

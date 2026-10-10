@@ -142,6 +142,20 @@ export function stuckDays(a: Applicant, deals: Deal[], now = new Date()): number
   return days >= limit ? days : null;
 }
 
+/**
+ * Days a client has gone cold, or null: a lead or referral with no property in play, no next step booked for
+ * today or later, and nothing moving for at least the team's cold limit. These can be moved to Lost in one go.
+ */
+export function coldDays(a: Applicant, deals: Deal[], now = new Date()): number | null {
+  const limit = activeSettings().coldAfterDays;
+  if (!limit || (a.stage !== 'lead' && a.stage !== 'referred')) return null;
+  const mine = deals.filter((d) => d.applicant_id === a.id);
+  if (mine.some(isLive)) return null;
+  if (a.next_call_at && a.next_call_at >= isoDay(now)) return null;
+  const days = Math.floor((now.getTime() - new Date(lastMoved(a, mine)).getTime()) / 86_400_000);
+  return days >= limit ? days : null;
+}
+
 /** Viewings between two dates, soonest first. */
 export function viewingsBetween(deals: Deal[], from: Date, to: Date): Deal[] {
   return deals

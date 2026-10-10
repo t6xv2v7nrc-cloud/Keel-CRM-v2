@@ -10,7 +10,7 @@ import { APPLICANT_STAGES } from '../../types/extraction';
 import type { ApplicantStage } from '../../types/extraction';
 import type { Applicant, Call, Deal, ProviderRequest } from '../../lib/types';
 import { RequestChip } from '../requests/RequestSheet';
-import { DEAL_STEPS, isLive, stuckDays } from '../../lib/progress';
+import { coldDays, DEAL_STEPS, isLive, stuckDays } from '../../lib/progress';
 import { DealChip, StuckChip } from '../progress/Progress';
 import { money, timeAgo } from '../../lib/format';
 import { HOUSEHOLD_LABEL, tierLabel, tierNumbers, URGENCY_LABEL, WORK_STATUS_LABEL } from '../../lib/tiering';
@@ -34,7 +34,7 @@ const SORT_OPTIONS: Array<[SortKey, string]> = [
 ];
 
 const PROGRESS_LABEL: Record<PipelineFilters['progress'], string> = {
-  any: 'Any', stuck: 'Stuck', viewing: 'Viewing booked', offer: 'Offer made or accepted', nothing: 'No properties sent yet',
+  any: 'Any', stuck: 'Stuck', cold: 'Gone cold', viewing: 'Viewing booked', offer: 'Offer made or accepted', nothing: 'No properties sent yet',
 };
 
 const CALLS_LABEL: Record<PipelineFilters['calls'], string> = {
@@ -147,6 +147,7 @@ export function PipelinePage() {
       if (filters.progress === 'any') return true;
       const pr = progressOf(a);
       if (filters.progress === 'stuck') return pr.stuck !== null;
+      if (filters.progress === 'cold') return coldDays(a, deals) !== null;
       if (filters.progress === 'nothing') return !pr.any;
       if (filters.progress === 'viewing') return pr.lead?.status === 'viewing';
       return pr.lead?.status === 'offered' || pr.lead?.status === 'accepted';

@@ -42,7 +42,11 @@ export const effectiveTier = (a: Applicant): Tier => {
 /** Urgent per Settings (by default: homeless tonight, or at risk within 56 days). */
 export const isUrgent = (a: Applicant) => activeSettings().urgentLevels.includes(a.urgency ?? '');
 
-export const isActive = (a: Applicant) => a.stage !== 'lost' && a.stage !== 'fee_paid' && a.stage !== 'fee_invoiced';
+/** Still being housed: a lead, referred, at a viewing or an offer. Clients who have moved in are housed, not active. */
+const ACTIVE_STAGES = new Set(['lead', 'referred', 'viewing', 'offer']);
+export const isActive = (a: Pick<Applicant, 'stage'>) => ACTIVE_STAGES.has(a.stage);
+/** Moved in (placed, or one of the old fee stages from before Finances). */
+export const isHoused = (a: Pick<Applicant, 'stage'>) => a.stage === 'placed' || a.stage === 'fee_invoiced' || a.stage === 'fee_paid';
 
 export const areaOf = (a: Applicant) => a.council || a.referring_borough || '';
 
@@ -148,7 +152,7 @@ export interface PipelineFilters {
   benefits: BenefitKey[]; // must have all of these
   calls: 'any' | 'due' | 'never' | 'scheduled'; // applied by the Pipeline, which has the call log
   owner: string; // 'any' | 'me' | 'none' | a team member's id; applied by the Pipeline, which knows who is signed in
-  progress: 'any' | 'stuck' | 'viewing' | 'offer' | 'nothing'; // applied by the Pipeline, which has the deals
+  progress: 'any' | 'stuck' | 'cold' | 'viewing' | 'offer' | 'nothing'; // applied by the Pipeline, which has the deals
   officer: 'any' | 'yes' | 'no'; // has a housing officer (case worker)
   council: string; // 'any', 'none', or a borough
 }
@@ -197,7 +201,7 @@ export function filtersFromParams(p: URLSearchParams): PipelineFilters {
     benefits: (p.get('benefits') ?? '').split(',').filter((b): b is BenefitKey => BENEFITS.some((x) => x.key === b)),
     calls: oneOf(p.get('calls'), ['any', 'due', 'never', 'scheduled'] as const, 'any'),
     owner: p.get('owner') || 'any',
-    progress: oneOf(p.get('progress'), ['any', 'stuck', 'viewing', 'offer', 'nothing'] as const, 'any'),
+    progress: oneOf(p.get('progress'), ['any', 'stuck', 'cold', 'viewing', 'offer', 'nothing'] as const, 'any'),
     officer: oneOf(p.get('officer'), ['any', 'yes', 'no'] as const, 'any'),
     council: p.get('council') || 'any',
   };
