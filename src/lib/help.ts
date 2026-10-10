@@ -17,6 +17,7 @@ export const HELP = {
       'Where new information comes in. Paste a screenshot anywhere with Ctrl+V, drop an image here, or paste a website enquiry email.',
       'On an iPhone: take the screenshot, tap it, tap Copy (or share it and choose Copy), then open Keel and tap Paste screenshot here. Tap Paste when the phone asks. From WhatsApp, press and hold a photo and choose Copy.',
       'Keel reads it, suggests which client it belongs to and waits for you to check. Nothing is saved until you confirm a card.',
+      'A new client is dated from when they got in touch: when the Bin received it, not when you confirm it. If a screenshot or email is older than that, change First got in touch on the card.',
       'Once an Anthropic key is added in Netlify, Claude reads screenshots: it understands chats and forms far better than reading the letters alone. The screenshot goes to Claude (Anthropic) to be read. Without the key, or if Claude does not answer, it is read on this device as before.',
       'Referrals from the website form arrive here on their own. Confirm all saves every card exactly as shown, including your edits.',
     ],
@@ -47,7 +48,7 @@ export const HELP = {
   },
   pipelineCalls: {
     title: 'Next step column',
-    body: ['When the client\'s next step is due, and the outcome of the last call (if any) with how long ago it was.'],
+    body: ['When the client\'s next step is due, and when they were last contacted and how (a note, a call or a property sent on WhatsApp). Sort by Recently contacted to see who you have been in touch with lately, or filter Next step by Never contacted.'],
   },
   tiers: {
     title: 'Tiers',
@@ -136,6 +137,13 @@ export const HELP = {
       'Stuck means nothing has moved for longer than Team settings allow at that stage. A viewing coming up always counts as moving.',
       'Gone cold means a lead or referral with no property in play, no next step booked and nothing moving for 30 days (Team settings). Home offers to move them all to Lost in one tap; each gets a line on their timeline, and you can set any back on their page.',
       'Active clients are the ones still being housed: lead, referred, viewing or offer. Clients who have moved in are counted as housed.',
+    ],
+  },
+  notes: {
+    title: 'Notes and contact',
+    body: [
+      'Keep a note each time you are in touch: pick how (a call, WhatsApp, a text, an email, in person, or just a note), write what was said, and save it. Each note is dated and signed with your name, and both of you see it here and on the timeline.',
+      'The latest contact shows at the top, so you know what you last spoke to them about. Calls logged on the Calls page and properties sent on WhatsApp count as contact too. The Pipeline shows when each client was last contacted and can be sorted by it.',
     ],
   },
   timeline: {

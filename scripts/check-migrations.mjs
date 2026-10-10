@@ -76,5 +76,27 @@ check('a client that is not there stops it', /Client not found/.test(err), err);
 // invoice numbers from 0013
 const n1 = (await one(`select next_invoice_no(1) n`))[0].n, n2 = (await one(`select next_invoice_no(1) n`))[0].n, n3 = (await one(`select next_invoice_no(50) n`))[0].n, n4 = (await one(`select next_invoice_no(1) n`))[0].n;
 check('invoice numbers run on, never repeat, and respect the lowest number', [n1, n2, n3, n4].map(Number).join(',') === '1,2,50,51', [n1, n2, n3, n4].join(','));
+// 0016: clients confirmed from the Bin are dated from when the Bin received them
+const R = '44444444-4444-4444-4444-444444444444', M = '55555555-5555-5555-5555-555555555555', I = '66666666-6666-6666-6666-666666666666';
+await db.exec(`
+  insert into inbox_items (id, status, created_at) values ('${I}', 'confirmed', '2026-09-01T09:00:00Z');
+  insert into applicants (id, full_name, stage, created_at, stage_changed_at, updated_at) values
+    ('${R}', 'Rana Late', 'referred', '2026-09-20T10:00:00Z', '2026-09-20T10:00:00Z', '2026-09-26T10:00:00Z'),
+    ('${M}', 'Mo Moved', 'viewing', '2026-09-20T10:00:00Z', '2026-09-25T10:00:00Z', '2026-09-26T10:00:00Z');
+  insert into activities (entity_type, entity_id, kind, body, inbox_item_id) values
+    ('applicant', '${R}', 'created', 'Created applicant Rana Late at stage referred (from screenshot)', '${I}'),
+    ('applicant', '${M}', 'created', 'Created applicant Mo Moved at stage referred (from screenshot)', '${I}');
+`);
+await db.exec(readFileSync(dir + '0016_received_dates.sql', 'utf8'));
+await db.exec(readFileSync(dir + '0016_received_dates.sql', 'utf8'));
+const dated = Object.fromEntries((await one(`select id, created_at, stage_changed_at, updated_at from applicants where id in ('${R}', '${M}')`)).map((r) => [r.id, r]));
+const iso = (d) => (d ? new Date(d).toISOString() : null);
+check('a client from the Bin is dated from when the Bin received it', iso(dated[R].created_at) === '2026-09-01T09:00:00.000Z', iso(dated[R].created_at));
+check('its stage, unmoved since, goes back with it', iso(dated[R].stage_changed_at) === '2026-09-01T09:00:00.000Z', iso(dated[R].stage_changed_at));
+check('a stage moved later keeps its own date', iso(dated[M].stage_changed_at) === '2026-09-25T10:00:00.000Z' && iso(dated[M].created_at) === '2026-09-01T09:00:00.000Z');
+check('"updated" times are left as they were', iso(dated[R].updated_at) === '2026-09-26T10:00:00.000Z', iso(dated[R].updated_at));
+const trig = await one(`select tgenabled from pg_trigger where tgname = 'applicants_updated_at'`);
+check('the "updated" clock is switched back on afterwards', trig[0]?.tgenabled === 'O', JSON.stringify(trig));
+
 console.log(failed ? `\n${failed} failed` : '\nAll passed');
 process.exit(failed ? 1 : 0);

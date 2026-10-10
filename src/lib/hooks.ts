@@ -14,6 +14,8 @@ import type {
 import { followUpFrom, PROVIDER_OFF, PROVIDER_ON, providerFor, providerNumber, REQUEST_LABEL, tagOf, withdrawnBySwitchOff } from './requests';
 import { basisWords, describe, KIND_LABEL, lettingFeeFor, rentOf, STATUS_LABEL } from './money';
 import { invoiceNumber } from './invoice';
+import { CONTACT_KINDS, lastContacts, noteActivity } from './contacts';
+import type { Channel } from './contacts';
 import type { ReceivableDraft } from './money';
 import type { ApplicantStage } from '../types/extraction';
 
@@ -181,6 +183,35 @@ export function useActivities(entityType: string, entityId: string | undefined) 
       return data as Activity[];
     },
   });
+}
+
+/** Save a note on a client: how you spoke to them (or just a note) and what about. It goes on their timeline. */
+export function useAddNote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ applicantId, channel, text }: { applicantId: string; channel: Channel; text: string }) => {
+      if (!text.trim()) throw new Error('Write the note first');
+      const { error } = await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: applicantId, ...noteActivity(channel, text) });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['activities'] }),
+  });
+}
+
+/** When every client was last contacted (notes, calls, WhatsApp sends), for the Pipeline. */
+export function useLastContacts() {
+  const { calls } = useCalls();
+  const q = useQuery({
+    queryKey: ['activities', 'contacts'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('activities').select('entity_type, entity_id, kind, body, created_at, actor')
+        .eq('entity_type', 'applicant').in('kind', [...CONTACT_KINDS]).order('created_at', { ascending: false }).limit(5000);
+      if (error) throw error;
+      return data as Array<Pick<Activity, 'entity_type' | 'entity_id' | 'kind' | 'body' | 'created_at' | 'actor'>>;
+    },
+  });
+  const rows = q.data;
+  return useMemo(() => lastContacts(rows ?? [], calls), [rows, calls]);
 }
 
 /** Most recent activity across all entities — for the dashboard feed. */

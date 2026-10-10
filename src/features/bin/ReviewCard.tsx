@@ -9,6 +9,8 @@ import type { ConfirmChoice } from './confirm';
 import { defaultChoice, withMessageNotes } from './defaults';
 import type { CardState } from './defaults';
 import { HOUSEHOLD_LABEL, WORK_STATUS_LABEL, URGENCY_LABEL } from '../../lib/tiering';
+import { isoDay, todayIso } from '../../lib/calls';
+import { timeAgo } from '../../lib/format';
 
 function Chip({ children }: { children: React.ReactNode }) {
   return (
@@ -27,11 +29,13 @@ interface ReviewCardProps {
   onDiscard: () => void;
   /** Reports the card's current draft and choice, so "Confirm all" saves exactly what the card shows. */
   onStateChange?: (itemId: string, state: CardState | null) => void;
+  /** When the Bin received it: a new client is dated from then, not from when it is confirmed. */
+  receivedAt: string;
 }
 
 /** The heart of the app (§5.3): screenshot left, editable fields right,
  *  matching proposal with radio choices, Confirm / Discard. */
-export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onDiscard, onStateChange }: ReviewCardProps) {
+export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onDiscard, onStateChange, receivedAt }: ReviewCardProps) {
   const { toast } = useToast();
   const [imgUrl, setImgUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -42,11 +46,13 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
   // Match choices: start from the shared default (best match, else create)
   const [applicantTarget, setApplicantTarget] = useState<string>(() => defaultChoice(draft, matches).applicantTarget);
   const [advanceStage, setAdvanceStage] = useState<ApplicantStage | ''>('');
+  // a new client is dated from when they got in touch: when the Bin received it, unless changed here
+  const [firstContactOn, setFirstContactOn] = useState(() => isoDay(new Date(receivedAt)));
 
   useEffect(() => {
-    onStateChange?.(itemId, { extraction: draft, choice: { applicantTarget, advanceStage: advanceStage || null } });
+    onStateChange?.(itemId, { extraction: draft, choice: { applicantTarget, advanceStage: advanceStage || null, firstContactOn } });
     return () => onStateChange?.(itemId, null);
-  }, [itemId, draft, applicantTarget, advanceStage, onStateChange]);
+  }, [itemId, draft, applicantTarget, advanceStage, firstContactOn, onStateChange]);
 
   useEffect(() => {
     if (imagePath) signedBinUrl(imagePath).then(setImgUrl);
@@ -70,6 +76,7 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
       const choice: ConfirmChoice = {
         applicantTarget,
         advanceStage: advanceStage || null,
+        firstContactOn,
       };
       const out = await confirmInboxItem({ inboxItemId: itemId, extraction: draft, choice });
       toast(
@@ -191,6 +198,18 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
                 Just log a note
               </Radio>
             </fieldset>
+
+            {/* When a new client first got in touch: they are dated from this, not from today */}
+            {applicantTarget === 'create' && (
+              <label className="mt-3 flex flex-wrap items-center gap-2 text-[15px]">
+                <span className="text-[var(--ink-muted)]">First got in touch:</span>
+                <input type="date" value={firstContactOn} max={todayIso()} onChange={(e) => setFirstContactOn(e.target.value || isoDay(new Date(receivedAt)))}
+                  className="min-h-[40px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]" />
+                <span className="text-[13px] text-[var(--ink-muted)]">
+                  {firstContactOn === isoDay(new Date(receivedAt)) ? `when the Bin received it, ${timeAgo(receivedAt)}` : 'changed by hand'}
+                </span>
+              </label>
+            )}
 
             {/* Stage advance */}
             {applicantTarget !== 'note_only' && (

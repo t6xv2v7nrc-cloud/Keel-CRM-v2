@@ -2,12 +2,25 @@ import { supabase } from '../../lib/supabase';
 import { computeTier } from '../../lib/tiering';
 import { STAGE_ORDER } from '../../lib/progress';
 import { shortDate } from '../../lib/format';
+import { isoDay } from '../../lib/calls';
 import type { Extraction, ApplicantStage } from '../../types/extraction';
 
 /** The user's decision on the review card, per entity. */
 export interface ConfirmChoice {
   applicantTarget: 'create' | 'note_only' | string; // string = existing applicant id
   advanceStage?: ApplicantStage | null;
+  /** A new client is dated from this day (YYYY-MM-DD); left out, from when the Bin received the item. */
+  firstContactOn?: string | null;
+}
+
+/** When a new client first got in touch: the day chosen on the card, else when the Bin received the item, never later than now. */
+async function firstContactAt(inboxItemId: string, day?: string | null): Promise<string> {
+  const now = new Date().toISOString();
+  const { data } = await supabase.from('inbox_items').select('created_at').eq('id', inboxItemId).maybeSingle();
+  const received = (data?.created_at as string | undefined) ?? now;
+  if (!day || day === isoDay(new Date(received))) return received < now ? received : now;
+  const chosen = new Date(`${day}T12:00:00`).toISOString();
+  return chosen < now ? chosen : now;
 }
 
 interface ConfirmInput {
@@ -49,9 +62,11 @@ export async function confirmInboxItem({
     const a = extraction.applicant;
     const stage: ApplicantStage = choice.advanceStage ?? 'referred';
     const tier = a.tier ?? computeTier(a);
+    const createdAt = await firstContactAt(inboxItemId, choice.firstContactOn);
     const { data, error } = await supabase
       .from('applicants')
       .insert({
+        created_at: createdAt,
         full_name: a.full_name,
         phone: a.phone ?? null,
         email: a.email ?? null,

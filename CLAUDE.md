@@ -8,7 +8,10 @@ Read `KEEL_CRM_PLAN.md` for the full build plan. Work phase by phase; do not sta
 src/
   lib/        supabase.ts, matching.ts, format.ts (phone/E.164, money, dates),
               settings.ts (team rules + my settings, tier logic types), tiering.ts (tier engine),
-              calls.ts, propertyMatch.ts, readNotes.ts (form answers from free text),
+              calls.ts, propertyMatch.ts, readNotes.ts (form answers from free text; `readHouseholdText` reads who is moving
+                           in as a whole: any child, "my 13-year-old daughter", "single mum", makes a family; also used for
+                           pasted enquiries), contacts.ts (notes on a client and last contact: activities kind "contact"
+                           ("WhatsApp: ...") or "note"; calls and WhatsApp sends count as contact; no migration),
               lha.ts (LHA area, size rules and rent-vs-LHA check; rates in src/data/lha-rates.ts),
               whatsapp.ts (wa.me links and message wording for sending properties),
               geo.ts (placing postcodes via postcodes.io, cached per device; a client's areas as districts),
@@ -81,6 +84,9 @@ supabase/migrations/
 - "Active" means still being housed (lead, referred, viewing, offer: `isActive`); moved-in clients are housed (`isHoused`).
   Leads and referrals with nothing for `coldAfterDays` (no live property, no next step booked) have gone cold: Home offers
   one tap to move them to Lost, and they are left out of "Needs a push". Home counts properties with a strong match.
+- A client is dated (`created_at`) from when they got in touch (their Bin item arriving), never from when it was confirmed.
+- Notes: each client page has Notes and contact (how you were in touch, what was said, who, when); the Pipeline shows
+  last contact per client and sorts by Recently contacted.
 - Calls are kept quiet on request: not in the top bar (the /calls page stays, linked from a client's Next step card),
   not on Home, no green "Log call" button. Home shows next steps due instead. Do not make calls prominent again unasked.
 - Finances leads with the ghost total: everything owed plus a fee for every client with a viewing booked or further
@@ -119,7 +125,8 @@ Never commit `.env.local`. Never expose the service role key or Anthropic key to
   `lib/hooks.ts`) and the page shows a note naming the file to run.
 - Run order matters: 0009 (deals) before 0010 (providers, requests), then 0011 (sharing default), then 0012 (receivables),
   then 0013 (finances: fees from the rent, first-rent dates, invoice numbers), then 0014 (merge duplicate clients),
-  then 0015 (move-in checklist).
+  then 0015 (move-in checklist), then 0016 (dates clients confirmed from the Bin from when the Bin received them; the
+  app already does this for new ones, and the review card's "First got in touch" date can change it).
 - Check every migration runs, twice, on a scratch Postgres before committing one:
   `npm i --no-save @electric-sql/pglite && node scripts/check-migrations.mjs` (it also tests the merge and invoice numbers).
 

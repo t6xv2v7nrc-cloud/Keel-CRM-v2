@@ -16,6 +16,9 @@ import type { Activity, Applicant, Call } from '../../lib/types';
 import { CallHistory, CallLogger } from '../calls/CallLogger';
 import { CallsNeedUpdate } from '../calls/CallsPage';
 import { ClientDetails } from './ClientDetails';
+import { NotesCard } from './NotesCard';
+import { CHANNEL_ICON } from './channelIcon';
+import { CHANNEL_LABEL, readNote } from '../../lib/contacts';
 import { LhaChip } from '../properties/Lha';
 import { SentTag, WhatsAppLink } from '../properties/WhatsApp';
 import { LazyMap, MapKey } from '../map/MapView';
@@ -71,6 +74,8 @@ export function ApplicantPage() {
 
       <DuplicateNote applicant={applicant} />
 
+      <NotesCard applicant={applicant} activities={activities} calls={mine} />
+
       <ProgressCard applicant={applicant} />
 
       <MoneyCard applicant={applicant} />
@@ -109,14 +114,16 @@ function TimelineRow({ act }: { act: Activity }) {
   const isCall = act.kind === 'call';
   const isWhatsApp = act.kind === 'whatsapp';
   const isProgress = act.kind === 'progress' || act.kind === 'request' || act.kind === 'money';
+  const note = act.kind === 'contact' || act.kind === 'note' ? readNote(act) : null;
   return (
     <li className="relative flex gap-3 pl-5">
       <span aria-hidden className="absolute left-0 top-1.5 h-[9px] w-[9px] rounded-full ring-2 ring-[var(--surface)]"
-        style={{ background: isCall || isWhatsApp || isProgress ? 'var(--accent)' : fromScreenshot ? 'var(--ink-muted)' : 'var(--line-strong)' }} />
-      <div className="flex-1">
-        <div className="text-[15px] text-[var(--ink)]">{act.body}</div>
-        <div className="mt-0.5 flex items-center gap-2 text-[13px] text-[var(--ink-muted)]">
-          <span>{isCall ? 'Call' : isWhatsApp ? 'WhatsApp' : act.kind === 'request' ? 'Request' : act.kind === 'money' ? 'Finances' : isProgress ? 'Progress' : act.kind.replace('_', ' ')}</span>
+        style={{ background: isCall || isWhatsApp || isProgress || note ? 'var(--accent)' : fromScreenshot ? 'var(--ink-muted)' : 'var(--line-strong)' }} />
+      <div className="min-w-0 flex-1">
+        <div className="whitespace-pre-wrap break-words text-[15px] text-[var(--ink)]">{note ? note.text : act.body}</div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[13px] text-[var(--ink-muted)]">
+          {note && <Icon name={CHANNEL_ICON[note.channel]} size={12} />}
+          <span>{note ? (note.channel === 'note' ? 'Note' : CHANNEL_LABEL[note.channel]) : isCall ? 'Call' : isWhatsApp ? 'WhatsApp' : act.kind === 'request' ? 'Request' : act.kind === 'money' ? 'Finances' : isProgress ? 'Progress' : act.kind.replace('_', ' ')}</span>
           <span>·</span>
           <span>{timeAgo(act.created_at)}</span>
           {who && <><span>·</span><span>by {who}</span></>}

@@ -228,7 +228,7 @@ export function filtersToParams(f: PipelineFilters, base = new URLSearchParams()
 
 // ── Sorting ─────────────────────────────────────────────────────────
 
-export type SortKey = 'tier' | 'name' | 'household' | 'benefits' | 'area' | 'officer' | 'budget' | 'stage' | 'updated';
+export type SortKey = 'tier' | 'name' | 'household' | 'benefits' | 'area' | 'officer' | 'budget' | 'stage' | 'updated' | 'contacted';
 
 const HOUSEHOLD_ORDER: Record<string, number> = { single: 0, couple: 1, family: 2, other: 3 };
 const benefitScore = (a: Applicant) => benefitsOf(a).reduce((s, b) => s + ({ lcwra: 8, pip: 4, uc: 2, hb: 1 })[b.key], 0);
@@ -237,7 +237,7 @@ const time = (s: string) => new Date(s).getTime();
 
 /** Natural order per key (dir 1): tier 1 first, A to Z, most benefits first,
  *  newest first. dir -1 reverses. Ties fall back to name. */
-export function sortApplicants(list: Applicant[], key: SortKey, dir: 1 | -1): Applicant[] {
+export function sortApplicants(list: Applicant[], key: SortKey, dir: 1 | -1, lastContactAt: (a: Applicant) => string | null = () => null): Applicant[] {
   const cmp = (a: Applicant, b: Applicant): number => {
     switch (key) {
       case 'tier': {
@@ -268,6 +268,12 @@ export function sortApplicants(list: Applicant[], key: SortKey, dir: 1 | -1): Ap
       case 'budget': return (((a.budget_pcm ?? 0) - (b.budget_pcm ?? 0)) || byName(a, b)) * dir;
       case 'stage': return ((APPLICANT_STAGES.indexOf(a.stage) - APPLICANT_STAGES.indexOf(b.stage)) || byName(a, b)) * dir;
       case 'updated': return (time(b.updated_at) - time(a.updated_at)) * dir;
+      case 'contacted': {
+        // most recently contacted first; never contacted always last
+        const x = lastContactAt(a), y = lastContactAt(b);
+        if (!x !== !y) return x ? -1 : 1;
+        return (((y ? time(y) : 0) - (x ? time(x) : 0)) || byName(a, b)) * dir;
+      }
     }
   };
   return [...list].sort(cmp);

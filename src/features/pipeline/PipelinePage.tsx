@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useApplicants, useCalls, useDeals, useMoveStage, useDeleteApplicant, usePeople, useProviders, useRequests } from '../../lib/hooks';
+import { useApplicants, useCalls, useDeals, useLastContacts, useMoveStage, useDeleteApplicant, usePeople, useProviders, useRequests } from '../../lib/hooks';
+import { CHANNEL_LABEL } from '../../lib/contacts';
+import type { LastContact } from '../../lib/contacts';
 import { Avatar, Button, Card, Help, Icon, PageHeader, TierBadge, UrgentChip, useToast } from '../../components/ui';
 import { HousingOfficersBox } from './Officers';
 import { DuplicatesBox } from './Duplicates';
 import { openGroups } from '../../lib/duplicates';
-import { callState, dayLabel, dayWord, lastCallMap, OUTCOME_LABEL, todayIso } from '../../lib/calls';
+import { callState, dayLabel, dayWord, lastCallMap, todayIso } from '../../lib/calls';
 import { readNotes } from '../../lib/readNotes';
 import type { CallState } from '../../lib/calls';
 import { APPLICANT_STAGES } from '../../types/extraction';
 import type { ApplicantStage } from '../../types/extraction';
-import type { Applicant, Call, Deal, ProviderRequest } from '../../lib/types';
+import type { Applicant, Deal, ProviderRequest } from '../../lib/types';
 import { RequestChip } from '../requests/RequestSheet';
 import { coldDays, DEAL_STEPS, isLive, stuckDays } from '../../lib/progress';
 import { DealChip, StuckChip } from '../progress/Progress';
@@ -32,7 +34,7 @@ const PICKABLE_STAGES: ApplicantStage[] = APPLICANT_STAGES.filter((s) => s !== '
 
 const SORT_OPTIONS: Array<[SortKey, string]> = [
   ['tier', 'Tier'], ['name', 'Name'], ['officer', 'Housing officer first'], ['household', 'Client type'], ['benefits', 'Benefits'],
-  ['area', 'Area'], ['budget', 'Budget'], ['stage', 'Stage'], ['updated', 'Recently updated'],
+  ['area', 'Area'], ['budget', 'Budget'], ['stage', 'Stage'], ['contacted', 'Recently contacted'], ['updated', 'Recently updated'],
 ];
 
 const PROGRESS_LABEL: Record<PipelineFilters['progress'], string> = {
@@ -40,12 +42,12 @@ const PROGRESS_LABEL: Record<PipelineFilters['progress'], string> = {
 };
 
 const CALLS_LABEL: Record<PipelineFilters['calls'], string> = {
-  any: 'Any', due: 'Next step due', never: 'New, not contacted', scheduled: 'Next step booked',
+  any: 'Any', due: 'Next step due', never: 'Never contacted', scheduled: 'Next step booked',
 };
 
 const TYPE_SHORT: Record<string, string> = { single: 'Single', couple: 'Couple', family: 'Family', other: 'Other' };
 
-const SORT_KEYS: SortKey[] = ['tier', 'name', 'household', 'benefits', 'area', 'budget', 'stage', 'updated'];
+const SORT_KEYS: SortKey[] = SORT_OPTIONS.map(([k]) => k);
 
 function sortFromParams(p: URLSearchParams): { key: SortKey; dir: 1 | -1 } {
   const k = p.get('sort') as SortKey | null;
@@ -65,6 +67,7 @@ export function PipelinePage() {
   const { data: applicants = [], isLoading } = useApplicants();
   const { calls } = useCalls();
   const last = useMemo(() => lastCallMap(calls), [calls]);
+  const contacts = useLastContacts(); // notes, calls and WhatsApp sends
   const { deals, ready: progressReady } = useDeals();
   const { requests } = useRequests();
   const { providers } = useProviders();
@@ -141,7 +144,7 @@ export function PipelinePage() {
     const byCalls = (a: Applicant) => {
       if (filters.calls === 'any') return true;
       const st = callState(a, last.get(a.id));
-      if (filters.calls === 'never') return !last.has(a.id);
+      if (filters.calls === 'never') return !contacts.has(a.id);
       if (filters.calls === 'scheduled') return st.kind === 'scheduled';
       return st.kind === 'due' || (st.kind === 'first' && st.date <= today);
     };
@@ -157,8 +160,9 @@ export function PipelinePage() {
       if (filters.progress === 'viewing') return pr.lead?.status === 'viewing';
       return pr.lead?.status === 'offered' || pr.lead?.status === 'accepted';
     };
-    return sortApplicants(applyFilters(applicants, filters, (a) => textIndex.get(a.id) ?? '').filter(byCalls).filter(byOwner).filter(byProgress), sortKey, dir);
-  }, [applicants, filters, textIndex, sortKey, dir, last, people.meId, progressOf]);
+    return sortApplicants(applyFilters(applicants, filters, (a) => textIndex.get(a.id) ?? '').filter(byCalls).filter(byOwner).filter(byProgress),
+      sortKey, dir, (a) => contacts.get(a.id)?.at ?? null);
+  }, [applicants, filters, textIndex, sortKey, dir, last, contacts, people.meId, progressOf]);
 
   const stageCounts = useMemo(() => {
     const m = new Map<string, number>();
@@ -453,7 +457,7 @@ export function PipelinePage() {
                   ) : (
                     <div className="text-[13px] text-[var(--ink-muted)]">No housing officer</div>
                   )}
-                  <CallCell state={callState(a, last.get(a.id))} lastOutcome={last.get(a.id)?.outcome} lastAt={last.get(a.id)?.created_at} />
+                  <CallCell state={callState(a, last.get(a.id))} contact={contacts.get(a.id) ?? null} />
                 </div>
 
                 {/* Stage */}
@@ -544,7 +548,7 @@ function Highlight({ text, terms }: { text: string; terms: string[] }) {
 }
 
 /** When the next step is due, and the last call if there was one, for a pipeline row. Quiet on purpose: new clients show nothing. */
-function CallCell({ state, lastOutcome, lastAt }: { state: CallState; lastOutcome?: Call['outcome']; lastAt?: string }) {
+function CallCell({ state, contact }: { state: CallState; contact: LastContact | null }) {
   const today = todayIso();
   const next = state.kind === 'due' || state.kind === 'scheduled' ? state.date : null;
   const dueNow = state.kind === 'due' || (state.kind === 'first' && state.date <= today);
@@ -555,10 +559,9 @@ function CallCell({ state, lastOutcome, lastAt }: { state: CallState; lastOutcom
           <Icon name="calendar" size={13} /> {next < today ? `Overdue, ${dayWord(next)}` : dayLabel(next)}
         </span>
       ) : null}
-      {lastOutcome && lastAt && (
-        <span className="text-[var(--ink-muted)]">{OUTCOME_LABEL[lastOutcome]}, {timeAgo(lastAt)}</span>
-      )}
-      {!lastOutcome && !next && <span className="text-[var(--ink-muted)]">·</span>}
+      <span className="truncate text-[var(--ink-muted)]" title={contact ? contact.text : undefined}>
+        {contact ? `Last contact ${timeAgo(contact.at)} (${CHANNEL_LABEL[contact.channel]})` : 'Not contacted yet'}
+      </span>
     </div>
   );
 }

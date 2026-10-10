@@ -1,4 +1,5 @@
 import type { Extraction } from '../types/extraction';
+import { readHouseholdText } from './readNotes';
 import { toE164 } from './format';
 
 /** Raw key/value pairs from a keellettings.com enquiry (email body or Netlify
@@ -23,22 +24,10 @@ function fieldsFromEmail(text: string): EnquiryFields {
   return out;
 }
 
-/** Parse household size from free text, e.g. "me and my 3 daughters". */
-function parseHousehold(message: string): { adults: number; children: number } {
-  let adults = 1; // the enquirer
-  let children = 0;
-
-  const kids = message.match(/(\d+)\s*(child|children|kid|kids|son|sons|daughter|daughters)/i);
-  if (kids) children = parseInt(kids[1], 10) || 0;
-
-  // "me and my partner/wife/husband/family"
-  if (/\b(my (partner|wife|husband)|with my partner)\b/i.test(message)) adults = 2;
-  const familyOf = message.match(/family of\s*(\d+)/i);
-  if (familyOf) {
-    const total = parseInt(familyOf[1], 10) || 0;
-    if (total > 0) { adults = Math.min(2, total); children = Math.max(0, total - adults); }
-  }
-  return { adults, children };
+/** Who is moving in, from the message: the same reading the client page uses ("my 13-year-old daughter" is a family). */
+function parseHousehold(message: string): { adults: number; children: number; household_type?: string } {
+  const h = readHouseholdText(message);
+  return { adults: h?.adults ?? 1, children: h?.children ?? 0, household_type: h && h.confidence >= 0.8 ? h.type : undefined };
 }
 
 /** Parse a budget figure (pcm) from free text. Returns the upper bound of any
@@ -69,7 +58,7 @@ function enquiryToExtraction(fields: EnquiryFields): Extraction {
   const message = fields['Message'] ?? '';
   const phone = fields['Phone'] ? toE164(fields['Phone']) ?? fields['Phone'] : undefined;
 
-  const { adults, children } = parseHousehold(message);
+  const { adults, children, household_type } = parseHousehold(message);
   const budget = parseBudget(message);
   const beds = parseBeds(message);
 
@@ -96,6 +85,7 @@ function enquiryToExtraction(fields: EnquiryFields): Extraction {
       email: fields['Email'] || undefined, // the applicant's own email, not a referring contact
       adults,
       children,
+      household_type,
       budget_pcm: budget,
       requirements,
       notes: message || undefined, // kept on the client so you can see and search what they want

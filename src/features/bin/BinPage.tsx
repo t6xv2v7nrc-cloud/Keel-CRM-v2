@@ -303,6 +303,7 @@ export function BinPage() {
             <ReviewCard
               key={item.id}
               itemId={item.id}
+              receivedAt={item.created_at}
               imagePath={item.image_path}
               extraction={item.extraction!}
               matches={item.matches}

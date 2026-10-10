@@ -68,6 +68,38 @@ check('Weekly: £300 a week becomes £1,300 pcm', weekly.suggestions.some((s) =>
 check('Weekly: "Single," at the start reads as single', weekly.suggestions.some((s) => s.field === 'Household' && s.value === 'Single'));
 check('Weekly: sofa surfing', weekly.suggestions.some((s) => s.field === 'Situation' && /Sofa surfing/.test(s.value)));
 
+// Household, read as a whole: anyone else moving in decides it
+const household = (notes: string) => {
+  const r = readNotes(make({ notes }));
+  const get = (field: string) => r.suggestions.find((s) => s.field === field)?.value ?? null;
+  return { type: get('Household'), children: get('Children'), adults: get('Adults') };
+};
+const alexandra = household('I’m looking for a 1 or 2 bedroom property in New Cross area. It would be for myself and my 13-year-old daughter, and I’m looking for a long-term rental.');
+check('mum and her 13-year-old daughter is a family with 1 child, not single', alexandra.type === 'Family with children' && alexandra.children === '1', JSON.stringify(alexandra));
+const cases: Array<[string, string | null, string | null, string | null]> = [
+  // notes, household, children, adults
+  ['Me and my son and daughter need a 2 bed.', 'Family with children', '2', null],
+  ['I have a 5 year old and I am pregnant.', 'Family with children', '1', null],
+  ['Single mum with a baby, need somewhere urgently.', 'Family with children', '1', null],
+  ['Single mum, two kids aged 4 and 9.', 'Family with children', '2', null],
+  ['Me, my husband and our 3 children.', 'Family with children', '3', '2'],
+  ['My partner and I are looking for a 1 bed.', 'Couple', null, '2'],
+  ['I am pregnant, due in March.', 'Family with children', null, null],
+  ['Just for myself, a studio is fine.', 'Single', null, null],
+  ['For myself and my partner.', 'Couple', null, '2'],
+  ['For me and my 19 year old daughter, we both work.', 'Other', null, '2'],
+  ['I get child benefit for my nephew but he lives with his dad. I live alone.', 'Single', null, null],
+  ['I don’t have any children, it is just me.', 'Single', null, null],
+  ['Looking with my twins, they are 6.', 'Family with children', '2', null],
+  ['We are a family of 4, me, my wife and two kids.', 'Family with children', '2', '2'],
+  ['Must be a 2 bed, good with kids next door is fine.', null, null, null],
+];
+for (const [notes, type, children, adults] of cases) {
+  const h = household(notes);
+  check(`"${notes}" reads as ${type ?? 'nothing'}${children ? `, ${children} children` : ''}${adults ? `, ${adults} adults` : ''}`,
+    h.type === type && h.children === children && h.adults === adults, JSON.stringify(h));
+}
+
 const filled = show('Already filled', make({ budget_pcm: 1650, household_type: 'family', children: 3, notes: 'Me and my 3 kids, budget up to £1,650 pcm.' }));
 check('Already filled: nothing to suggest', filled.suggestions.length === 0, filled.suggestions.map((s) => s.field).join(', '));
 

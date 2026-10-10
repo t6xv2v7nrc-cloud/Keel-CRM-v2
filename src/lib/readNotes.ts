@@ -120,37 +120,110 @@ function readLha(text: string, out: Candidate[]) {
   if (any) out.push({ key: 'lha', field: 'LHA band', patch: { lha_band: 'LHA rate' }, value: 'LHA rate', confidence: 0.6, evidence: evidence(text, any.index, any[0].length), note: 'Says LHA but not which band' });
 }
 
+// ── Household ──────────────────────────────────────────────────────
+// Read as a whole: anyone else moving in decides it. A child (by count, by
+// "my 13-year-old daughter", "my son and daughter", "single mum", a pregnancy)
+// makes a family; a partner a couple; a friend or relative to share with,
+// other. "For myself" only means single when nobody else is mentioned.
+
+const CHILD = 'son|daughter|baby|child|boy|girl|toddler|newborn|little one|kid';
+const CHILDREN = 'sons|daughters|babies|children|kids|boys|girls|twins|little ones';
+const NOT_A_CHILD = '(?!\\s*(?:benefit|tax|maintenance|support|care|minder)\\b)(?!\'s father|\'s mother|\'s dad|\'s mum)';
+const ageOf = (s: string): number | null => {
+  const m = /(\d{1,2})\s*-?\s*(?:years?|yrs?|y\/o|yo)\b|\b(?:aged?|is)\s+(\d{1,2})\b/i.exec(s);
+  if (m) return Number(m[1] ?? m[2]);
+  return /\b\d{1,2}\s*-?\s*(?:months?|weeks?)\b/i.test(s) ? 0 : null;
+};
+
+export interface HouseholdReading {
+  type: 'single' | 'couple' | 'family' | 'other';
+  confidence: number;
+  /** children moving in, when it can be told */
+  children?: number;
+  /** adults moving in, the client included, when it can be told */
+  adults?: number;
+  /** where in the text it was read from */
+  at: number;
+  length: number;
+  note?: string;
+}
+
+/** Who is moving in, read from what the client wrote; null if it does not say. */
+export function readHouseholdText(text: string): HouseholdReading | null {
+  type Hit = { at: number; length: number };
+  const kids: Array<Hit & { n: number | null }> = []; // n: how many, null if not said
+  const grownUps: Hit[] = [];                         // adult children or relatives moving in
+  // already read as part of an earlier hit (the two ranges overlap)
+  const seen = (at: number, length: number) => [...kids, ...grownUps].some((h) => at < h.at + h.length && h.at < at + length);
+
+  // "3 kids", "two young children"
+  for (const m of text.matchAll(new RegExp(`\\b(\\d|one|two|three|four|five|six|seven)\\s+(?:young\\s+|little\\s+|small\\s+)?(${CHILDREN}|${CHILD})\\b${NOT_A_CHILD}`, 'gi'))) {
+    if (negated(text, m.index)) continue;
+    kids.push({ at: m.index, length: m[0].length, n: num(m[1]) });
+  }
+  // "my 13-year-old daughter", "my son and daughter", "and a baby", "with my kids"
+  for (const m of text.matchAll(new RegExp(`\\b(my|our|and|with|plus)\\s+((?:[\\w'-]+\\s+){0,3}?)(${CHILD}|${CHILDREN})\\b${NOT_A_CHILD}`, 'gi'))) {
+    if (seen(m.index, m[0].length) || negated(text, m.index)) continue;
+    // "with kids" alone can be general ("good with kids"); "with my kids", "with a baby" cannot
+    if (/^(with|plus)$/i.test(m[1]) && !/\b(my|our|a|an|the|\d+|one|two|three|four)\b/i.test(m[2])) continue;
+    const plural = new RegExp(`^(${CHILDREN})$`, 'i').test(m[3]);
+    const age = ageOf(m[2]) ?? ageOf(text.slice(m.index + m[0].length, m.index + m[0].length + 16));
+    if (age !== null && age >= 18) { grownUps.push({ at: m.index, length: m[0].length }); continue; }
+    kids.push({ at: m.index, length: m[0].length, n: m[3].toLowerCase() === 'twins' ? 2 : plural ? null : 1 });
+  }
+  // "a 5 year old", "my 8 month old"
+  for (const m of text.matchAll(/\b(?:a|an|my|our)\s+(\d{1,2})\s*-?\s*(year|yr|month|week)s?\s*-?\s*old\b(?!\s+(?:property|flat|house|home|building|block))/gi)) {
+    if (seen(m.index, m[0].length) || negated(text, m.index)) continue;
+    if (/^(year|yr)$/i.test(m[2]) && Number(m[1]) >= 18) continue;
+    kids.push({ at: m.index, length: m[0].length, n: 1 });
+  }
+  const singleParent = /\bsingle (mum|mother|dad|father|parent)\b/i.exec(text);
+  const familyOf = /\bfamily of (\d|two|three|four|five|six|seven)\b/i.exec(text);
+  const expecting = /\b(pregnant|expecting a baby|expecting my first|baby on the way|due in)\b/i.exec(text);
+  const partner = /\b(me and my|with my|my|and my)\s+(partner|wife|husband|girlfriend|boyfriend|fianc[eé]e?|other half)\b|\bwe are a couple\b/i.exec(text);
+  const sharer = /\b(me and my|with my|my|and my)\s+(friend|flatmate|housemate|sister|brother|mum|mother|dad|father|cousin|nan|gran|grandmother|grandfather|aunt|uncle)\b/i.exec(text);
+  const sharing = !!sharer && !negated(text, sharer.index) && /\b(we|us|together|share|sharing|total|combined|both|live with|living with|for (me|myself) and)\b/i.test(text);
+  const withPartner = !!partner && !negated(text, partner.index);
+
+  if (kids.length || singleParent || familyOf || expecting) {
+    const counted = kids.every((k) => k.n !== null) && kids.length > 0 ? kids.reduce((s, k) => s + (k.n ?? 0), 0) : undefined;
+    const hits: Hit[] = [...kids, ...[singleParent, familyOf, expecting].flatMap((m) => (m ? [{ at: m.index, length: m[0].length }] : []))];
+    const first = hits.sort((a, b) => a.at - b.at)[0];
+    const adults = withPartner ? 2 : singleParent ? 1 : undefined;
+    const familySize = familyOf ? num(familyOf[1]) : null;
+    return {
+      type: 'family', at: first.at, length: first.length,
+      confidence: kids.length ? 0.9 : singleParent || familyOf ? 0.8 : 0.6,
+      children: counted ?? (familySize && adults ? Math.max(0, familySize - adults) : undefined),
+      adults: adults ?? (kids.length && !withPartner && !sharing ? 1 : undefined),
+      note: !kids.length && expecting ? 'Expecting a baby' : undefined,
+    };
+  }
+  if (withPartner) return { type: 'couple', confidence: 0.85, adults: 2, at: partner!.index, length: partner![0].length };
+  if (sharing || grownUps.length) {
+    const hit = sharer && sharing ? { at: sharer.index, length: sharer[0].length } : grownUps[0];
+    return { type: 'other', confidence: 0.6, adults: 2, at: hit.at, length: hit.length,
+      note: grownUps.length && !sharing ? 'An adult son or daughter moving in too' : 'Looking to live with someone who is not a partner' };
+  }
+  const single = /\b(i'?m|i am)\s+(single|on my own|alone)\b|\bjust (me|myself)\b|\bonly me\b|\bfor myself\b(?!\s+and\b)|\bi live alone\b|\bsingle (person|man|woman|male|female)\b/i.exec(text);
+  if (single && !negated(text, single.index)) return { type: 'single', confidence: 0.8, adults: 1, at: single.index, length: single[0].length };
+  // "Single, sofa surfing..." at the start of a sentence (not "single bed", "single mum"...)
+  const bare = /(?:^|[.\n]\s*)(single)\b(?![- ](?:bed|room|parent|mum|mother|dad|father|glazing))/i.exec(text);
+  if (bare) return { type: 'single', confidence: 0.65, at: bare.index + bare[0].length - bare[1].length, length: bare[1].length };
+  return null;
+}
+
 function readHousehold(text: string, out: Candidate[]) {
-  const kids = /\b(\d|one|two|three|four|five|six|seven)\s+(?:young\s+|little\s+)?(kids|children|child|sons|daughters|boys|girls)\b/i.exec(text);
-  if (kids) {
-    const n = num(kids[1]);
-    out.push({ key: 'household', field: 'Household', patch: { household_type: 'family' }, value: HOUSEHOLD_LABEL.family, confidence: 0.85, evidence: evidence(text, kids.index, kids[0].length) });
-    out.push({ key: 'children', field: 'Children', patch: { children: n }, value: String(n), confidence: 0.85, evidence: evidence(text, kids.index, kids[0].length) });
-  } else {
-    const child = /\b(my|our)\s+(son|daughter|baby|child|kids|children|little one)\b|\bfamily of (\d|three|four|five|six)\b|\b(pregnant|expecting a baby)\b/i.exec(text);
-    if (child) {
-      out.push({ key: 'household', field: 'Household', patch: { household_type: 'family' }, value: HOUSEHOLD_LABEL.family,
-        confidence: child[4] ? 0.6 : 0.8, evidence: evidence(text, child.index, child[0].length), note: child[4] ? 'Expecting a baby' : undefined });
-    }
+  const h = readHouseholdText(text);
+  if (!h) return;
+  const ev = evidence(text, h.at, h.length);
+  const value = h.type === 'other' && /not a partner/.test(h.note ?? '') ? `${HOUSEHOLD_LABEL.other} (sharing)` : HOUSEHOLD_LABEL[h.type];
+  out.push({ key: 'household', field: 'Household', patch: { household_type: h.type }, value, confidence: h.confidence, evidence: ev, note: h.note });
+  if (h.children !== undefined && h.children > 0) {
+    out.push({ key: 'children', field: 'Children', patch: { children: h.children }, value: String(h.children), confidence: Math.min(0.85, h.confidence), evidence: ev });
   }
-  const partner = /\b(me and my|with my|my)\s+(partner|wife|husband|girlfriend|boyfriend|fianc[eé]e?|other half)\b|\bwe are a couple\b/i.exec(text);
-  if (partner) {
-    out.push({ key: 'household', field: 'Household', patch: { household_type: 'couple' }, value: HOUSEHOLD_LABEL.couple, confidence: kids ? 0.4 : 0.8, evidence: evidence(text, partner.index, partner[0].length) });
-    out.push({ key: 'adults', field: 'Adults', patch: { adults: 2 }, value: '2', confidence: 0.75, evidence: evidence(text, partner.index, partner[0].length) });
-  }
-  const sharer = /\b(me and my|with my|my)\s+(friend|flatmate|housemate|sister|brother|mum|mother|dad|father|cousin)\b/i.exec(text);
-  if (sharer && /\b(we|us|together|share|sharing|total|combined|both)\b/i.test(text)) {
-    out.push({ key: 'household', field: 'Household', patch: { household_type: 'other' }, value: `${HOUSEHOLD_LABEL.other} (sharing)`, confidence: 0.6, evidence: evidence(text, sharer.index, sharer[0].length), note: 'Looking to live with someone who is not a partner' });
-    out.push({ key: 'adults', field: 'Adults', patch: { adults: 2 }, value: '2', confidence: 0.6, evidence: evidence(text, sharer.index, sharer[0].length) });
-  }
-  const single = /\b(i'?m|i am)\s+(single|on my own|alone)\b|\bjust (me|myself)\b|\bonly me\b|\bfor myself\b|\bi live alone\b|\bsingle (person|man|woman|male|female|mum|dad)\b/i.exec(text);
-  if (single && !negated(text, single.index)) {
-    out.push({ key: 'household', field: 'Household', patch: { household_type: 'single' }, value: HOUSEHOLD_LABEL.single, confidence: 0.8, evidence: evidence(text, single.index, single[0].length) });
-  } else {
-    // "Single, sofa surfing..." at the start of a sentence (not "single bed", "single mum"...)
-    const bare = /(?:^|[.\n]\s*)(single)\b(?![- ](?:bed|room|parent|mum|mother|dad|father|glazing))/i.exec(text);
-    if (bare) out.push({ key: 'household', field: 'Household', patch: { household_type: 'single' }, value: HOUSEHOLD_LABEL.single, confidence: 0.65,
-      evidence: evidence(text, bare.index + bare[0].length - bare[1].length, bare[1].length) });
+  if (h.adults !== undefined && h.adults > 1) {
+    out.push({ key: 'adults', field: 'Adults', patch: { adults: h.adults }, value: String(h.adults), confidence: 0.75, evidence: ev });
   }
 }
 
