@@ -171,7 +171,7 @@ export const HELP = {
   money: {
     title: 'Finances',
     body: [
-      'What Keel is owed and what could come in. Owed is every letting fee and council incentive still to come in, soonest due first; anything past its due date is flagged overdue. Potential is fees from clients going for a property. Paid is what has come in.',
+      'What Keel is owed and what could come in. Owed is every letting fee and council incentive still to come in, soonest due first; anything past its due date is flagged overdue. Potential is fees from clients with a viewing booked or further. Paid is what has come in.',
       'When a client is marked as moved in on their Progress, the letting fee is added by itself: from the property\'s provider (Watermint, Zuber...) at their usual fee, or from the landlord. Add an incentive from the client\'s page if the council pays one.',
       'An amount can be typed in, or worked out from the property\'s rent: a percentage of a month\'s rent, or a number of weeks\' rent (a week is the monthly rent times 12, divided by 52). Change the rent if the listing was wrong.',
       'The due date is worked out from the sign-up date: the provider\'s own rule if it has one (say 1 month after sign up), otherwise the standard in Team settings. Some providers only pay once the client\'s first month\'s rent is in: those fees wait for it, with the date it is expected on the calendar. Press First rent paid when it arrives and the fee falls due. You can change any date by hand.',
@@ -188,17 +188,17 @@ export const HELP = {
   potential: {
     title: 'Potential',
     body: [
-      'Letting fees that could come in from clients going for a property: a viewing booked, viewed, an offer made or accepted. Offers made and accepted are counted as likely. Properties only sent, or clients only interested, are listed as early: they count in the ghost total but not in Potential.',
-      'Each client is counted once, at the property they have got furthest with, and each property once, as it can only be let once. Clients who have moved in are on Owed instead.',
+      'Letting fees that could come in from clients with a viewing booked, viewed, an offer made or accepted. Offers made and accepted are counted as likely. Properties only sent, or clients only interested, do not count.',
+      'Several clients can be booked to view the same property, and each of them counts. Each client is counted once, at the property they have got furthest with, as they only move in once. Clients who have moved in are on Owed instead.',
       'The fee is the provider\'s usual fee from Settings, Providers, worked out from the rent if they pay a percentage or weeks of rent. Fees from landlords, or from providers with no usual fee, show as not known.',
     ],
   },
   ghost: {
     title: 'Ghost total',
     body: [
-      'The size of the whole pipeline as one number: everything still owed, plus a fee for every client going for a property, from a property just sent to an offer accepted. It is what would come in if every one of them came good, so it is a ghost, not money in the bank. Paid money is not in it.',
-      'The bar shows what it is made of, from solid to faint: owed (clients who have moved in), offers made or accepted, viewings, then properties only sent or clients only interested.',
-      'Each client counts once, at the property they have got furthest with, and each property once. Fees are the provider\'s usual fee, worked out from the rent where they pay that way; fees nobody can work out yet (a landlord, or no rent) are counted as not known, and clients with no property yet are not in it.',
+      'The size of the whole pipeline as one number: everything still owed, plus a fee for every client with a viewing booked or further (viewed, an offer made or accepted). Properties only sent do not count. It is what would come in if every one of them came good, so it is a ghost, not money in the bank. Paid money is not in it.',
+      'The bar shows what it is made of, from solid to faint: owed (clients who have moved in), offers made or accepted, then viewings.',
+      'Several clients booked to view the same property each count. Each client counts once, at the property they have got furthest with. Fees are the provider\'s usual fee, worked out from the rent where they pay that way; fees nobody can work out yet (a landlord, or no rent) are counted as not known.',
     ],
   },
   moneyCalendar: {

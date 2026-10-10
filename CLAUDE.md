@@ -83,8 +83,9 @@ supabase/migrations/
   one tap to move them to Lost, and they are left out of "Needs a push". Home counts properties with a strong match.
 - Calls are kept quiet on request: not in the top bar (the /calls page stays, linked from a client's Next step card),
   not on Home, no green "Log call" button. Home shows next steps due instead. Do not make calls prominent again unasked.
-- Finances leads with the ghost total: everything owed plus a fee for every client going for a property (sent to accepted),
-  each client and property once (`ghostTotal` in money.ts). "Potential" alone is a viewing booked or further.
+- Finances leads with the ghost total: everything owed plus a fee for every client with a viewing booked or further
+  (viewing, viewed, offered, accepted; `ghostTotal` and `potentials` in money.ts). Properties only sent or "interested" never
+  count. Several clients booked to view one property each count; each client counts once (they move in once).
 
 ## Env vars
 

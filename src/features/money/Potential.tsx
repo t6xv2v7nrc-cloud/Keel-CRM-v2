@@ -1,30 +1,30 @@
 import { Link } from 'react-router-dom';
 import { Card, CardHeader, Empty, Help } from '../../components/ui';
 import { money, moneyFee } from '../../lib/format';
-import { basisRule, isEarly, LANDLORD, PIPELINE_STEPS } from '../../lib/money';
+import { basisRule, LANDLORD, POTENTIAL_STEPS } from '../../lib/money';
 import type { Potential, PotentialTotals } from '../../lib/money';
 import { DEAL_LABEL, shortAddress, viewingShort } from '../../lib/progress';
 import type { Applicant, DealStatus } from '../../lib/types';
 
-/** Fees that could come in, furthest along first: accepted, offer made, viewed, viewing booked, then the early ones (interested, sent). */
+/** Fees that could come in, furthest along first: accepted, offer made, viewed, viewing booked. */
 export function PotentialList({ pots, byId, totals }: { pots: Potential[]; byId: Map<string, Applicant>; totals: PotentialTotals }) {
   if (pots.length === 0) {
     return (
       <Card>
         <Empty icon="trend" title="No potential fees yet">
-          When a property is sent to a client, the letting fee they could bring in shows here. Track properties for a client on their Progress.
+          When a viewing is booked for a client, the letting fee they could bring in shows here. Book viewings from a client's Progress.
         </Empty>
       </Card>
     );
   }
-  const steps = [...PIPELINE_STEPS].reverse() as DealStatus[];
+  const steps = [...POTENTIAL_STEPS].reverse() as DealStatus[];
   return (
     <div className="flex flex-col gap-4">
       <p className="m-0 text-[14px] text-[var(--ink-muted)]">
         {money(totals.total)} could come in from {totals.count} {totals.count === 1 ? 'client' : 'clients'} with a viewing booked or further
         {totals.likelyCount ? `, ${money(totals.likely)} of it from offers made or accepted` : ''}
         {totals.unpriced ? `. ${totals.unpriced} ${totals.unpriced === 1 ? 'fee is' : 'fees are'} not known yet (no usual fee for the payer, or no rent)` : ''}
-        {totals.earlyCount ? `. Early ones (sent or interested) add ${money(totals.early)} to the ghost total` : ''}.{' '}
+        .{' '}
         <Help topic="potential" />
       </p>
       {steps.map((step) => {
@@ -34,7 +34,7 @@ export function PotentialList({ pots, byId, totals }: { pots: Potential[]; byId:
         const unknown = group.filter((p) => p.amount == null).length;
         return (
           <Card key={step}>
-            <CardHeader title={`${DEAL_LABEL[step]}${isEarly(group[0]) ? ', early' : ''}`} sub={`${unknown === group.length ? 'fee not known' : `${money(sum)}${unknown ? ` + ${unknown} not known` : ''}`} · ${group.length}`} />
+            <CardHeader title={DEAL_LABEL[step]} sub={`${unknown === group.length ? 'fee not known' : `${money(sum)}${unknown ? ` + ${unknown} not known` : ''}`} · ${group.length}`} />
             <ul className="m-0 flex list-none flex-col divide-y divide-[var(--line)] px-4 py-0 sm:px-5">
               {group.map((p) => {
                 const client = byId.get(p.deal.applicant_id);

@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Button, Card, CardHeader, Empty, Help, Icon, PageHeader } from '../../components/ui';
 import { useApplicants, useDeals, useProperties, useProviders, useReceivables } from '../../lib/hooks';
 import { money, moneyFee, moneyShort } from '../../lib/format';
-import { byMonth, financesCsv, ghostTotal, incentiveFor, isOpen, lettingFeeFor, owed, periodDay, periods, placementOf, potentials, potentialTotals, totals } from '../../lib/money';
+import { byMonth, financesCsv, ghostTotal, incentiveFor, isOpen, lettingFeeFor, owed, periodDay, periods, placementOf, POTENTIAL_STEPS, potentials, potentialTotals, totals } from '../../lib/money';
 import { saveFile } from '../../lib/files';
 import type { GhostTotal, MonthTotal, ReceivableDraft } from '../../lib/money';
 import { councilOf, isActive } from '../../lib/search';
@@ -42,8 +42,8 @@ export function MoneyPage() {
   const pots = useMemo(() => potentials(deals, receivables, properties, providers), [deals, receivables, properties, providers]);
   const pt = potentialTotals(pots);
   const ghost = ghostTotal(receivables, pots);
-  // active clients nobody is going for a property with yet: they have no fee to count
-  const noProperty = applicants.filter((a) => isActive(a) && !deals.some((d) => d.applicant_id === a.id && d.status !== 'fell_through')).length;
+  // active clients with no viewing booked yet: they have no fee to count
+  const noProperty = applicants.filter((a) => isActive(a) && !deals.some((d) => d.applicant_id === a.id && POTENTIAL_STEPS.includes(d.status))).length;
   const months = useMemo(() => byMonth(receivables), [receivables]);
   const payers = [...new Set(receivables.map((r) => r.payer))].sort();
   const done = receivables.filter((r) => !isOpen(r));
@@ -209,13 +209,12 @@ function AccountantExport({ receivables, nameOf }: { receivables: Receivable[]; 
   );
 }
 
-/** The whole pipeline as one number, and what it is made of, from solid (owed) to faint (only sent so far). */
+/** The whole pipeline as one number, and what it is made of, from solid (owed) to faint (viewings). */
 function GhostCard({ g, noProperty, onOpen }: { g: GhostTotal; noProperty: number; onOpen: () => void }) {
   const parts: Array<{ label: string; value: number; swatch: CSSProperties }> = [
     { label: 'Owed', value: g.owed, swatch: { background: 'var(--accent)' } },
     { label: 'Offers', value: g.likely, swatch: { background: 'var(--accent)', opacity: 0.5 } },
     { label: 'Viewings', value: g.viewings, swatch: { background: 'var(--ink-faint)', opacity: 0.7 } },
-    { label: 'Sent or interested', value: g.early, swatch: { background: 'var(--surface)', boxShadow: 'inset 0 0 0 1.5px var(--ink-faint)' } },
   ];
   return (
     <Card className="flex flex-col gap-3 p-4 sm:p-5">
@@ -242,7 +241,7 @@ function GhostCard({ g, noProperty, onOpen }: { g: GhostTotal; noProperty: numbe
           </span>
         ))}
         {g.unknown > 0 && <span className="text-[var(--ink-muted)]">{g.unknown} {g.unknown === 1 ? 'fee' : 'fees'} not known yet</span>}
-        {noProperty > 0 && <span className="text-[var(--ink-muted)]">{noProperty} {noProperty === 1 ? 'client has' : 'clients have'} no property yet</span>}
+        {noProperty > 0 && <span className="text-[var(--ink-muted)]">{noProperty} {noProperty === 1 ? 'client has' : 'clients have'} no viewing booked yet</span>}
       </div>
     </Card>
   );

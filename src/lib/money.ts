@@ -1,5 +1,5 @@
 // Finances: money owed to Keel for a placement (receivables), what could come
-// in from clients going for a property (potentials), and when it all falls
+// in from clients with a viewing booked or further (potentials), and when it all falls
 // due (the calendar). A receivable is the letting fee (from a provider such as
 // Watermint or Zuber, or the landlord) or a council incentive. The page is
 // called "Finances"; files and the activity kind keep the name "money" they
@@ -285,12 +285,8 @@ export function feeChaseText(r: Receivable, provider: Pick<Provider, 'name' | 'c
 
 // ── Potential: fees that could come in ─────────────────────────────
 
-/** Every live step of a deal, earliest first: the whole pipeline, as counted in the ghost total. */
-export const PIPELINE_STEPS: DealStatus[] = ['sent', 'interested', 'viewing', 'viewed', 'offered', 'accepted'];
-/** How far a deal must have got to count as potential income: a viewing booked or further. Sent and interested are early. */
+/** How far a deal must have got to count as potential income: a viewing booked or further. Sent and interested do not count. */
 export const POTENTIAL_STEPS: DealStatus[] = ['viewing', 'viewed', 'offered', 'accepted'];
-/** Sent or interested: in the ghost total, but not yet counted as potential. */
-export const isEarly = (p: Pick<Potential, 'deal'>) => !POTENTIAL_STEPS.includes(p.deal.status);
 
 export interface Potential {
   deal: Deal;
@@ -305,31 +301,30 @@ export interface Potential {
 }
 
 /**
- * The letting fees that could come in from clients going for a property, from
- * a property sent to them up to an offer accepted: each client counted once,
- * at their furthest deal (they only move in once), and each property once (it
- * only lets once). Deals that already have a fee on Finances, or whose property is withdrawn, are left out.
- * Furthest along first. Sent and interested ones are early (see isEarly).
+ * The letting fees that could come in from clients with a viewing booked or
+ * further (viewed, an offer made or accepted). Several clients can be booked
+ * to view the same property, and each of them counts. Each client counts once,
+ * at their furthest deal, as they only move in once. Properties already let or
+ * withdrawn, and deals that already have a fee on Finances, are left out.
+ * Furthest along first.
  */
 export function potentials(deals: Deal[], receivables: Array<Pick<Receivable, 'kind' | 'deal_id' | 'applicant_id' | 'status'>>, properties: Property[], providers: Provider[]): Potential[] {
   const billedDeals = new Set(receivables.filter((r) => r.kind === 'letting_fee' && r.deal_id).map((r) => r.deal_id));
   // a fee added by hand with no deal still means that client is placed
   const billedClients = new Set(receivables.filter((r) => r.kind === 'letting_fee' && !r.deal_id && isOpen(r)).map((r) => r.applicant_id));
-  const step = (s: DealStatus) => PIPELINE_STEPS.indexOf(s);
+  const step = (s: DealStatus) => POTENTIAL_STEPS.indexOf(s);
   const live = deals
     .filter((d) => step(d.status) >= 0 && !billedDeals.has(d.id) && !billedClients.has(d.applicant_id))
     .sort((a, b) => step(b.status) - step(a.status) || b.updated_at.localeCompare(a.updated_at));
   const placeOf = (d: Pick<Deal, 'property_id' | 'address'>) => d.property_id ?? d.address.trim().toLowerCase();
+  const let_ = new Set<string>(deals.filter((d) => d.status === 'moved_in').map(placeOf));
   const clients = new Set<string>();
-  const places = new Set<string>(deals.filter((d) => d.status === 'moved_in').map(placeOf)); // already let
   const out: Potential[] = [];
   for (const d of live) {
-    const place = placeOf(d);
-    if (clients.has(d.applicant_id) || places.has(place)) continue;
-    clients.add(d.applicant_id);
-    places.add(place);
+    if (clients.has(d.applicant_id) || let_.has(placeOf(d))) continue;
     const property = (d.property_id ? properties.find((p) => p.id === d.property_id) : undefined) ?? properties.find((p) => p.address_line === d.address) ?? null;
-    if (property?.status === 'withdrawn') continue; // taken off (by hand, or with its provider): nothing to come from it
+    if (property?.status === 'withdrawn' || property?.status === 'let') continue; // nothing to come from it
+    clients.add(d.applicant_id);
     const provider = property ? providerFor(property, providers) : null;
     const rent = rentOf(property);
     const fee = usualFee(provider?.rules);
@@ -341,17 +336,12 @@ export function potentials(deals: Deal[], receivables: Array<Pick<Receivable, 'k
   return out;
 }
 
-export interface PotentialTotals {
-  total: number; count: number; unpriced: number; likely: number; likelyCount: number;
-  /** sent or interested: not counted in total, only in the ghost total */
-  early: number; earlyCount: number;
-}
+export interface PotentialTotals { total: number; count: number; unpriced: number; likely: number; likelyCount: number }
 
-/** The sum of potential fees (a viewing booked or further); "likely" is an offer made or accepted; early ones are kept apart. */
+/** The sum of potential fees (a viewing booked or further); "likely" is an offer made or accepted. */
 export function potentialTotals(list: Potential[]): PotentialTotals {
-  const t: PotentialTotals = { total: 0, count: 0, unpriced: 0, likely: 0, likelyCount: 0, early: 0, earlyCount: 0 };
+  const t: PotentialTotals = { total: 0, count: 0, unpriced: 0, likely: 0, likelyCount: 0 };
   for (const p of list) {
-    if (isEarly(p)) { t.early += p.amount ?? 0; t.earlyCount += 1; continue; }
     t.count += 1;
     if (p.amount == null) t.unpriced += 1;
     t.total += p.amount ?? 0;
@@ -370,28 +360,26 @@ export interface GhostTotal {
   likely: number;
   /** viewings booked or viewed */
   viewings: number;
-  /** properties sent, or the client is interested */
-  early: number;
   /** fees in the pipeline that cannot be worked out (no usual fee, or no rent), plus owed items with no amount */
   unknown: number;
 }
 
 /**
  * Everything that could come in if the whole pipeline came good: what is
- * owed now, plus a fee for every client going for a property. Not money in
- * the bank, which is why it is a "ghost": a headline for the size of the
- * pipeline. Paid money is not in it.
+ * owed now, plus a fee for every client with a viewing booked or further
+ * (properties only sent do not count). Not money in the bank, which is why it
+ * is a "ghost": a headline for the size of the pipeline. Paid money is not in it.
  */
 export function ghostTotal(receivables: Receivable[], pipeline: Potential[], today = todayIso()): GhostTotal {
   const t = totals(receivables, today);
-  const g: GhostTotal = { total: 0, owed: t.owed, likely: 0, viewings: 0, early: 0, unknown: t.unpriced };
+  const g: GhostTotal = { total: 0, owed: t.owed, likely: 0, viewings: 0, unknown: t.unpriced };
   for (const p of pipeline) {
+    if (!POTENTIAL_STEPS.includes(p.deal.status)) continue;
     if (p.amount == null) { g.unknown += 1; continue; }
     if (p.deal.status === 'offered' || p.deal.status === 'accepted') g.likely += p.amount;
-    else if (p.deal.status === 'viewing' || p.deal.status === 'viewed') g.viewings += p.amount;
-    else g.early += p.amount;
+    else g.viewings += p.amount;
   }
-  g.total = pence(g.owed + g.likely + g.viewings + g.early);
+  g.total = pence(g.owed + g.likely + g.viewings);
   return g;
 }
 
