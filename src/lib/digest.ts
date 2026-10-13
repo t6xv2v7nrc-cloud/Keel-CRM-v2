@@ -8,7 +8,7 @@ import { activeSettings } from './settings';
 import { isoDay } from './calls';
 import { clockTime, longDay, money } from './format';
 import { checklistProgress, coldDays, shortAddress, stuckDays } from './progress';
-import { isActive } from './search';
+import { isActive, isIced } from './search';
 import { totals } from './money';
 import { awaitingProviders, firstNameOf } from './requests';
 
@@ -59,7 +59,7 @@ export function morningDigest({ applicants, deals, receivables, requests, provid
   }
 
   // Next steps due today or overdue
-  const due = applicants.filter((a) => isActive(a) && a.next_call_at && a.next_call_at <= today)
+  const due = applicants.filter((a) => isActive(a) && !isIced(a, now) && a.next_call_at && a.next_call_at <= today)
     .sort((a, b) => a.next_call_at!.localeCompare(b.next_call_at!));
   if (due.length) {
     const overdue = due.filter((a) => a.next_call_at! < today).length;

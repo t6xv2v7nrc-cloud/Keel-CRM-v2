@@ -11,7 +11,7 @@
 import type { ApplicantStage } from '../types/extraction';
 import type { Applicant, Deal, DealStatus } from './types';
 import { activeSettings } from './settings';
-import { isActive } from './search';
+import { isActive, isIced } from './search';
 import { addDays, dayLabel, isoDay } from './calls';
 import { clockTime, longDay, shortDay } from './format';
 
@@ -132,7 +132,7 @@ export function lastMoved(a: Applicant, deals: Deal[]): string {
 
 /** Days a client has been stuck, or null if they are moving (or it does not apply at their stage). */
 export function stuckDays(a: Applicant, deals: Deal[], now = new Date()): number | null {
-  if (!isActive(a)) return null;
+  if (!isActive(a) || isIced(a, now)) return null; // on ice is meant to be still
   const limits = activeSettings().stuckAfterDays as Record<string, number>;
   const limit = limits[a.stage];
   if (!limit) return null;
@@ -148,7 +148,7 @@ export function stuckDays(a: Applicant, deals: Deal[], now = new Date()): number
  */
 export function coldDays(a: Applicant, deals: Deal[], now = new Date()): number | null {
   const limit = activeSettings().coldAfterDays;
-  if (!limit || (a.stage !== 'lead' && a.stage !== 'referred')) return null;
+  if (!limit || (a.stage !== 'lead' && a.stage !== 'referred') || isIced(a, now)) return null;
   const mine = deals.filter((d) => d.applicant_id === a.id);
   if (mine.some(isLive)) return null;
   if (a.next_call_at && a.next_call_at >= isoDay(now)) return null;

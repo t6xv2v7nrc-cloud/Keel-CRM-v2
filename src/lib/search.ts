@@ -45,6 +45,16 @@ export const isUrgent = (a: Applicant) => activeSettings().urgentLevels.includes
 /** Still being housed: a lead, referred, at a viewing or an offer. Clients who have moved in are housed, not active. */
 const ACTIVE_STAGES = new Set(['lead', 'referred', 'viewing', 'offer']);
 export const isActive = (a: Pick<Applicant, 'stage'>) => ACTIVE_STAGES.has(a.stage);
+const localDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/** On ice (0017): paused until they are ready. They come back by themselves on their return date. */
+export const isIced = (a: Pick<Applicant, 'iced_at' | 'iced_until'>, now = new Date()) =>
+  !!a.iced_at && (!a.iced_until || a.iced_until > localDay(now));
+
+/** Got in touch in the last 7 days: shown with a New badge. */
+export const isFresh = (a: Pick<Applicant, 'created_at'>, now = new Date()) =>
+  now.getTime() - new Date(a.created_at).getTime() < 7 * 86_400_000 && new Date(a.created_at).getTime() <= now.getTime() + 60_000;
+
 /** Moved in (placed, or one of the old fee stages from before Finances). */
 export const isHoused = (a: Pick<Applicant, 'stage'>) => a.stage === 'placed' || a.stage === 'fee_invoiced' || a.stage === 'fee_paid';
 
@@ -152,7 +162,7 @@ export interface PipelineFilters {
   benefits: BenefitKey[]; // must have all of these
   calls: 'any' | 'due' | 'never' | 'scheduled'; // applied by the Pipeline, which has the call log
   owner: string; // 'any' | 'me' | 'none' | a team member's id; applied by the Pipeline, which knows who is signed in
-  progress: 'any' | 'stuck' | 'cold' | 'viewing' | 'offer' | 'nothing'; // applied by the Pipeline, which has the deals
+  progress: 'any' | 'stuck' | 'cold' | 'viewing' | 'offer' | 'nothing' | 'iced'; // applied by the Pipeline, which has the deals; on ice only here
   officer: 'any' | 'yes' | 'no'; // has a housing officer (case worker)
   council: string; // 'any', 'none', or a borough
 }
@@ -169,6 +179,8 @@ export function applyFilters(
   const terms = parseQuery(f.q);
   return list.filter((a) => {
     if (f.stage === 'active' ? !isActive(a) : f.stage !== 'all' && a.stage !== f.stage) return false;
+    // clients on ice are kept out of the active list; "On ice" shows only them
+    if (f.progress === 'iced' ? !isIced(a) : f.stage === 'active' && isIced(a)) return false;
     if (f.tier !== 'any' && String(effectiveTier(a)) !== f.tier) return false;
     if (f.household !== 'any' && (householdOf(a) ?? 'unknown') !== f.household) return false;
     if (f.work !== 'any' && a.work_status !== f.work) return false;
@@ -201,7 +213,7 @@ export function filtersFromParams(p: URLSearchParams): PipelineFilters {
     benefits: (p.get('benefits') ?? '').split(',').filter((b): b is BenefitKey => BENEFITS.some((x) => x.key === b)),
     calls: oneOf(p.get('calls'), ['any', 'due', 'never', 'scheduled'] as const, 'any'),
     owner: p.get('owner') || 'any',
-    progress: oneOf(p.get('progress'), ['any', 'stuck', 'cold', 'viewing', 'offer', 'nothing'] as const, 'any'),
+    progress: oneOf(p.get('progress'), ['any', 'stuck', 'cold', 'viewing', 'offer', 'nothing', 'iced'] as const, 'any'),
     officer: oneOf(p.get('officer'), ['any', 'yes', 'no'] as const, 'any'),
     council: p.get('council') || 'any',
   };

@@ -9,6 +9,7 @@ import { computeTier, HOUSEHOLD_LABEL, tierLabel, tierNumbers, tierReason, tierS
 import { effectiveTier } from '../../lib/search';
 import { STAGE_ORDER } from '../../lib/progress';
 import { selfContainedFrom, withSelfContained } from '../../lib/propertyMatch';
+import { useFold } from '../../lib/collapse';
 import { confidenceWord, readNotes } from '../../lib/readNotes';
 import type { Evidence, Flag, Suggestion } from '../../lib/readNotes';
 import type { Applicant } from '../../lib/types';
@@ -23,6 +24,7 @@ const yesNoWord = (b: boolean | null | undefined) => (b === true ? 'yes' : b ===
  *  leave it; the tier follows the answers unless it was set by hand. */
 export function ClientDetails({ applicant }: { applicant: Applicant }) {
   const triage = useUpdateTriage();
+  const fold = useFold('client.details');
   const moveStage = useMoveStage();
   const people = usePeople();
   const { toast } = useToast();
@@ -67,11 +69,13 @@ export function ClientDetails({ applicant }: { applicant: Applicant }) {
 
   return (
     <Card id="details" className="scroll-mt-28 lg:scroll-mt-20">
-      <CardHeader icon="user" title="Client details" help="clientDetails">
+      <CardHeader icon="user" title="Client details" help="clientDetails" open={fold.open} onToggle={fold.toggle}
+        sub={fold.open ? undefined : [council || null, a.household_type ? HOUSEHOLD_LABEL[a.household_type] ?? a.household_type : null, tierLabel(effective)].filter(Boolean).join(' · ')}>
         <span className="inline-flex items-center gap-1.5 text-[13px] text-[var(--ink-muted)]">
           {triage.isPending || moveStage.isPending ? 'Saving…' : <><Icon name="check" size={13} />Saves as you go</>}
         </span>
       </CardHeader>
+      {fold.open && <>
 
       {/* Stage and tier */}
       <div className="grid grid-cols-1 gap-5 border-b border-[var(--line)] p-4 sm:p-5 md:grid-cols-[220px_1fr]">
@@ -193,6 +197,7 @@ export function ClientDetails({ applicant }: { applicant: Applicant }) {
           <Box label="Phone" value={a.officer_phone ?? ''} placeholder="Not given" mono onSave={text('Officer phone', 'officer_phone')} />
         </div>
       </Section>
+      </>}
     </Card>
   );
 }

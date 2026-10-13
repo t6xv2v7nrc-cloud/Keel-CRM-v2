@@ -42,6 +42,10 @@ export interface Applicant {
   stage_changed_at?: string | null; // when the stage last moved
   // 0010_providers_requests.sql
   share_with_landlords?: boolean;   // OK to send their details to landlords and agents
+  // 0017_on_ice.sql (undefined until that update is run)
+  iced_at?: string | null;          // put on ice: paused until they are ready
+  iced_until?: string | null;       // YYYY-MM-DD they come back by themselves; null until taken off by hand
+  iced_reason?: string | null;
   created_at: string;
   updated_at: string;
 }

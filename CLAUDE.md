@@ -34,7 +34,9 @@ src/
               shareClient.ts (a client described for a landlord or agent: first name, household, benefits, size, areas,
                               budget, council; never surname, phone, email or medical; needs share_with_landlords),
               collapse.ts (`useFold`: cards folded away on this device; CardHeader takes open/onToggle and keeps its
-                           summary (sub) in view when folded),
+                           summary (sub) in view when folded; `openCard` opens one from elsewhere; some start folded),
+              clientLayout.ts (order of the client page's cards: personal setting `clientPageOrder`, Arrange panel),
+              targets.ts (weekly, monthly, annual targets: placements moved in and fees signed up, pace; Team settings `targets`),
               help.ts (words behind the "?" help buttons)
   components/ ui primitives on tokens (Button, StageBadge, Card, Field, Toast, Icon,
               Visuals: avatars, page headers, stat tiles, SVG charts, UpdateNote for "run this migration")
@@ -93,14 +95,21 @@ supabase/migrations/
 - "Active" means still being housed (lead, referred, viewing, offer: `isActive`); moved-in clients are housed (`isHoused`).
   Leads and referrals with nothing for `coldAfterDays` (no live property, no next step booked) have gone cold: Home offers
   one tap to move them to Lost, and they are left out of "Needs a push". Home counts properties with a strong match.
+- Clients who got in touch in the last 7 days carry a New badge (`isFresh`).
+- On ice (0017: `iced_at`, `iced_until`, `iced_reason`; `isIced` in search.ts): a paused client is not matched, never stuck
+  or cold, has no next step due, and is out of the Pipeline's active list (Progress: On ice). On the return date they come
+  back by themselves with "Back from ice: check in" as their next step.
+- Home shows targets (Team settings): the week as its own card of progress bars, the month and year in a card that starts
+  folded. Bars show an even-pace marker and say On track or Behind pace in words, not colour alone.
 - A client is dated (`created_at`) from when they got in touch (their Bin item arriving), never from when it was confirmed.
-- A client page's cards (Notes and contact, Progress, Finances, Suitable properties, Timeline) fold away; the summary stays
-  in the header and the choice is remembered per device. Share (client header) sends their details to a landlord or agent
+- Every card on a client's page (Notes and contact, Progress, Finances, Suitable properties, Client details, Next step,
+  Timeline) folds away; the summary stays in the header and the choice is remembered per device. Each person arranges the
+  cards' order (Arrange, saved as their own setting). The call log is gone from the client page: notes cover calls. Share (client header) sends their details to a landlord or agent
   on WhatsApp, by email or copied, only once they agreed; it is logged (activity kind "shared"), not counted as contact.
 - Notes: each client page has Notes and contact (how you were in touch, what was said, who, when); the Pipeline shows
   last contact per client and sorts by Recently contacted.
-- Calls are kept quiet on request: not in the top bar (the /calls page stays, linked from a client's Next step card),
-  not on Home, no green "Log call" button. Home shows next steps due instead. Do not make calls prominent again unasked.
+- Calls are kept quiet on request: not in the top bar, not on Home, not on the client page (the /calls page still exists
+  but nothing links to it); log a call as a note. Home shows next steps due instead. Do not make calls prominent again unasked.
 - Finances leads with the ghost total: everything owed plus a fee for every client with a viewing booked or further
   (viewing, viewed, offered, accepted; `ghostTotal` and `potentials` in money.ts). Properties only sent or "interested" never
   count. Several clients booked to view one property each count; each client counts once (they move in once).
@@ -138,7 +147,7 @@ Never commit `.env.local`. Never expose the service role key or Anthropic key to
 - Run order matters: 0009 (deals) before 0010 (providers, requests), then 0011 (sharing default), then 0012 (receivables),
   then 0013 (finances: fees from the rent, first-rent dates, invoice numbers), then 0014 (merge duplicate clients),
   then 0015 (move-in checklist), then 0016 (dates clients confirmed from the Bin from when the Bin received them; the
-  app already does this for new ones, and the review card's "First got in touch" date can change it).
+  app already does this for new ones, and the review card's "First got in touch" date can change it), then 0017 (on ice).
 - Check every migration runs, twice, on a scratch Postgres before committing one:
   `npm i --no-save @electric-sql/pglite && node scripts/check-migrations.mjs` (it also tests the merge and invoice numbers).
 

@@ -8,7 +8,7 @@ import { useApplicants, useCalls, useDeals, usePeople, useProperties, useProvide
 import { longDay, money, timeAgo } from '../../lib/format';
 import { ghostTotal, potentials, totals as moneyTotals } from '../../lib/money';
 import { isPlaced } from '../../lib/progress';
-import { effectiveTier, isActive, isHoused, isUrgent } from '../../lib/search';
+import { effectiveTier, isActive, isHoused, isIced, isUrgent } from '../../lib/search';
 import { matchesForProperty } from '../../lib/propertyMatch';
 import { addDays, callQueue, isoDay, lastCallMap, queueLabel } from '../../lib/calls';
 import { tierColor, tierCount, tierLabel, tierNumbers, URGENCY_LABEL } from '../../lib/tiering';
@@ -16,6 +16,7 @@ import type { ApplicantStage } from '../../types/extraction';
 import type { Activity } from '../../lib/types';
 import { ThisWeek } from './ThisWeek';
 import { MorningSummary } from './MorningSummary';
+import { LongerTargets, WeeklyTargets } from './Targets';
 import { AwaitingProviders } from '../requests/AwaitingProviders';
 import { MoneyOwedSummary } from '../money/Money';
 
@@ -37,7 +38,7 @@ export function DashboardPage() {
     return (id: string) => m.get(id) ?? null;
   }, [applicants]);
 
-  const active = useMemo(() => applicants.filter(isActive), [applicants]);
+  const active = useMemo(() => applicants.filter((a) => isActive(a) && !isIced(a)), [applicants]); // on ice are paused
   const tiers = useMemo(() => {
     const counts = new Map<number, number>(tierNumbers().map((t) => [t, 0]));
     for (const a of active) counts.set(effectiveTier(a), (counts.get(effectiveTier(a)) ?? 0) + 1);
@@ -106,6 +107,9 @@ export function DashboardPage() {
       </header>
 
       <MorningSummary applicants={applicants} />
+
+      <WeeklyTargets />
+      <LongerTargets />
 
       {/* Stat tiles */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

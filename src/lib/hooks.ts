@@ -76,6 +76,38 @@ export function useUpdateTriage() {
   });
 }
 
+const ICE_UPDATE =
+  'Putting a client on ice needs a one-off database update: run supabase/migrations/0017_on_ice.sql in the Supabase SQL Editor.';
+
+/**
+ * Put a client on ice (paused until they are ready, or until a date), or take them off. On ice, their next step
+ * becomes checking in on the return date; taken off by hand, checking in today.
+ */
+export function useSetIce() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ applicant, on, until, reason }: { applicant: Applicant; on: boolean; until?: string | null; reason?: string | null }) => {
+      const first = applicant.full_name.trim().split(/\s+/)[0];
+      const why = reason?.trim() || null;
+      const patch: Record<string, unknown> = on
+        ? { iced_at: new Date().toISOString(), iced_until: until || null, iced_reason: why,
+            next_step: until ? `Back from ice: check in with ${first}` : null, next_call_at: until || null }
+        : { iced_at: null, iced_until: null, iced_reason: null, next_step: `Back from ice: check in with ${first}`, next_call_at: todayIso() };
+      const { error } = await supabase.from('applicants').update(patch).eq('id', applicant.id);
+      if (error) throw isMissingColumn(error) ? new Error(ICE_UPDATE) : error;
+      await supabase.from('activities').insert({
+        entity_type: 'applicant', entity_id: applicant.id, kind: 'updated',
+        body: on ? `Put on ice${until ? ` until ${shortDate(until)}` : ''}${why ? `: ${why}` : ''}` : 'Taken off ice',
+      });
+    },
+    onSuccess: (_d, { applicant }) => {
+      qc.invalidateQueries({ queryKey: ['applicants'] });
+      qc.invalidateQueries({ queryKey: ['applicants', applicant.id] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
 /** Delete an applicant and its activities. Calls, deals and receivables go with it (they cascade). */
 export function useDeleteApplicant() {
   const qc = useQueryClient();

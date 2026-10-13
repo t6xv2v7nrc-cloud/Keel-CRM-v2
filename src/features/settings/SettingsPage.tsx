@@ -8,7 +8,7 @@ import {
 } from '../../lib/hooks';
 import type { Applicant, DueFrom, DueRule } from '../../lib/types';
 import { DEFAULT_FEE_CHASE, DEFAULT_INVOICE_MESSAGE, DEFAULT_MOVE_IN_CHECKLIST, DEFAULT_SETTINGS, myPart, teamPart } from '../../lib/settings';
-import type { AppSettings, InvoiceSettings } from '../../lib/settings';
+import type { AppSettings, InvoiceSettings, Target, Targets } from '../../lib/settings';
 import { URGENCY_LABEL } from '../../lib/tiering';
 import { TierLogicEditor } from './TierLogicEditor';
 import { LhaSettings } from './LhaSettings';
@@ -287,6 +287,8 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
         </div>
       </Card>
 
+      <TargetsSettings draft={draft} set={set} />
+
       <ChecklistSettings draft={draft} set={set} />
 
       <Card>
@@ -351,6 +353,36 @@ function MoneySettings({ draft, set }: { draft: AppSettings; set: <K extends key
 }
 
 /** Team settings: Keel's details and bank details printed on invoices, numbering, VAT, and the WhatsApp wording. */
+/** The team's targets: placements and fees for a week, a month and a year. 0 leaves a target out. */
+function TargetsSettings({ draft, set }: { draft: AppSettings; set: <K extends keyof AppSettings>(k: K, v: AppSettings[K]) => void }) {
+  const rows: Array<[keyof Targets, string]> = [['week', 'Each week'], ['month', 'Each month'], ['year', 'Each year']];
+  const put = (k: keyof Targets, field: keyof Target, v: number) => set('targets', { ...draft.targets, [k]: { ...draft.targets[k], [field]: v } });
+  return (
+    <Card id="targets" className="scroll-mt-28">
+      <CardHeader icon="flag" title="Targets" help="targets" />
+      <div className="flex flex-col gap-3 p-5">
+        <p className="m-0 text-[15px] text-[var(--ink-muted)]">
+          Shown on Home as progress bars: the week on its own, the month and year in a card that opens. Placements are clients who moved in;
+          fees are letting fees and incentives signed up. 0 leaves a target out.
+        </p>
+        {rows.map(([k, label]) => (
+          <div key={k} className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg bg-[var(--surface-2)] px-3 py-2.5">
+            <span className="w-[110px] text-[15px] font-medium text-[var(--ink)]">{label}</span>
+            <span className="flex items-center gap-2">
+              <NumberField label="Placements" value={draft.targets[k].placements} min={0} onChange={(v) => put(k, 'placements', Math.round(v))} />
+              <span className="text-[13px] text-[var(--ink-muted)] sm:hidden">placements</span>
+            </span>
+            <span className="flex items-center gap-2">
+              <NumberField label="Fees" prefix="£" value={draft.targets[k].fees} min={0} step={100} onChange={(v) => put(k, 'fees', v)} />
+              <span className="text-[13px] text-[var(--ink-muted)] sm:hidden">in fees</span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 const lines = (t: string) => t.split('\n').map((l) => l.trim()).filter(Boolean);
 
 /** The checks ticked off for every move-in, one per line. */

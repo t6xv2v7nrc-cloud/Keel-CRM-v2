@@ -139,6 +139,27 @@ export const HELP = {
       'Active clients are the ones still being housed: lead, referred, viewing or offer. Clients who have moved in are counted as housed.',
     ],
   },
+  arrange: {
+    title: 'Arrange this page',
+    body: [
+      'Move the cards on a client\'s page up or down, say Timeline nearer the top. The order is yours: it is the same for every client, follows you from phone to computer, and does not change your co-worker\'s page.',
+      'Any card can also be folded away by tapping its title; folding is remembered on each device.',
+    ],
+  },
+  ice: {
+    title: 'On ice',
+    body: [
+      'For a client who is not ready yet: they want to think about it, are waiting on a job, or asked you to come back later. While on ice they are not matched to properties, not flagged as stuck or gone cold, and are left out of the Pipeline\'s main list (find them under Progress: On ice).',
+      'Give a date and they come back by themselves that day, with a next step to check in. Without a date they stay on ice until someone takes them off.',
+    ],
+  },
+  targets: {
+    title: 'Targets',
+    body: [
+      'How the team is doing against its targets: placements are clients who moved in during the week, month or year (Monday to Sunday for the week); fees are letting fees and incentives with a sign-up date in that time, paid or not.',
+      'The marker on each bar shows where you would be if you kept an even pace. The owner sets the targets under Settings, Team rules. A target of 0 is left out.',
+    ],
+  },
   shareClient: {
     title: 'Share a client',
     body: [

@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApplicants, useCalls, useDeals, useLastContacts, useMoveStage, useDeleteApplicant, usePeople, useProviders, useRequests } from '../../lib/hooks';
 import { CHANNEL_LABEL } from '../../lib/contacts';
 import type { LastContact } from '../../lib/contacts';
-import { Avatar, Button, Card, Help, Icon, PageHeader, TierBadge, UrgentChip, useToast } from '../../components/ui';
+import { Avatar, Button, Card, Help, IceBadge, Icon, NewBadge, PageHeader, TierBadge, UrgentChip, useToast } from '../../components/ui';
 import { HousingOfficersBox } from './Officers';
 import { DuplicatesBox } from './Duplicates';
 import { openGroups } from '../../lib/duplicates';
@@ -16,11 +16,11 @@ import type { Applicant, Deal, ProviderRequest } from '../../lib/types';
 import { RequestChip } from '../requests/RequestSheet';
 import { coldDays, DEAL_STEPS, isLive, stuckDays } from '../../lib/progress';
 import { DealChip, StuckChip } from '../progress/Progress';
-import { money, timeAgo } from '../../lib/format';
+import { money, shortDate, timeAgo } from '../../lib/format';
 import { HOUSEHOLD_LABEL, tierLabel, tierNumbers, URGENCY_LABEL, WORK_STATUS_LABEL } from '../../lib/tiering';
 import {
   applyFilters, areaOf, BENEFITS, benefitsOf, councilOf, DEFAULT_FILTERS, effectiveTier, filtersFromParams,
-  filtersToParams, hasOfficer, householdOf, isActive, isUrgent, officerName, officerOrg, parseQuery, previewText, searchText, sortApplicants,
+  filtersToParams, hasOfficer, householdOf, isActive, isFresh, isIced, isUrgent, officerName, officerOrg, parseQuery, previewText, searchText, sortApplicants,
 } from '../../lib/search';
 import type { BenefitKey, PipelineFilters, SortKey } from '../../lib/search';
 
@@ -38,7 +38,7 @@ const SORT_OPTIONS: Array<[SortKey, string]> = [
 ];
 
 const PROGRESS_LABEL: Record<PipelineFilters['progress'], string> = {
-  any: 'Any', stuck: 'Stuck', cold: 'Gone cold', viewing: 'Viewing booked', offer: 'Offer made or accepted', nothing: 'No properties sent yet',
+  any: 'Any', stuck: 'Stuck', cold: 'Gone cold', viewing: 'Viewing booked', offer: 'Offer made or accepted', nothing: 'No properties sent yet', iced: 'On ice',
 };
 
 const CALLS_LABEL: Record<PipelineFilters['calls'], string> = {
@@ -152,7 +152,7 @@ export function PipelinePage() {
       : filters.owner === 'none' ? !a.assigned_to
       : a.assigned_to === (filters.owner === 'me' ? people.meId : filters.owner);
     const byProgress = (a: Applicant) => {
-      if (filters.progress === 'any') return true;
+      if (filters.progress === 'any' || filters.progress === 'iced') return true; // on ice is applied with the other filters
       const pr = progressOf(a);
       if (filters.progress === 'stuck') return pr.stuck !== null;
       if (filters.progress === 'cold') return coldDays(a, deals) !== null;
@@ -169,7 +169,8 @@ export function PipelinePage() {
     for (const a of applicants) m.set(a.stage, (m.get(a.stage) ?? 0) + 1);
     return m;
   }, [applicants]);
-  const activeCount = applicants.filter(isActive).length;
+  const activeCount = applicants.filter((a) => isActive(a) && !isIced(a)).length;
+  const icedCount = applicants.filter((a) => isIced(a)).length;
   const withOfficer = applicants.filter((a) => isActive(a) && hasOfficer(a)).length;
   const councilCount = useMemo(() => {
     const m = new Map<string, number>();
@@ -177,10 +178,12 @@ export function PipelinePage() {
     return m;
   }, [applicants]);
   const councils = [...councilCount.keys()].sort();
-  const scopeCount = filters.stage === 'active' ? activeCount
+  const scopeCount = filters.progress === 'iced' ? icedCount
+    : filters.stage === 'active' ? activeCount
     : filters.stage === 'all' ? applicants.length
     : stageCounts.get(filters.stage) ?? 0;
-  const scopeLabel = filters.stage === 'active' ? 'active clients'
+  const scopeLabel = filters.progress === 'iced' ? 'clients on ice'
+    : filters.stage === 'active' ? 'active clients'
     : filters.stage === 'all' ? 'clients'
     : `at ${STAGE_LABEL[filters.stage].toLowerCase()}`;
 
@@ -343,6 +346,11 @@ export function PipelinePage() {
         <span className="text-[var(--ink-muted)]">
           Showing <strong className="text-[var(--ink)]">{rows.length}</strong> of {scopeCount} {scopeLabel}
         </span>
+        {icedCount > 0 && filters.progress !== 'iced' && (
+          <button type="button" onClick={() => update({ progress: 'iced' })} className="text-[var(--link)] hover:underline">
+            {icedCount} on ice
+          </button>
+        )}
         {pills.map((p) => (
           <button
             key={p.label}
@@ -399,6 +407,8 @@ export function PipelinePage() {
                         <Highlight text={a.full_name} terms={terms} />
                       </button>
                       <TierBadge tier={effectiveTier(a)} />
+                      {isFresh(a) && <NewBadge />}
+                      {isIced(a) && <IceBadge until={a.iced_until ? shortDate(a.iced_until) : null} />}
                       {isUrgent(a) && <UrgentChip reason={URGENCY_LABEL[a.urgency ?? '']} />}
                     </div>
                     {a.phone && <div className="font-mono text-[13px] text-[var(--ink-muted)]">{a.phone}</div>}

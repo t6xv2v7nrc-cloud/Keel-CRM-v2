@@ -1,23 +1,24 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
-  Avatar, Button, Card, CardHeader, Empty, Help, Icon, StageBadge, TierBadge, UrgentChip, useToast,
+  Avatar, Button, Card, CardHeader, Empty, Help, IceBadge, Icon, NewBadge, StageBadge, TierBadge, UrgentChip, useToast,
 } from '../../components/ui';
 import {
   sentKey, useActivities, useApplicant, useApplicants, useAssign, useCalls, useDeals, useDeleteApplicant, usePeople, useProperties, useProviders, useRequests,
-  useSentOnWhatsApp,
+  useSaveSettings, useSentOnWhatsApp, useSettings,
 } from '../../lib/hooks';
 import { bestFew, brief, matchesForApplicant } from '../../lib/propertyMatch';
-import { money, timeAgo } from '../../lib/format';
-import { effectiveTier, isUrgent } from '../../lib/search';
+import { money, shortDate, timeAgo } from '../../lib/format';
+import { effectiveTier, isActive, isFresh, isIced, isUrgent } from '../../lib/search';
 import { URGENCY_LABEL } from '../../lib/tiering';
 import { dayWord, todayIso } from '../../lib/calls';
-import type { Activity, Applicant, Call } from '../../lib/types';
-import { CallHistory, CallLogger } from '../calls/CallLogger';
+import type { Activity, Applicant } from '../../lib/types';
 import { CallsNeedUpdate } from '../calls/CallsPage';
 import { ClientDetails } from './ClientDetails';
 import { NotesCard } from './NotesCard';
 import { ShareClient } from './ShareClient';
+import { IceBand, IcePanel } from './IceClient';
 import { CHANNEL_ICON } from './channelIcon';
 import { CHANNEL_LABEL, readNote } from '../../lib/contacts';
 import { LhaChip } from '../properties/Lha';
@@ -28,7 +29,9 @@ import { RequestButton, RequestChip } from '../requests/RequestSheet';
 import { MoneyCard } from '../money/Money';
 import { stuckDays } from '../../lib/progress';
 import { openGroups } from '../../lib/duplicates';
-import { useFold } from '../../lib/collapse';
+import { openCard, useFold } from '../../lib/collapse';
+import { CLIENT_CARDS, cardOrder, isStandardOrder, moveCard } from '../../lib/clientLayout';
+import type { ClientCard } from '../../lib/clientLayout';
 import { clientAreas, placeKey } from '../../lib/geo';
 
 export function ApplicantPage() {
@@ -38,20 +41,31 @@ export function ApplicantPage() {
   const { data: activities = [] } = useActivities('applicant', id);
   const { calls, ready: callsReady } = useCalls();
   const deleteApplicant = useDeleteApplicant();
+  const { settings } = useSettings();
+  const save = useSaveSettings();
   const { toast } = useToast();
-  const [logging, setLogging] = useState(false);
-  const callsRef = useRef<HTMLDivElement>(null);
+  const [arranging, setArranging] = useState(false);
+  const [order, setOrder] = useState<ClientCard[] | null>(null); // while arranging, ahead of the saved setting
   const { hash } = useLocation();
   const loaded = !!applicant;
-  // Arriving from "found in notes" in the Pipeline: go straight to the details
+  // Arriving from "found in notes" in the Pipeline: open the details and go straight to them
   useEffect(() => {
-    if (loaded && hash === '#details') setTimeout(() => document.getElementById('details')?.scrollIntoView({ block: 'start' }), 50);
+    if (!loaded || hash !== '#details') return;
+    openCard('client.details');
+    setTimeout(() => document.getElementById('details')?.scrollIntoView({ block: 'start' }), 50);
   }, [loaded, hash]);
 
   if (isLoading) return <div className="grid min-h-[50vh] place-items-center text-[var(--ink-muted)]">Loading…</div>;
   if (!applicant) return <div className="grid min-h-[50vh] place-items-center text-[var(--ink-muted)]">Client not found.</div>;
 
   const mine = calls.filter((c) => c.applicant_id === applicant.id);
+  const cards = order ?? cardOrder(settings.clientPageOrder);
+  const arrange = (next: ClientCard[]) => {
+    setOrder(next);
+    save.mutate({ scope: 'me', value: { ...settings, clientPageOrder: next } }, {
+      onError: (e) => toast(`Could not save the order: ${(e as Error).message}`, 'danger'),
+    });
+  };
 
   const handleDelete = () => {
     if (!window.confirm(`Delete ${applicant.full_name}? This removes their record, calls and activity. This cannot be undone.`)) return;
@@ -61,39 +75,72 @@ export function ApplicantPage() {
     });
   };
 
+  const card: Record<ClientCard, ReactNode> = {
+    notes: <NotesCard applicant={applicant} activities={activities} calls={mine} />,
+    progress: <ProgressCard applicant={applicant} />,
+    finances: <MoneyCard applicant={applicant} />,
+    suitable: <SuitablePropertiesCard applicant={applicant} />,
+    details: <ClientDetails applicant={applicant} />,
+    nextstep: <NextStepCard applicant={applicant} ready={callsReady} />,
+    timeline: <TimelineCard activities={activities} />,
+  };
+
   return (
     <div className="mx-auto flex max-w-[1060px] flex-col gap-6 p-4 pb-24 sm:p-6 sm:pb-24">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <button onClick={() => navigate('/pipeline')} className="inline-flex items-center gap-1.5 text-[15px] text-[var(--link)] hover:underline">
           <Icon name="arrowRight" size={16} className="rotate-180" /> Pipeline
         </button>
-        <Button variant="danger" className="min-h-0 px-3 py-1.5 text-[13px]" onClick={handleDelete} disabled={deleteApplicant.isPending}>
-          <Icon name="trash" size={14} />{deleteApplicant.isPending ? 'Deleting…' : 'Delete'}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button className="min-h-0 px-3 py-1.5 text-[13px]" onClick={() => setArranging((v) => !v)} aria-expanded={arranging}>
+            <Icon name="layers" size={14} />{arranging ? 'Done arranging' : 'Arrange'}
+          </Button>
+          <Button variant="danger" className="min-h-0 px-3 py-1.5 text-[13px]" onClick={handleDelete} disabled={deleteApplicant.isPending}>
+            <Icon name="trash" size={14} />{deleteApplicant.isPending ? 'Deleting…' : 'Delete'}
+          </Button>
+        </div>
       </div>
+
+      {arranging && <ArrangePanel order={cards} onChange={arrange} onDone={() => setArranging(false)} />}
 
       <HeroCard applicant={applicant} />
 
       <DuplicateNote applicant={applicant} />
 
-      <NotesCard applicant={applicant} activities={activities} calls={mine} />
-
-      <ProgressCard applicant={applicant} />
-
-      <MoneyCard applicant={applicant} />
-
-      <SuitablePropertiesCard applicant={applicant} />
-
-      <ClientDetails applicant={applicant} />
-
-      <div className="grid items-start gap-6 lg:grid-cols-2">
-        <div ref={callsRef} className="min-w-0 scroll-mt-28 lg:scroll-mt-20">
-          <NextStepCard applicant={applicant} calls={mine} ready={callsReady} open={logging} setOpen={setLogging} />
-        </div>
-
-          <TimelineCard activities={activities} />
-      </div>
+      {cards.map((k) => <Fragment key={k}>{card[k]}</Fragment>)}
     </div>
+  );
+}
+
+/** Move the client page's cards up and down; the order is this person's own and follows them between devices. */
+function ArrangePanel({ order, onChange, onDone }: { order: ClientCard[]; onChange: (next: ClientCard[]) => void; onDone: () => void }) {
+  const label = (k: ClientCard) => CLIENT_CARDS.find((c) => c.key === k)?.label ?? k;
+  const arrow = 'grid h-9 w-9 place-items-center rounded-md border border-[var(--line-strong)] text-[var(--ink)] hover:border-[var(--accent)] disabled:opacity-30';
+  return (
+    <Card>
+      <CardHeader icon="layers" title="Arrange this page" help="arrange">
+        <Button variant="primary" className="min-h-0 px-3 py-1.5 text-[13px]" onClick={onDone}>Done</Button>
+      </CardHeader>
+      <ol className="m-0 flex list-none flex-col gap-1.5 p-4">
+        {order.map((k, i) => (
+          <li key={k} className="flex items-center gap-2 rounded-md bg-[var(--surface-2)] px-3 py-1.5">
+            <span className="w-5 text-right font-mono text-[13px] text-[var(--ink-muted)]">{i + 1}</span>
+            <span className="min-w-0 flex-1 text-[15px] text-[var(--ink)]">{label(k)}</span>
+            <button type="button" className={arrow} disabled={i === 0} onClick={() => onChange(moveCard(order, k, -1))} aria-label={`Move ${label(k)} up`}>
+              <Icon name="chevronDown" size={16} className="rotate-180" />
+            </button>
+            <button type="button" className={arrow} disabled={i === order.length - 1} onClick={() => onChange(moveCard(order, k, 1))} aria-label={`Move ${label(k)} down`}>
+              <Icon name="chevronDown" size={16} />
+            </button>
+          </li>
+        ))}
+      </ol>
+      {!isStandardOrder(order) && (
+        <div className="px-4 pb-4">
+          <button type="button" onClick={() => onChange(cardOrder([]))} className="text-[13px] text-[var(--link)] hover:underline">Use the standard order</button>
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -132,7 +179,7 @@ function TimelineRow({ act }: { act: Activity }) {
       <span aria-hidden className="absolute left-0 top-1.5 h-[9px] w-[9px] rounded-full ring-2 ring-[var(--surface)]"
         style={{ background: isCall || isWhatsApp || isProgress || note ? 'var(--accent)' : fromScreenshot ? 'var(--ink-muted)' : 'var(--line-strong)' }} />
       <div className="min-w-0 flex-1">
-        <div className="whitespace-pre-wrap break-words text-[15px] text-[var(--ink)]">{note ? note.text : act.body}</div>
+        <LongText text={note ? note.text : act.body} />
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[13px] text-[var(--ink-muted)]">
           {note && <Icon name={CHANNEL_ICON[note.channel]} size={12} />}
           <span>{note ? (note.channel === 'note' ? 'Note' : CHANNEL_LABEL[note.channel]) : isCall ? 'Call' : isWhatsApp ? 'WhatsApp' : act.kind === 'request' ? 'Request' : act.kind === 'shared' ? 'Shared' : act.kind === 'money' ? 'Finances' : isProgress ? 'Progress' : act.kind.replace('_', ' ')}</span>
@@ -143,6 +190,22 @@ function TimelineRow({ act }: { act: Activity }) {
         </div>
       </div>
     </li>
+  );
+}
+
+/** A timeline line, cut short when it is long (a whole pasted message), with Show more. */
+function LongText({ text, max = 220 }: { text: string; max?: number }) {
+  const [all, setAll] = useState(false);
+  const long = text.length > max;
+  return (
+    <div className="whitespace-pre-wrap break-words text-[15px] text-[var(--ink)]">
+      {long && !all ? `${text.slice(0, max).replace(/\s+\S*$/, '')}…` : text}
+      {long && (
+        <button type="button" onClick={() => setAll((v) => !v)} className="ml-1.5 whitespace-nowrap text-[13px] text-[var(--link)] hover:underline">
+          {all ? 'Show less' : 'Show more'}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -170,46 +233,19 @@ function DuplicateNote({ applicant }: { applicant: Applicant }) {
 
 // ── Next step, and calls kept quietly underneath ───────────────────
 
-function NextStepCard({ applicant, calls, ready, open, setOpen }: {
-  applicant: Applicant; calls: Call[]; ready: boolean; open: boolean; setOpen: (v: boolean) => void;
-}) {
-  const [showCalls, setShowCalls] = useState(false);
+function NextStepCard({ applicant, ready }: { applicant: Applicant; ready: boolean }) {
+  const fold = useFold('client.nextstep');
+  const next = applicant.next_call_at;
+  const summary = !fold.open ? (next ? `${applicant.next_step ? `${applicant.next_step}, ` : ''}${dayWord(next)}` : 'Not set') : undefined;
   return (
     <Card>
-      <CardHeader icon="calendar" title="Next step">
-        {!open && ready && (
-          <Button variant="ghost" className="min-h-0 px-2.5 py-1 text-[13px]" onClick={() => setOpen(true)}>
-            <Icon name="phone" size={14} /> Log a call
-          </Button>
-        )}
-      </CardHeader>
-      <div className="flex flex-col gap-4 p-5">
-        {!ready && <CallsNeedUpdate />}
-
-        {ready && <NextStepRow key={`${applicant.next_step ?? ''}|${applicant.next_call_at ?? ''}`} applicant={applicant} />}
-
-        {open && ready && (
-          <div className="rounded-lg border border-[var(--accent)] bg-[var(--surface)] p-4 shadow-[0_0_0_4px_var(--accent-soft)]">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-[15px] font-semibold text-[var(--ink)]">Log a call</span>
-              <button onClick={() => setOpen(false)} className="text-[13px] text-[var(--link)] hover:underline">Cancel</button>
-            </div>
-            <CallLogger applicant={applicant} onDone={() => setOpen(false)} autoFocus />
-          </div>
-        )}
-
-        {ready && calls.length > 0 && (
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-center gap-3 text-[13px]">
-              <button type="button" onClick={() => setShowCalls((v) => !v)} className="text-[var(--link)] hover:underline">
-                {showCalls ? 'Hide calls' : `Show ${calls.length} ${calls.length === 1 ? 'call' : 'calls'}`}
-              </button>
-              <Link to="/calls" className="text-[var(--ink-muted)] hover:text-[var(--ink)] hover:underline">Calls list</Link>
-            </div>
-            {showCalls && <CallHistory calls={calls} />}
-          </div>
-        )}
-      </div>
+      <CardHeader icon="calendar" title="Next step" sub={summary} help="nextCall" open={fold.open} onToggle={fold.toggle} />
+      {fold.open && (
+        <div className="flex flex-col gap-4 p-5">
+          {!ready && <CallsNeedUpdate />}
+          {ready && <NextStepRow key={`${applicant.next_step ?? ''}|${applicant.next_call_at ?? ''}`} applicant={applicant} />}
+        </div>
+      )}
     </Card>
   );
 }
@@ -334,6 +370,8 @@ function HeroCard({ applicant }: { applicant: Applicant }) {
   const { providers } = useProviders();
   const latestRequest = requests.find((r) => r.status === 'sent' && r.client_ids.includes(applicant.id)) ?? null;
   const [sharing, setSharing] = useState(false);
+  const [icing, setIcing] = useState(false);
+  const iced = isIced(applicant);
   return (
     <Card className="overflow-hidden">
       <div className="h-1.5 w-full" style={{ background: tier === 1 ? 'var(--accent)' : tier === 2 ? 'var(--accent-soft)' : 'var(--paper-2)' }} />
@@ -347,6 +385,8 @@ function HeroCard({ applicant }: { applicant: Applicant }) {
                 <TierBadge tier={tier} />
                 {isUrgent(applicant) && <UrgentChip reason={URGENCY_LABEL[applicant.urgency ?? '']} showReason />}
                 <StageBadge stage={applicant.stage} />
+                {isFresh(applicant) && <NewBadge />}
+                {iced && <IceBadge until={applicant.iced_until ? shortDate(applicant.iced_until) : null} />}
                 {stuck !== null && <StuckChip days={stuck} />}
                 {latestRequest && <RequestChip request={latestRequest} providers={providers} />}
               </div>
@@ -360,7 +400,11 @@ function HeroCard({ applicant }: { applicant: Applicant }) {
           <div className="flex flex-wrap items-center gap-2">
             <AssignPicker applicant={applicant} />
             <Button onClick={() => setSharing((v) => !v)} aria-expanded={sharing} className="min-h-0 px-3 py-2 text-[13px]"><Icon name="share" size={14} />Share</Button>
-            <Button onClick={() => document.getElementById('details')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="min-h-0 px-3 py-2 text-[13px]"><Icon name="pencil" size={14} />Edit details</Button>
+            {!iced && isActive(applicant) && (
+              <Button onClick={() => setIcing((v) => !v)} aria-expanded={icing} className="min-h-0 px-3 py-2 text-[13px]"><Icon name="clock" size={14} />Put on ice</Button>
+            )}
+            <Button onClick={() => { openCard('client.details'); setTimeout(() => document.getElementById('details')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30); }}
+              className="min-h-0 px-3 py-2 text-[13px]"><Icon name="pencil" size={14} />Edit details</Button>
           </div>
         </div>
 
@@ -371,6 +415,8 @@ function HeroCard({ applicant }: { applicant: Applicant }) {
             strong={!!next && next <= todayIso()} />
         </dl>
 
+        {iced && <IceBand applicant={applicant} />}
+        {icing && !iced && <IcePanel applicant={applicant} onClose={() => setIcing(false)} />}
         {sharing && <ShareClient applicant={applicant} onClose={() => setSharing(false)} />}
 
       </div>

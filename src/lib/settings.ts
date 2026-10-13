@@ -78,6 +78,11 @@ function fromOldRules(r: OldTierRules): TierLogic {
   ] };
 }
 
+/** A target for a week, a month or a year: clients moved in, and fees secured in pounds. 0 means no target. */
+export interface Target { placements: number; fees: number }
+export interface Targets { week: Target; month: Target; year: Target }
+export const DEFAULT_TARGETS: Targets = { week: { placements: 0, fees: 0 }, month: { placements: 0, fees: 0 }, year: { placements: 0, fees: 0 } };
+
 export interface AppSettings {
   tierLogic: TierLogic;
   /** Co-workers may set a client's tier by hand (the owner always can). */
@@ -139,6 +144,10 @@ export interface AppSettings {
   startPage: '/' | '/calls' | '/pipeline' | '/bin' | '/properties';
   /** Which clients the Calls page shows first. */
   callsView: 'everyone' | 'mine';
+  /** The order of the cards on a client's page, for this person (names from CLIENT_CARDS); empty means the standard order. */
+  clientPageOrder: string[];
+  /** Targets for the team: placements (clients moved in) and fees secured (letting fees and incentives signed up), 0 = none. */
+  targets: Targets;
 }
 
 export const DEFAULT_WHATSAPP_MESSAGE = [
@@ -296,10 +305,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
   invoiceMessage: DEFAULT_INVOICE_MESSAGE,
   startPage: '/',
   callsView: 'everyone',
+  clientPageOrder: [],
+  targets: DEFAULT_TARGETS,
 };
 
 /** Settings each person sets for themselves; everything else is shared by the team. */
-const PERSONAL_KEYS = ['showPossibleMatches', 'callAgainAfterNoAnswer', 'callAgainAfterAnswered', 'startPage', 'callsView'] as const;
+const PERSONAL_KEYS = ['showPossibleMatches', 'callAgainAfterNoAnswer', 'callAgainAfterAnswered', 'startPage', 'callsView', 'clientPageOrder'] as const;
 type PersonalKey = (typeof PERSONAL_KEYS)[number];
 export type MySettings = Pick<AppSettings, PersonalKey>;
 export type TeamSettings = Omit<AppSettings, PersonalKey>;

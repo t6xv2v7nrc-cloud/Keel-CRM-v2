@@ -19,7 +19,7 @@
 // they gave. Anything dearer is not a match for them at all.
 
 import type { Applicant } from './types';
-import { benefitsOf, effectiveTier, householdOf, isUrgent } from './search';
+import { benefitsOf, effectiveTier, householdOf, isIced, isUrgent } from './search';
 import type { HouseholdKey } from './search';
 import { tierCount, tierLabel, URGENCY_LABEL } from './tiering';
 import { activeSettings } from './settings';
@@ -237,7 +237,7 @@ const householdWords = (x: Needs) =>
 // ── Scoring ────────────────────────────────────────────────────────
 
 export function scoreMatch(p: PropertyLike, a: Applicant): Match | null {
-  if (!MATCHABLE_STAGES.has(a.stage)) return null;
+  if (!MATCHABLE_STAGES.has(a.stage) || isIced(a)) return null; // on ice: nothing offered until they are back
   const need = clientNeeds(a);
   const f = propertyFacts(p);
   const reasons: string[] = [];

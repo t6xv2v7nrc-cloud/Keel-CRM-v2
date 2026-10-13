@@ -5,7 +5,7 @@
 
 import type { Applicant, Call, CallOutcome } from './types';
 import { activeSettings } from './settings';
-import { effectiveTier, isActive, isUrgent } from './search';
+import { effectiveTier, isActive, isIced, isUrgent } from './search';
 import { weekdayName } from './format';
 
 export const OUTCOMES: ReadonlyArray<{ key: CallOutcome; label: string }> = [
@@ -68,7 +68,7 @@ export type CallState =
   | { kind: 'none' };                                  // called before, nothing set
 
 export function callState(a: Applicant, last: Call | undefined): CallState {
-  if (!isActive(a)) return { kind: 'none' };
+  if (!isActive(a) || isIced(a)) return { kind: 'none' }; // on ice: their next step waits for their return date
   const today = todayIso();
   if (a.next_call_at) {
     return a.next_call_at <= today

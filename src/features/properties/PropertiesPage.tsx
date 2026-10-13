@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Button, Card, Help, Icon, PageHeader, TierBadge, UrgentChip, useToast } from '../../components/ui';
+import { Button, Card, Help, Icon, NewBadge, PageHeader, TierBadge, UrgentChip, useToast } from '../../components/ui';
 import {
   NeedsDatabaseUpdate, PROPERTY_STATUS_LABEL, sentKey, useAddProperties, useApplicants, useDeleteProperties, useProperties,
   useDeals, useProviders, useRequests, useSentOnWhatsApp, useSetPropertyProvider, useSetPropertyStatus,
@@ -21,7 +21,7 @@ import { MapView } from '../map/MapView';
 import { DealChip } from '../progress/Progress';
 import { RequestButton } from '../requests/RequestSheet';
 import { providerFor } from '../../lib/requests';
-import { effectiveTier, isUrgent } from '../../lib/search';
+import { effectiveTier, isFresh, isUrgent } from '../../lib/search';
 import { tierLabel } from '../../lib/tiering';
 import { money, shortDate } from '../../lib/format';
 import { bedsOfType, TYPE_OPTIONS } from '../../lib/propertyEdit';
@@ -765,6 +765,7 @@ function MatchRow({ m, p, sent, deal }: { m: Match; p: Property; sent: SentOnWha
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <Link to={`/applicants/${a.id}`} className="text-[15px] font-medium text-[var(--ink)] hover:underline">{a.full_name}</Link>
           <TierBadge tier={tier} />
+          {isFresh(a) && <NewBadge />}
           {isUrgent(a) && <UrgentChip reason={urgentWhy?.replace(/^Urgent:\s*/, '')} />}
           {deal && deal.status !== 'sent' ? <DealChip deal={deal} /> : <SentTag sent={sent} />}
         </div>

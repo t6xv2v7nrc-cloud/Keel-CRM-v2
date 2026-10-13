@@ -1,5 +1,5 @@
 export { Button } from './Button';
-export { StageBadge } from './Badge';
+export { IceBadge, NewBadge, StageBadge } from './Badge';
 export { Card, CardHeader } from './Card';
 export { Field } from './Field';
 export { ToastProvider, useToast } from './Toast';
