@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Button, Card, CardHeader, Icon, UpdateNote, useToast } from '../../components/ui';
+import { useFold } from '../../lib/collapse';
 import {
   useDeals, useDeleteReceivable, usePeople, useProperties, useProviders, useReceivables, useSaveReceivable,
 } from '../../lib/hooks';
@@ -339,18 +340,24 @@ export function MoneyCard({ applicant }: { applicant: Applicant }) {
   const potential = useMemo(() => potentials(deals, receivables, properties, providers).find((p) => p.deal.applicant_id === applicant.id) ?? null,
     [deals, receivables, properties, providers, applicant.id]);
   const { placed, base, provider, rentPcm } = placementOf(applicant.id, deals, properties, providers);
+  const fold = useFold('client.finances');
   if (!ready || (mine.length === 0 && !placed && !potential)) return null;
 
   const open = owed(mine);
   const t = totals(mine);
+  const summary = [
+    open.length ? `${money(t.owed)} owed${t.overdueCount ? ` · ${t.overdueCount} overdue` : ''}` : mine.length ? 'All paid' : null,
+    // folded away, the potential fee still shows
+    !fold.open && potential ? `Potential ${potential.amount != null ? moneyFee(potential.amount) : 'fee not known'}` : null,
+  ].filter(Boolean).join(' · ') || undefined;
 
   return (
     <Card>
-      <CardHeader icon="pound" title="Finances" sub={open.length ? `${money(t.owed)} owed${t.overdueCount ? ` · ${t.overdueCount} overdue` : ''}` : mine.length ? 'All paid' : undefined} help="money">
+      <CardHeader icon="pound" title="Finances" sub={summary} help="money" open={fold.open} onToggle={fold.toggle}>
         <Button className={small} onClick={() => setAdding(lettingFeeFor({ ...base, provider, rentPcm }))}><Icon name="plus" size={14} />Letting fee</Button>
         <Button className={small} onClick={() => setAdding(incentiveFor({ ...base, council: councilOf(applicant) }))}><Icon name="plus" size={14} />Incentive</Button>
       </CardHeader>
-      <div className="flex flex-col gap-2 px-5 py-3">
+      {fold.open && <div className="flex flex-col gap-2 px-5 py-3">
         {adding && <ReceivableForm initial={adding} council={councilOf(applicant)} onDone={() => setAdding(null)} />}
         {potential && (
           <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-[var(--surface-2)] px-3 py-2 text-[14px] text-[var(--ink)]">
@@ -367,7 +374,7 @@ export function MoneyCard({ applicant }: { applicant: Applicant }) {
             <MoneyRow key={r.id} r={r} client={applicant} provider={providers.find((p) => p.id === r.provider_id) ?? null} showClient={false} />
           ))}
         </ul>
-      </div>
+      </div>}
     </Card>
   );
 }

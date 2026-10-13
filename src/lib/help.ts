@@ -139,6 +139,13 @@ export const HELP = {
       'Active clients are the ones still being housed: lead, referred, viewing or offer. Clients who have moved in are counted as housed.',
     ],
   },
+  shareClient: {
+    title: 'Share a client',
+    body: [
+      'Sends a short description of the client to a landlord or agent who might have something: their first name, household, benefits, the size and areas they want, their budget and council. Never their surname, phone number, email or anything medical.',
+      'It only sends once the client has agreed to their details going to landlords (the same agreement requests to providers use). You can change the wording before sending. Each share goes on their timeline, but does not count as contacting the client.',
+    ],
+  },
   nothingShared: {
     title: 'Shared accommodation',
     body: [

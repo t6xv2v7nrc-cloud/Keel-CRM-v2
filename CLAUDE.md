@@ -31,6 +31,10 @@ src/
                              not a duplicate; merging is the `merge_applicants` database function, 0014),
               digest.ts (the Today summary on Home: first names and short addresses only, as it goes to WhatsApp),
               claudeRead.ts (Bin screenshots read by Claude through /api/read-screenshot; null means read on the device),
+              shareClient.ts (a client described for a landlord or agent: first name, household, benefits, size, areas,
+                              budget, council; never surname, phone, email or medical; needs share_with_landlords),
+              collapse.ts (`useFold`: cards folded away on this device; CardHeader takes open/onToggle and keeps its
+                           summary (sub) in view when folded),
               help.ts (words behind the "?" help buttons)
   components/ ui primitives on tokens (Button, StageBadge, Card, Field, Toast, Icon,
               Visuals: avatars, page headers, stat tiles, SVG charts, UpdateNote for "run this migration")
@@ -90,6 +94,9 @@ supabase/migrations/
   Leads and referrals with nothing for `coldAfterDays` (no live property, no next step booked) have gone cold: Home offers
   one tap to move them to Lost, and they are left out of "Needs a push". Home counts properties with a strong match.
 - A client is dated (`created_at`) from when they got in touch (their Bin item arriving), never from when it was confirmed.
+- A client page's cards (Notes and contact, Progress, Finances, Suitable properties, Timeline) fold away; the summary stays
+  in the header and the choice is remembered per device. Share (client header) sends their details to a landlord or agent
+  on WhatsApp, by email or copied, only once they agreed; it is logged (activity kind "shared"), not counted as contact.
 - Notes: each client page has Notes and contact (how you were in touch, what was said, who, when); the Pipeline shows
   last contact per client and sorts by Recently contacted.
 - Calls are kept quiet on request: not in the top bar (the /calls page stays, linked from a client's Next step card),

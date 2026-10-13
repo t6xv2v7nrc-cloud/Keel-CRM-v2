@@ -200,6 +200,20 @@ export function useAddNote() {
   });
 }
 
+/** Note on a client's timeline that their details were shared with a landlord or agent, and how. Not a contact with the client. */
+export function useLogShare() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ applicant, how }: { applicant: Pick<Applicant, 'id' | 'full_name'>; how: string }) => {
+      await supabase.from('activities').insert({
+        entity_type: 'applicant', entity_id: applicant.id, kind: 'shared',
+        body: `Shared ${applicant.full_name.split(' ')[0]}'s details with a landlord or agent (${how})`,
+      });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['activities'] }),
+  });
+}
+
 /** When every client was last contacted (notes, calls, WhatsApp sends), for the Pipeline. */
 export function useLastContacts() {
   const { calls } = useCalls();

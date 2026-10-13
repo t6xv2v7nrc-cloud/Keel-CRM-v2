@@ -20,6 +20,7 @@ const PATHS = {
   clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></>,
   calendar: <><rect x="3.5" y="5" width="17" height="15.5" rx="2" /><path d="M3.5 10h17M8 3v4M16 3v4" /></>,
   arrowRight: <path d="M5 12h14M13 6l6 6-6 6" />,
+  chevronDown: <path d="M6 9l6 6 6-6" />,
   user: <><circle cx="12" cy="8" r="3.8" /><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0" /></>,
   users: <><circle cx="9" cy="8.5" r="3.3" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" /><path d="M16 5.3a3.3 3.3 0 0 1 0 6.4M18 14.2A6.5 6.5 0 0 1 21.5 20" /></>,
   alert: <><path d="M12 3.5l9.5 16.5h-19z" /><path d="M12 10v4.5M12 17.3h.01" /></>,

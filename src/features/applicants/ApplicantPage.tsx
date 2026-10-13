@@ -17,6 +17,7 @@ import { CallHistory, CallLogger } from '../calls/CallLogger';
 import { CallsNeedUpdate } from '../calls/CallsPage';
 import { ClientDetails } from './ClientDetails';
 import { NotesCard } from './NotesCard';
+import { ShareClient } from './ShareClient';
 import { CHANNEL_ICON } from './channelIcon';
 import { CHANNEL_LABEL, readNote } from '../../lib/contacts';
 import { LhaChip } from '../properties/Lha';
@@ -27,6 +28,7 @@ import { RequestButton, RequestChip } from '../requests/RequestSheet';
 import { MoneyCard } from '../money/Money';
 import { stuckDays } from '../../lib/progress';
 import { openGroups } from '../../lib/duplicates';
+import { useFold } from '../../lib/collapse';
 import { clientAreas, placeKey } from '../../lib/geo';
 
 export function ApplicantPage() {
@@ -89,21 +91,31 @@ export function ApplicantPage() {
           <NextStepCard applicant={applicant} calls={mine} ready={callsReady} open={logging} setOpen={setLogging} />
         </div>
 
-          <Card>
-            <CardHeader icon="clock" title="Timeline" sub={`${activities.length} events`} help="timeline" />
-            <div className="p-5">
-              {activities.length === 0 ? (
-                <p className="m-0 text-[15px] text-[var(--ink-muted)]">No activity yet.</p>
-              ) : (
-                <ul className="relative m-0 flex list-none flex-col gap-4 p-0">
-                  <span aria-hidden className="absolute bottom-1 left-[4px] top-1 w-px bg-[var(--line-strong)]" />
-                  {activities.map((act) => <TimelineRow key={act.id} act={act} />)}
-                </ul>
-              )}
-            </div>
-          </Card>
+          <TimelineCard activities={activities} />
       </div>
     </div>
+  );
+}
+
+/** Everything that has happened with the client, newest first. */
+function TimelineCard({ activities }: { activities: Activity[] }) {
+  const fold = useFold('client.timeline');
+  return (
+    <Card>
+      <CardHeader icon="clock" title="Timeline" sub={`${activities.length} events`} help="timeline" open={fold.open} onToggle={fold.toggle} />
+      {fold.open && (
+        <div className="p-5">
+          {activities.length === 0 ? (
+            <p className="m-0 text-[15px] text-[var(--ink-muted)]">No activity yet.</p>
+          ) : (
+            <ul className="relative m-0 flex list-none flex-col gap-4 p-0">
+              <span aria-hidden className="absolute bottom-1 left-[4px] top-1 w-px bg-[var(--line-strong)]" />
+              {activities.map((act) => <TimelineRow key={act.id} act={act} />)}
+            </ul>
+          )}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -123,7 +135,7 @@ function TimelineRow({ act }: { act: Activity }) {
         <div className="whitespace-pre-wrap break-words text-[15px] text-[var(--ink)]">{note ? note.text : act.body}</div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[13px] text-[var(--ink-muted)]">
           {note && <Icon name={CHANNEL_ICON[note.channel]} size={12} />}
-          <span>{note ? (note.channel === 'note' ? 'Note' : CHANNEL_LABEL[note.channel]) : isCall ? 'Call' : isWhatsApp ? 'WhatsApp' : act.kind === 'request' ? 'Request' : act.kind === 'money' ? 'Finances' : isProgress ? 'Progress' : act.kind.replace('_', ' ')}</span>
+          <span>{note ? (note.channel === 'note' ? 'Note' : CHANNEL_LABEL[note.channel]) : isCall ? 'Call' : isWhatsApp ? 'WhatsApp' : act.kind === 'request' ? 'Request' : act.kind === 'shared' ? 'Shared' : act.kind === 'money' ? 'Finances' : isProgress ? 'Progress' : act.kind.replace('_', ' ')}</span>
           <span>·</span>
           <span>{timeAgo(act.created_at)}</span>
           {who && <><span>·</span><span>by {who}</span></>}
@@ -223,9 +235,11 @@ function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
   const atPin = pinned ? available.filter((p) => placeKey(p) === pinned) : [];
   const matches = pinned ? all.filter((x) => placeKey(x.property) === pinned) : showAll ? all : best;
   const first = applicant.full_name.split(' ')[0];
+  const fold = useFold('client.suitable');
   return (
     <Card>
-      <CardHeader icon="building" title="Suitable properties" sub={available.length ? `${all.length} of ${available.length} available` : undefined} help="suitable">
+      <CardHeader icon="building" title="Suitable properties" sub={available.length ? `${all.length} of ${available.length} available` : undefined} help="suitable"
+        open={fold.open} onToggle={fold.toggle}>
         {available.length > 0 && (
           <button type="button" onClick={() => { setMapOpen((v) => !v); setPinned(null); }} aria-pressed={mapOpen}
             className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-md border px-3 text-[13px] font-medium transition-colors ${
@@ -238,6 +252,7 @@ function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
             label={best.length === 1 ? 'Send it on WhatsApp' : `Send the best ${best.length} on WhatsApp`} />
         )}
       </CardHeader>
+      {fold.open && (<>
       {mapOpen && available.length > 0 && (
         <div className="flex flex-col gap-2 px-5 pt-4">
           <div className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
@@ -297,6 +312,7 @@ function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
           )}
         </div>
       )}
+      </>)}
     </Card>
   );
 }
@@ -317,6 +333,7 @@ function HeroCard({ applicant }: { applicant: Applicant }) {
   const { requests } = useRequests();
   const { providers } = useProviders();
   const latestRequest = requests.find((r) => r.status === 'sent' && r.client_ids.includes(applicant.id)) ?? null;
+  const [sharing, setSharing] = useState(false);
   return (
     <Card className="overflow-hidden">
       <div className="h-1.5 w-full" style={{ background: tier === 1 ? 'var(--accent)' : tier === 2 ? 'var(--accent-soft)' : 'var(--paper-2)' }} />
@@ -342,6 +359,7 @@ function HeroCard({ applicant }: { applicant: Applicant }) {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <AssignPicker applicant={applicant} />
+            <Button onClick={() => setSharing((v) => !v)} aria-expanded={sharing} className="min-h-0 px-3 py-2 text-[13px]"><Icon name="share" size={14} />Share</Button>
             <Button onClick={() => document.getElementById('details')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="min-h-0 px-3 py-2 text-[13px]"><Icon name="pencil" size={14} />Edit details</Button>
           </div>
         </div>
@@ -352,6 +370,8 @@ function HeroCard({ applicant }: { applicant: Applicant }) {
           <Meta icon="calendar" label="Next step" wide value={next ? `${applicant.next_step ? `${applicant.next_step}, ` : ''}${dayWord(next)}` : 'Not set'}
             strong={!!next && next <= todayIso()} />
         </dl>
+
+        {sharing && <ShareClient applicant={applicant} onClose={() => setSharing(false)} />}
 
       </div>
     </Card>

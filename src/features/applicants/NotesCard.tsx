@@ -6,6 +6,7 @@ import type { Channel } from '../../lib/contacts';
 import { clockTime, shortDay, timeAgo } from '../../lib/format';
 import type { Activity, Applicant, Call } from '../../lib/types';
 import { CHANNEL_ICON } from './channelIcon';
+import { useFold } from '../../lib/collapse';
 
 const LAST_KEY = 'keel.noteChannel';
 const firstChannel = (): Channel => {
@@ -22,6 +23,7 @@ export function NotesCard({ applicant, activities, calls }: { applicant: Applica
   const [text, setText] = useState('');
   const [all, setAll] = useState(false);
   const first = applicant.full_name.split(' ')[0];
+  const fold = useFold('client.notes');
 
   // notes and logged calls (properties sent on WhatsApp stay on the timeline, but count as contact)
   const notes = useMemo(() => activities.filter((a) => a.kind === 'contact' || a.kind === 'note' || a.kind === 'call'), [activities]);
@@ -42,9 +44,9 @@ export function NotesCard({ applicant, activities, calls }: { applicant: Applica
   const shown = all ? notes : notes.slice(0, SHOWN);
   return (
     <Card>
-      <CardHeader icon="pencil" title="Notes and contact" help="notes"
-        sub={last ? `Last contact ${timeAgo(last.at)}, ${CHANNEL_LABEL[last.channel].toLowerCase()}` : 'Not contacted yet'} />
-      <div className="flex flex-col gap-4 p-4 sm:p-5">
+      <CardHeader icon="pencil" title="Notes and contact" help="notes" open={fold.open} onToggle={fold.toggle}
+        sub={last ? `Last contact ${timeAgo(last.at)} (${CHANNEL_LABEL[last.channel]})` : 'Not contacted yet'} />
+      {fold.open && <div className="flex flex-col gap-4 p-4 sm:p-5">
         <div className="flex flex-col gap-2">
           <div role="radiogroup" aria-label="How you were in touch" className="flex flex-wrap gap-1.5">
             {CHANNELS.map((c) => {
@@ -99,7 +101,7 @@ export function NotesCard({ applicant, activities, calls }: { applicant: Applica
             {all ? 'Show fewer' : `Show all ${notes.length} notes`}
           </button>
         )}
-      </div>
+      </div>}
     </Card>
   );
 }

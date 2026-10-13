@@ -12,6 +12,7 @@ import {
   viewingShort, viewingWords,
 } from '../../lib/progress';
 import { reminderMessage, waLink, waNumber } from '../../lib/whatsapp';
+import { useFold } from '../../lib/collapse';
 import { openViewingChange } from './ViewingChange';
 import type { ApplicantStage } from '../../types/extraction';
 import type { Applicant, Deal, DealStatus, Property } from '../../lib/types';
@@ -100,6 +101,7 @@ const tomorrowAt11 = () => `${addDays(1)}T11:00`;
 /** Where the client is: their stage, each property they are going for and how far it has got. */
 export function ProgressCard({ applicant }: { applicant: Applicant }) {
   const { deals: all, ready } = useDeals();
+  const fold = useFold('client.progress');
   const [adding, setAdding] = useState(false);
   const [showGone, setShowGone] = useState(false);
   const mine = all.filter((d) => d.applicant_id === applicant.id);
@@ -111,9 +113,17 @@ export function ProgressCard({ applicant }: { applicant: Applicant }) {
   const byId = useMemo(() => new Map(properties.map((p) => [p.id, p])), [properties]);
   const propertyOf = (d: Deal) => (d.property_id ? byId.get(d.property_id) : properties.find((p) => p.address_line === d.address)) ?? null;
 
+  const inPlay = live.filter(isLive);
+  // folded away, the header still says where things stand: "1 in play · West Green Road: Viewing today, 4pm"
+  const summary = [
+    inPlay.length ? `${inPlay.length} in play` : null,
+    !fold.open && live[0] ? `${short(live[0].address)}: ${dealWords(live[0])}` : null,
+    !fold.open && stuck !== null ? `stuck ${stuck}d` : null,
+  ].filter(Boolean).join(' · ') || undefined;
+
   return (
     <Card>
-      <CardHeader icon="flag" title="Progress" sub={live.filter(isLive).length ? `${live.filter(isLive).length} in play` : undefined} help="progress">
+      <CardHeader icon="flag" title="Progress" sub={summary} help="progress" open={fold.open} onToggle={fold.toggle}>
         {stuck !== null && <StuckChip days={stuck} />}
         {ready && (
           <Button className="min-h-0 px-3 py-1.5 text-[13px]" onClick={() => setAdding((v) => !v)}>
@@ -121,7 +131,7 @@ export function ProgressCard({ applicant }: { applicant: Applicant }) {
           </Button>
         )}
       </CardHeader>
-      <div className="flex flex-col gap-4 p-5">
+      {fold.open && <div className="flex flex-col gap-4 p-5">
         <StageStrip stage={applicant.stage} />
 
         {!ready && (
@@ -163,7 +173,7 @@ export function ProgressCard({ applicant }: { applicant: Applicant }) {
             )}
           </div>
         )}
-      </div>
+      </div>}
     </Card>
   );
 }
