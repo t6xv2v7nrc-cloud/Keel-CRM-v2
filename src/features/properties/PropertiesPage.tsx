@@ -24,9 +24,9 @@ import { providerFor } from '../../lib/requests';
 import { effectiveTier, isUrgent } from '../../lib/search';
 import { tierLabel } from '../../lib/tiering';
 import { money, shortDate } from '../../lib/format';
+import { bedsOfType, TYPE_OPTIONS } from '../../lib/propertyEdit';
+import { EditProperty } from './EditProperty';
 
-const TYPE_OPTIONS = ['Room', 'En-suite Room', 'Studio', 'En-suite Studio', 'Self-Contained Studio', '1-Bed Flat', '2-Bed Flat', '3-Bed Flat', '3-Bed House', '4-Bed House'];
-const bedsOfType = (t: string) => (/(\d)-Bed/.exec(t) ? Number(/(\d)-Bed/.exec(t)![1]) : 0);
 const normAddr = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 const STRENGTH: Record<Strength, { label: string; bg: string; fg: string }> = {
@@ -621,6 +621,7 @@ function PropertyCard({ p, matches, deals, names, sent, openRequests, isNew, sel
   onToggle: () => void; onStatus: (s: Property['status']) => void; onDelete: () => void;
 }) {
   const [showAll, setShowAll] = useState(false);
+  const [editing, setEditing] = useState(false);
   const best = bestFew(matches, (m) => m.strength);
   const shown = showAll ? matches : best;
   const hidden = matches.length - best.length;
@@ -668,12 +669,18 @@ function PropertyCard({ p, matches, deals, names, sent, openRequests, isNew, sel
             className="min-h-[36px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[13px] text-[var(--ink)]">
             {(Object.keys(PROPERTY_STATUS_LABEL) as Property['status'][]).map((s) => <option key={s} value={s}>{PROPERTY_STATUS_LABEL[s]}</option>)}
           </select>
+          <button type="button" onClick={() => setEditing((v) => !v)} aria-expanded={editing} aria-label={`Edit ${p.address_line}`}
+            className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-md border px-2.5 text-[13px] font-medium ${editing ? 'border-[var(--accent)] text-[var(--accent-ink)]' : 'border-[var(--line-strong)] text-[var(--ink)] hover:border-[var(--accent)]'}`}>
+            <Icon name="pencil" size={14} />Edit
+          </button>
           <button onClick={onDelete} aria-label={`Delete ${p.address_line}`} title="Delete property"
             className="grid h-8 w-8 place-items-center rounded-md text-[var(--ink-muted)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]">
             <Icon name="x" size={16} />
           </button>
         </div>
       </div>
+
+      {editing && <EditProperty p={p} onDone={() => setEditing(false)} />}
 
       {isAvailable(p) && (
         <div className="border-t border-[var(--line)] px-5 pb-3 pt-2">

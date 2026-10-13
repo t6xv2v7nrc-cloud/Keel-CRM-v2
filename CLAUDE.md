@@ -14,6 +14,8 @@ src/
                            ("WhatsApp: ...") or "note"; calls and WhatsApp sends count as contact; no migration),
               lha.ts (LHA area, size rules and rent-vs-LHA check; rates in src/data/lha-rates.ts),
               whatsapp.ts (wa.me links and message wording for sending properties),
+              propertyEdit.ts (editing a saved property: typed rent, bedrooms from the type, what changed in words;
+                               the Edit button on each property card, features/properties/EditProperty.tsx),
               geo.ts (placing postcodes via postcodes.io, cached per device; a client's areas as districts),
               progress.ts (deals: each property a client is going for; stage follows deals, next steps, stuck, gone cold,
                            the move-in checklist on accepted and moved-in deals (`deals.checklist`, items in Settings)),
@@ -67,6 +69,9 @@ supabase/migrations/
 - Matching: anything over £1,300 pcm is always offered to clients on PIP or in full-time work (`premiumRent`). Clients on
   UC alone (no PIP or LCWRA, not working) are never matched above £1,100 (`ucOnlyRentCap`), whatever budget they gave.
   Studios and en-suite rooms count as 1 bed for LHA. "Central" means the zone 1 districts (`CENTRAL_DISTRICTS`).
+  "Self-contained only" (the client's Shared accommodation switch, stored as those words in their must-haves; the same
+  wish in their own words counts) is never matched to anything shared: rooms, en-suite rooms and studios, HMOs, house
+  shares, or notes saying shared kitchen or bathroom (`selfContainedFrom`, `withSelfContained`, `shared` in propertyMatch.ts).
 - Short lists, not endless ones: each property shows only its best few clients (`bestFew`), one line each. No kanban.
 - Nothing scrolls sideways, on a phone especially.
 - Properties go to clients, and requests go to providers, as WhatsApp links (wa.me) the person sends by hand; every

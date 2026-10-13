@@ -15,6 +15,8 @@ import { followUpFrom, PROVIDER_OFF, PROVIDER_ON, providerFor, providerNumber, R
 import { basisWords, describe, KIND_LABEL, lettingFeeFor, rentOf, STATUS_LABEL } from './money';
 import { invoiceNumber } from './invoice';
 import { CONTACT_KINDS, lastContacts, noteActivity } from './contacts';
+import { changedFields, changeWords } from './propertyEdit';
+import type { EditableProperty } from './propertyEdit';
 import type { Channel } from './contacts';
 import type { ReceivableDraft } from './money';
 import type { ApplicantStage } from '../types/extraction';
@@ -359,6 +361,32 @@ export function useSetPropertyStatus() {
       });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['properties'] }),
+  });
+}
+
+/** Change a property's details (address, type, rent...). The change is noted on its history in words. */
+export function useUpdateProperty() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ p, next }: { p: Property; next: EditableProperty }): Promise<number> => {
+      const patch = changedFields(p, next);
+      if (Object.keys(patch).length === 0) return 0;
+      if (!next.address_line.trim()) throw new Error('A property needs an address');
+      if (isLocalProperty(p.id)) {
+        if (!localProperties.update([p.id], patch)) throw new Error('This browser would not save the change');
+        return Object.keys(patch).length;
+      }
+      const { error } = await supabase.from('properties').update(patch).eq('id', p.id);
+      if (error) throw error;
+      await supabase.from('activities').insert({
+        entity_type: 'property', entity_id: p.id, kind: 'updated', body: `${p.address_line}: ${changeWords(p, patch)}`,
+      });
+      return Object.keys(patch).length;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['properties'] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+    },
   });
 }
 

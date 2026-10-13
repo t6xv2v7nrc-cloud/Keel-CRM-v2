@@ -8,6 +8,7 @@ import { activeSettings } from '../../lib/settings';
 import { computeTier, HOUSEHOLD_LABEL, tierLabel, tierNumbers, tierReason, tierStyle, URGENCY_LABEL, WORK_STATUS_LABEL } from '../../lib/tiering';
 import { effectiveTier } from '../../lib/search';
 import { STAGE_ORDER } from '../../lib/progress';
+import { selfContainedFrom, withSelfContained } from '../../lib/propertyMatch';
 import { confidenceWord, readNotes } from '../../lib/readNotes';
 import type { Evidence, Flag, Suggestion } from '../../lib/readNotes';
 import type { Applicant } from '../../lib/types';
@@ -117,6 +118,9 @@ export function ClientDetails({ applicant }: { applicant: Applicant }) {
         <Area label="In their own words" value={a.notes ?? ''} rows={4} onSave={text('Notes', 'notes')}
           placeholder="What the client is looking for: area, bedrooms, budget, anything they said" />
         <Box label="Must-haves" value={a.requirements ?? ''} placeholder="e.g. ground floor, near school" onSave={text('Must-haves', 'requirements')} wide />
+        <NothingShared applicant={a} busy={triage.isPending}
+          onChange={(on) => save({ requirements: withSelfContained(a.requirements, on) },
+            on ? 'Self-contained only: no rooms, en-suites or shared houses' : 'Shared accommodation is fine again')} />
         <NotesReader applicant={a} save={save} busy={triage.isPending} />
       </Section>
 
@@ -314,6 +318,33 @@ function Quote({ e }: { e: Evidence }) {
 }
 
 // ── Form pieces ────────────────────────────────────────────────────
+
+/** Some clients want nothing shared: no rooms, en-suites, HMOs or house shares. Plain studios and flats still match. */
+function NothingShared({ applicant, busy, onChange }: { applicant: Applicant; busy: boolean; onChange: (on: boolean) => void }) {
+  const from = selfContainedFrom(applicant);
+  const on = from !== null;
+  return (
+    <div className="flex min-h-[44px] flex-wrap items-center justify-between gap-x-3 gap-y-1">
+      <span className="flex min-w-0 items-center gap-1.5 text-[15px] text-[var(--ink)]">Shared accommodation <Help topic="nothingShared" /></span>
+      <div className="ml-auto flex max-w-full flex-col items-end gap-1">
+        <div className="inline-flex rounded-md border border-[var(--line-strong)] p-0.5" role="radiogroup" aria-label="Shared accommodation">
+          {([[false, 'Fine'], [true, 'Self-contained only']] as const).map(([v, label]) => {
+            const picked = on === v;
+            return (
+              <button key={label} type="button" role="radio" aria-checked={picked} disabled={busy || (from === 'notes' && !v)}
+                onClick={() => !picked && onChange(v)}
+                className={`rounded px-2.5 py-1 text-[13px] font-medium transition-colors disabled:cursor-not-allowed ${
+                  picked ? (v ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'bg-[var(--ink)] text-[var(--surface)]') : 'text-[var(--ink-muted)] hover:text-[var(--ink)] disabled:opacity-50'}`}>
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        {from === 'notes' && <span className="text-[12px] text-[var(--ink-muted)]">They asked for this in their own words</span>}
+      </div>
+    </div>
+  );
+}
 
 function Section({ icon, title, children, border = '', last = false }: { icon: IconName; title: string; children: ReactNode; border?: string; last?: boolean }) {
   return (

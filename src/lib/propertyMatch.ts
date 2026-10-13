@@ -69,7 +69,7 @@ interface Needs {
   flexible: boolean;
   strictArea: boolean; // "Harrow only", "nowhere else": no next-door suggestions
   openToOthers: boolean; // "I don't mind if it is further north": other areas are a caution, not a no
-  selfContained: boolean; // asked for self-contained: no rooms
+  selfContained: boolean; // asked for nothing shared: no rooms, en-suites, HMOs or house shares
   premiumOk: string | null; // why they can take a property over the premium rent: "PIP", "full-time"...
   rentCap: number | null; // on UC alone: the most they can afford, or null if the limit does not apply
   beds: { min: number; max: number; asked: boolean } | null;
@@ -100,6 +100,30 @@ function ucOnlyCap(a: Applicant): number | null {
   if (!has('uc') || has('pip') || has('lcwra')) return null;
   if (a.work_status === 'full_time' || a.work_status === 'part_time') return null;
   return cap;
+}
+
+// ── Shared accommodation ───────────────────────────────────────────
+// Some clients want nothing shared: no rooms, no en-suites (a room with its own
+// bathroom still shares a kitchen), no HMOs or house shares. Plain studios and
+// flats are fine. The client page's switch writes "Self-contained only" into
+// their must-haves; the same words in their own notes count too.
+
+export const SELF_CONTAINED_ONLY = 'Self-contained only';
+const ASKS_SELF_CONTAINED = /\bself[- ]?contained\b|\bown\s+(?:kitchen|bathroom|front\s+door)\b|\b(?:no|not|nothing|never|without|don'?t\s+want(?:\s+(?:a|an|to))?)\s+(?:a\s+|an\s+)?(?:shared?|sharing|house\s*share|flat\s*share|hmo|en[- ]?suites?)\b/i;
+
+/** Whether a client asked for nothing shared, and where: their must-haves (the switch), or their own words. */
+export function selfContainedFrom(a: Pick<Applicant, 'notes' | 'requirements'>): 'must-haves' | 'notes' | null {
+  if (a.requirements && ASKS_SELF_CONTAINED.test(a.requirements)) return 'must-haves';
+  if (a.notes && ASKS_SELF_CONTAINED.test(a.notes)) return 'notes';
+  return null;
+}
+
+/** Must-haves with "Self-contained only" added, or with every self-contained phrase taken out. */
+export function withSelfContained(requirements: string | null, on: boolean): string | null {
+  const parts = (requirements ?? '').split(/\s*[;,]\s*|\n+/).map((x) => x.trim()).filter(Boolean);
+  const rest = parts.filter((x) => !ASKS_SELF_CONTAINED.test(x));
+  const next = on ? [SELF_CONTAINED_ONLY, ...rest] : rest;
+  return next.length ? next.join(', ') : null;
 }
 
 export function clientNeeds(a: Applicant): Needs {
@@ -133,7 +157,7 @@ export function clientNeeds(a: Applicant): Needs {
   const askNames = [...new Map(
     [...wantedAreas.map(titleCase), ...wantedDistricts, ...askedBoroughs, ...regions.map(titleCase)].map((x) => [x.toLowerCase(), x]),
   ).values()];
-  const selfContained = /\bself[- ]?contained\b|\bown\s+(?:kitchen|bathroom|front\s+door)\b/i.test(text);
+  const selfContained = ASKS_SELF_CONTAINED.test(text);
 
   // Bedrooms: what they asked for, else what the household needs
   let beds: Needs['beds'] = null;
@@ -192,8 +216,14 @@ function propertyFacts(p: PropertyLike) {
     ...areasIn(p.address_line).filter((x) => boroughOfArea(x) === borough),
   ]);
   const text = `${type} ${p.notes ?? ''}`;
+  // shared: a room (en-suite or not), or a studio-sized place that says en-suite, HMO or shared
+  // (a 2 bed flat with an en-suite bathroom is not shared)
+  const small = kind === 'room' || kind === 'studio' || beds === 0 || beds == null;
+  const shared = kind === 'room'
+    || /\bhmo\b|\bshared\s+(?:house|flat|kitchen|bathroom|facilities|accommodation)\b|\b(?:house|flat)\s*share\b|\broom\s+in\s+a\b/i.test(text)
+    || (small && /\ben[- ]?suite\b/i.test(text));
   return {
-    kind, beds, district, borough, areas,
+    kind, beds, district, borough, areas, shared,
     stepFree: /\b(ground\s+floor|step[- ]?free|level\s+access|lift|bungalow)\b/i.test(text),
     furnished: p.furnished ? !/^unfurnished$/i.test(p.furnished) : null,
     lha: /lha/i.test(p.rent_text ?? ''),
@@ -225,7 +255,7 @@ export function scoreMatch(p: PropertyLike, a: Applicant): Match | null {
   const isFamily = need.household === 'family' || need.children > 0;
   if (f.kind === 'room' && (isFamily || need.household === 'couple')) return null;
   if (f.kind === 'studio' && isFamily) return null;
-  if (f.kind === 'room' && need.selfContained) return null;
+  if (f.shared && need.selfContained) return null; // they want nothing shared
   if (f.beds == null) {
     cautions.push('Size not stated');
   } else if (need.beds) {

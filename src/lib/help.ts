@@ -139,6 +139,13 @@ export const HELP = {
       'Active clients are the ones still being housed: lead, referred, viewing or offer. Clients who have moved in are counted as housed.',
     ],
   },
+  nothingShared: {
+    title: 'Shared accommodation',
+    body: [
+      'Self-contained only means the client is never matched to anything shared: rooms, en-suite rooms and en-suite studios (an en-suite still shares a kitchen), HMO rooms, house shares, or a studio whose notes say the kitchen or bathroom is shared. Plain studios and flats still match.',
+      'It adds "Self-contained only" to their must-haves; Fine takes it out again. If the client wrote "self-contained", "no shared house" or "own kitchen" in their own words, it is already on.',
+    ],
+  },
   notes: {
     title: 'Notes and contact',
     body: [
