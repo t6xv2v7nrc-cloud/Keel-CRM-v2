@@ -10,8 +10,8 @@ import { todayIso } from '../../lib/calls';
 import { money, moneyExact, moneyFee, shortDate } from '../../lib/format';
 import { BOROUGHS } from '../../lib/london';
 import {
-  amountWords, awaitingFirstRent, BASIS_LABEL, basisWords, dueOn, dueWords, feeChaseText, feeFrom, firstRentExpected, firstRentLate, gapFor,
-  incentiveFor, isOpen, KIND_LABEL, LANDLORD, lettingFeeFor, overdueDays, owed, placementOf, potentials, potentialTotals, ruleWords, STATUS_LABEL,
+  amountWords, awaitingFirstRent, BASIS_LABEL, basisWords, cameWithReferral, dueOn, dueWords, feeChaseText, feeFrom, firstRentExpected, firstRentLate, gapFor,
+  fromHousingOfficer, incentiveFor, incentiveStatuses, isOpen, KIND_LABEL, LANDLORD, lettingFeeFor, overdueDays, owed, placementOf, potentials, potentialTotals, ruleWords, STATUS_LABEL,
   STATUSES, totals, usualFee,
 } from '../../lib/money';
 import type { ReceivableDraft } from '../../lib/money';
@@ -209,6 +209,8 @@ export function ReceivableForm({ initial, was = null, council, onDone }: { initi
   const { toast } = useToast();
   const [d, setD] = useState<ReceivableDraft>(initial);
   const [dueByHand, setDueByHand] = useState(Boolean(was)); // an existing due date is left alone unless what it counts from changes
+  // an incentive that came with a housing officer's referral is owed on sign up; any other is claimed from the council
+  const [referral, setReferral] = useState(() => cameWithReferral(initial));
   const fee = d.kind === 'letting_fee';
   const provider = providers.find((p) => p.id === d.provider_id) ?? null;
   const payerChoice = d.provider_id ?? (d.payer === LANDLORD ? 'landlord' : 'other');
@@ -218,11 +220,21 @@ export function ReceivableForm({ initial, was = null, council, onDone }: { initi
     if (recalc === 'force') setDueByHand(false);
     setD((x) => {
       const next = { ...x, ...p };
-      if (recalc === 'force' || (recalc && !dueByHand)) next.due_on = dueOn(next, providers.find((q) => q.id === next.provider_id) ?? null);
+      if (recalc === 'force' || (recalc && !dueByHand)) next.due_on = dueOn(next, providers.find((q) => q.id === next.provider_id) ?? null, referral);
       return next;
     });
   };
-  const gap = gapFor(d.kind, d.due_after ?? 'sign_up', provider);
+  const gap = gapFor(d.kind, d.due_after ?? 'sign_up', provider, referral);
+  const statuses = fee ? STATUSES.letting_fee : incentiveStatuses(referral);
+  const howPaid = (withReferral: boolean) => {
+    setReferral(withReferral);
+    setDueByHand(false);
+    setD((x) => {
+      const next = { ...x, due_after: 'sign_up' as const, ...(withReferral ? { claim_submitted_on: null } : {}),
+        ...(isOpen(x) ? { status: withReferral ? 'due' as const : x.claim_submitted_on ? 'submitted' as const : 'to_claim' as const } : {}) };
+      return { ...next, due_on: dueOn(next, null, withReferral) };
+    });
+  };
 
   const pickPayer = (v: string) => {
     const p = providers.find((q) => q.id === v);
@@ -280,6 +292,14 @@ export function ReceivableForm({ initial, was = null, council, onDone }: { initi
             </select>
           </Field>
         ) : (
+          <Field label="How it is paid">
+            <select value={referral ? 'referral' : 'claim'} className={input} onChange={(e) => howPaid(e.target.value === 'referral')}>
+              <option value="referral">Came with the referral</option>
+              <option value="claim">Claimed from the council</option>
+            </select>
+          </Field>
+        )}
+        {!fee && !referral && (
           <Field label="Claim submitted">
             <input type="date" value={d.claim_submitted_on ?? ''} className={input}
               onChange={(e) => patch({ claim_submitted_on: e.target.value || null, ...(e.target.value && d.status === 'to_claim' ? { status: 'submitted' as const } : {}) })} />
@@ -303,7 +323,7 @@ export function ReceivableForm({ initial, was = null, council, onDone }: { initi
         </Field>
         <Field label="Status">
           <select value={d.status} onChange={(e) => patch({ status: e.target.value as ReceivableStatus })} className={input}>
-            {STATUSES[d.kind].map((st) => <option key={st} value={st}>{STATUS_LABEL[st]}</option>)}
+            {(statuses.includes(d.status) ? statuses : [d.status, ...statuses]).map((st) => <option key={st} value={st}>{STATUS_LABEL[st]}</option>)}
           </select>
         </Field>
         <Field label="Notes" className="sm:col-span-2 lg:col-span-3">
@@ -342,6 +362,10 @@ export function MoneyCard({ applicant }: { applicant: Applicant }) {
   const { placed, base, provider, rentPcm } = placementOf(applicant.id, deals, properties, providers);
   const fold = useFold('client.finances');
   if (!ready || (mine.length === 0 && !placed && !potential)) return null;
+  const officer = fromHousingOfficer(applicant);
+  const addIncentive = () => setAdding(incentiveFor({ ...base, council: councilOf(applicant), fromOfficer: officer }));
+  // referred by a housing officer and placed, with no incentive yet: one usually comes with the referral
+  const askIncentive = officer && !!placed && !adding && !mine.some((r) => r.kind === 'incentive');
 
   const open = owed(mine);
   const t = totals(mine);
@@ -355,7 +379,7 @@ export function MoneyCard({ applicant }: { applicant: Applicant }) {
     <Card>
       <CardHeader icon="pound" title="Finances" sub={summary} help="money" open={fold.open} onToggle={fold.toggle}>
         <Button className={small} onClick={() => setAdding(lettingFeeFor({ ...base, provider, rentPcm }))}><Icon name="plus" size={14} />Letting fee</Button>
-        <Button className={small} onClick={() => setAdding(incentiveFor({ ...base, council: councilOf(applicant) }))}><Icon name="plus" size={14} />Incentive</Button>
+        <Button className={small} onClick={addIncentive}><Icon name="plus" size={14} />Incentive</Button>
       </CardHeader>
       {fold.open && <div className="flex flex-col gap-2 px-5 py-3">
         {adding && <ReceivableForm initial={adding} council={councilOf(applicant)} onDone={() => setAdding(null)} />}
@@ -366,7 +390,14 @@ export function MoneyCard({ applicant }: { applicant: Applicant }) {
             <span className="text-[var(--ink-muted)]">({DEAL_LABEL[potential.deal.status].toLowerCase()})</span>
           </p>
         )}
-        {mine.length === 0 && !adding && placed && (
+        {askIncentive && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md px-3 py-2 text-[14px]" style={{ background: 'var(--note-bg)', color: 'var(--note-fg)' }}>
+            <Icon name="pound" size={15} />
+            <span className="min-w-0 flex-1 basis-[220px]">{applicant.full_name.split(' ')[0]} came through a housing officer. If an incentive came with the referral, add it: it is due on sign up.</span>
+            <Button className={small} onClick={addIncentive}>Add the incentive</Button>
+          </div>
+        )}
+        {mine.length === 0 && !adding && placed && !askIncentive && (
           <p className="m-0 py-1 text-[14px] text-[var(--ink-muted)]">Nothing recorded yet. A letting fee is added here by itself when they move in; add an incentive if the council pays one.</p>
         )}
         <ul className="m-0 flex list-none flex-col divide-y divide-[var(--line)] p-0">

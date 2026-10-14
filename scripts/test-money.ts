@@ -3,6 +3,7 @@ import {
   addRule, awaitingFirstRent, basisRule, basisWords, byMonth, calendarEntries, describe, dueDate, dueOn, dueRuleFor, dueWords, feeChaseText, feeFrom,
   firstRentExpected, firstRentLate, icsFile, incentiveFor, isOpen, lettingFeeFor, moneyEvents, monthGrid, nextMonth, overdueDays, owed, potentials,
   potentialTotals, rentOf, ruleWords, totals, usualFee, usualFeeWords, ghostTotal, periods, financesCsv,
+  cameWithReferral, fromHousingOfficer, gapFor, incentiveStatuses,
 } from '../src/lib/money';
 import { DEFAULT_SETTINGS, setActiveSettings } from '../src/lib/settings';
 import type { Deal, Property, Provider, Receivable } from '../src/lib/types';
@@ -44,6 +45,29 @@ const landlordFee = lettingFeeFor({ applicantId: 'a1', dealId: 'd1', address: 'x
 check('no provider: the landlord pays, amount still to set', landlordFee.payer === 'Landlord' && landlordFee.amount === null);
 const inc = incentiveFor({ applicantId: 'a1', dealId: 'd1', address: 'x', signUpOn: '2026-10-06', council: 'Barnet' });
 check('incentive: from the council, still to claim', inc.payer === 'Barnet council' && inc.status === 'to_claim' && inc.due_on === '2026-11-17');
+check('a claimed incentive did not come with the referral', !cameWithReferral(inc));
+
+// Incentives that come with a housing officer's referral: owed from sign up, nothing to claim
+const officerClient = { officer_name: 'Hannah Okafor', officer_email: null, officer_phone: null, source: 'officer' };
+check('a client with their housing officer named came from a housing officer', fromHousingOfficer(officerClient));
+check('only an officer email is enough', fromHousingOfficer({ officer_name: '  ', officer_email: 'h.okafor@barnet.gov.uk', officer_phone: null, source: 'website' }));
+check('a client with no officer did not', !fromHousingOfficer({ officer_name: null, officer_email: '', officer_phone: null, source: 'website' }) && !fromHousingOfficer(null));
+const withReferral = incentiveFor({ applicantId: 'a1', dealId: 'd1', address: 'x', signUpOn: '2026-10-06', council: 'Barnet', fromOfficer: true });
+check('incentive with the referral: due on the sign-up date, nothing to claim',
+  withReferral.due_on === '2026-10-06' && withReferral.status === 'due' && withReferral.due_after === 'sign_up' && withReferral.claim_submitted_on === null, JSON.stringify(withReferral));
+check('it reads back as having come with the referral', cameWithReferral(withReferral));
+check('the rule says on sign up', ruleWords(gapFor('incentive', 'sign_up', null, true)) === 'on sign up' && ruleWords(gapFor('incentive', 'sign_up', null, false)) === '6 weeks after sign up');
+check('moving the sign-up date moves the due date with it', dueOn({ kind: 'incentive', sign_up_on: '2026-10-20', due_after: 'sign_up' }, null, true) === '2026-10-20');
+check('with no sign-up date yet, no due date', incentiveFor({ applicantId: 'a1', dealId: null, address: null, signUpOn: null, council: null, fromOfficer: true }).due_on === null);
+check('overdue the day after sign up if not paid', overdueDays({ status: 'due', due_on: '2026-10-06' }, '2026-10-07') === 1 && overdueDays({ status: 'due', due_on: '2026-10-06' }, '2026-10-06') === null);
+setActiveSettings({ ...DEFAULT_SETTINGS, officerIncentiveDue: { n: 14, unit: 'days', from: 'sign_up' } });
+check('the team can give them longer in Settings', incentiveFor({ applicantId: 'a1', dealId: 'd1', address: 'x', signUpOn: '2026-10-06', council: 'Barnet', fromOfficer: true }).due_on === '2026-10-20');
+check('which leaves claimed incentives alone', incentiveFor({ applicantId: 'a1', dealId: 'd1', address: 'x', signUpOn: '2026-10-06', council: 'Barnet' }).due_on === '2026-11-17');
+setActiveSettings(DEFAULT_SETTINGS);
+check('a claimed one is a claim even once chased or paid', !cameWithReferral({ kind: 'incentive', status: 'paid', claim_submitted_on: '2026-10-10' }) && !cameWithReferral({ kind: 'incentive', status: 'submitted' }));
+check('a letting fee is never an incentive with a referral', !cameWithReferral({ kind: 'letting_fee', status: 'due' }));
+check('statuses: no claim steps for one with the referral', !incentiveStatuses(true).includes('to_claim') && !incentiveStatuses(true).includes('submitted') && incentiveStatuses(true).includes('due'));
+check('statuses: a claimed one has its claim steps and is never plain due', incentiveStatuses(false).includes('to_claim') && !incentiveStatuses(false).includes('due'));
 check('timeline wording', describe({ kind: 'letting_fee', payer: 'Watermint', amount: 300, due_on: '2026-11-06' }) === 'Letting fee of £300 from Watermint, due Fri 6 Nov');
 
 // Money owed: sorted by due date, overdue flagged

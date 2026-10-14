@@ -31,7 +31,7 @@ export const STATUS_LABEL: Record<ReceivableStatus, string> = {
 /** The statuses each kind moves through. */
 export const STATUSES: Record<ReceivableKind, ReceivableStatus[]> = {
   letting_fee: ['due', 'chased', 'paid'],
-  incentive: ['to_claim', 'submitted', 'chased', 'paid', 'declined'],
+  incentive: ['due', 'to_claim', 'submitted', 'chased', 'paid', 'declined'],
 };
 export const LANDLORD = 'Landlord';
 
@@ -111,10 +111,25 @@ export function ruleWords(r: DueRule): string {
   return r.n === 0 ? 'on sign up' : `${gap} after sign up`;
 }
 
-/** The rule that applies: the provider's own for a letting fee, else the team's standard. */
-export function dueRuleFor(kind: ReceivableKind, provider?: Pick<Provider, 'rules'> | null): DueRule {
+/**
+ * A client referred directly by a housing officer: their council incentive comes with them and falls due on sign up
+ * (Team settings), rather than being claimed afterwards.
+ */
+export const fromHousingOfficer = (a: Pick<Applicant, 'officer_name' | 'officer_email' | 'officer_phone' | 'source'> | null | undefined) =>
+  !!a && (!!(a.officer_name?.trim() || a.officer_email?.trim() || a.officer_phone?.trim()) || a.source === 'officer');
+
+/** An incentive that came with the referral rather than being claimed: no claim stage and no claim date. */
+export const cameWithReferral = (r: Pick<Receivable, 'kind' | 'status'> & Pick<Partial<Receivable>, 'claim_submitted_on'>) =>
+  r.kind === 'incentive' && !r.claim_submitted_on && r.status !== 'to_claim' && r.status !== 'submitted';
+
+/** The statuses an incentive can have: one that came with the referral is simply owed, a claimed one goes through its claim. */
+export const incentiveStatuses = (referral: boolean): ReceivableStatus[] =>
+  (referral ? ['due', 'chased', 'paid', 'declined'] : ['to_claim', 'submitted', 'chased', 'paid', 'declined']);
+
+/** The rule that applies: the provider's own for a letting fee, else the team's standard; for an incentive, the housing officer rule when it came with one. */
+export function dueRuleFor(kind: ReceivableKind, provider?: Pick<Provider, 'rules'> | null, officer = false): DueRule {
   const s = activeSettings();
-  if (kind === 'incentive') return s.incentiveDue;
+  if (kind === 'incentive') return officer ? s.officerIncentiveDue : s.incentiveDue;
   return provider?.rules?.fee_due ?? s.feeDue;
 }
 
@@ -123,20 +138,20 @@ export const firstRentExpected = (signUpOn: string | null | undefined) =>
   (signUpOn ? addRule(signUpOn, activeSettings().firstRentExpected) : null);
 
 /** How long after `from` it falls due: the payer's own rule if it counts from the same thing, else a standard. */
-export function gapFor(kind: ReceivableKind, from: DueFrom, provider?: Pick<Provider, 'rules'> | null): DueRule {
-  const rule = dueRuleFor(kind, provider);
+export function gapFor(kind: ReceivableKind, from: DueFrom, provider?: Pick<Provider, 'rules'> | null, officer = false): DueRule {
+  const rule = dueRuleFor(kind, provider, officer);
   if ((rule.from ?? 'sign_up') === from) return rule;
   if (from === 'first_rent') return { n: 0, unit: 'days', from };
-  const team = kind === 'incentive' ? activeSettings().incentiveDue : activeSettings().feeDue;
+  const team = kind === 'incentive' ? dueRuleFor('incentive', null, officer) : activeSettings().feeDue;
   return (team.from ?? 'sign_up') === 'sign_up' ? team : { n: 1, unit: 'months', from: 'sign_up' };
 }
 
 type DueFields = Pick<Receivable, 'kind' | 'sign_up_on'> & Pick<Partial<Receivable>, 'due_after' | 'first_rent_due_on' | 'first_rent_paid_on'>;
 
 /** When it falls due: counted from sign up, or for a fee that waits for the first month's rent, from the day that is paid (or expected). */
-export function dueOn(r: DueFields, provider?: Pick<Provider, 'rules'> | null): string | null {
+export function dueOn(r: DueFields, provider?: Pick<Provider, 'rules'> | null, officer = false): string | null {
   const from = r.due_after ?? 'sign_up';
-  const gap = gapFor(r.kind, from, provider);
+  const gap = gapFor(r.kind, from, provider, officer);
   if (from === 'first_rent') {
     const base = r.first_rent_paid_on ?? r.first_rent_due_on ?? firstRentExpected(r.sign_up_on);
     return base ? addRule(base, gap) : null;
@@ -145,8 +160,8 @@ export function dueOn(r: DueFields, provider?: Pick<Provider, 'rules'> | null): 
 }
 
 /** When it falls due under the payer's rule, from the sign-up date; null without one. */
-export function dueDate(kind: ReceivableKind, signUpOn: string | null, provider?: Pick<Provider, 'rules'> | null): string | null {
-  return dueOn({ kind, sign_up_on: signUpOn, due_after: dueRuleFor(kind, provider).from ?? 'sign_up' }, provider);
+export function dueDate(kind: ReceivableKind, signUpOn: string | null, provider?: Pick<Provider, 'rules'> | null, officer = false): string | null {
+  return dueOn({ kind, sign_up_on: signUpOn, due_after: dueRuleFor(kind, provider, officer).from ?? 'sign_up' }, provider, officer);
 }
 
 // ── What is owed ───────────────────────────────────────────────────
@@ -252,13 +267,17 @@ export function placementOf(applicantId: string, deals: Deal[], properties: Prop
   };
 }
 
-/** A council incentive for a placement, still to be claimed. */
-export function incentiveFor(v: { applicantId: string; dealId: string | null; address: string | null; signUpOn: string | null; council: string | null }): ReceivableDraft {
+/**
+ * A council incentive for a placement. One that came with a client referred directly by a housing officer is owed
+ * on sign up (nothing to claim); any other is still to be claimed, and falls due on the team's incentive rule.
+ */
+export function incentiveFor(v: { applicantId: string; dealId: string | null; address: string | null; signUpOn: string | null; council: string | null; fromOfficer?: boolean }): ReceivableDraft {
+  const officer = v.fromOfficer === true;
   return {
     kind: 'incentive', applicant_id: v.applicantId, deal_id: v.dealId, property_address: v.address,
     payer: v.council ? `${v.council} council` : 'Council', provider_id: null, amount: null, sign_up_on: v.signUpOn,
-    due_on: dueDate('incentive', v.signUpOn), claim_submitted_on: null, status: 'to_claim', paid_on: null, notes: null,
-    due_after: 'sign_up',
+    due_on: dueDate('incentive', v.signUpOn, null, officer), claim_submitted_on: null, status: officer ? 'due' : 'to_claim', paid_on: null,
+    notes: null, due_after: 'sign_up',
   };
 }
 

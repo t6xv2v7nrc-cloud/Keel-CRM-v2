@@ -132,6 +132,8 @@ export interface AppSettings {
   feeDue: DueRule;
   /** When a council incentive should have been paid, counted from sign up. */
   incentiveDue: DueRule;
+  /** When the incentive that comes with a client referred directly by a housing officer falls due: on sign up as standard. */
+  officerIncentiveDue: DueRule;
   /** Wording when chasing a provider for a letting fee on WhatsApp. */
   feeChaseMessage: string;
   /** When a client's first month's rent usually arrives, counted from sign up (for fees that wait for it). */
@@ -299,6 +301,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // `from` is spelt out so a saved "after the first month's rent" survives withDefaults
   feeDue: { n: 1, unit: 'months', from: 'sign_up' },
   incentiveDue: { n: 6, unit: 'weeks', from: 'sign_up' },
+  officerIncentiveDue: { n: 0, unit: 'days', from: 'sign_up' },
   feeChaseMessage: DEFAULT_FEE_CHASE,
   firstRentExpected: { n: 1, unit: 'months', from: 'sign_up' },
   invoice: DEFAULT_INVOICE,

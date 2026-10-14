@@ -307,7 +307,7 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
 /** Team settings: when letting fees and incentives fall due, when a first month's rent is expected, and the wording for chasing a fee. */
 function MoneySettings({ draft, set }: { draft: AppSettings; set: <K extends keyof AppSettings>(k: K, v: AppSettings[K]) => void }) {
   const box = 'h-10 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]';
-  const due = (key: 'feeDue' | 'incentiveDue' | 'firstRentExpected', label: string, canWait: boolean) => (
+  const due = (key: 'feeDue' | 'incentiveDue' | 'officerIncentiveDue' | 'firstRentExpected', label: string, canWait: boolean) => (
     <span className="flex flex-wrap items-center gap-2">
       <input type="number" min={0} value={draft[key].n} aria-label={`${label}: how long`}
         onChange={(e) => set(key, { ...draft[key], n: Math.max(0, Number(e.target.value) || 0) })}
@@ -330,8 +330,11 @@ function MoneySettings({ draft, set }: { draft: AppSettings; set: <K extends key
         <Row icon="calendar" title="Letting fees fall due" text="For the landlord, or a provider with no rule of its own. A provider's own rule (Settings, Providers) wins.">
           {due('feeDue', 'Letting fees fall due', true)}
         </Row>
-        <Row icon="calendar" title="Council incentives should arrive by" text="Counted from the sign-up date. Anything not paid by then shows as overdue.">
+        <Row icon="calendar" title="Council incentives should arrive by" text="Incentives claimed from the council, counted from the sign-up date. Anything not paid by then shows as overdue.">
           {due('incentiveDue', 'Incentives due', false)}
+        </Row>
+        <Row icon="calendar" title="Incentives that come with a housing officer's referral fall due" text="Nothing to claim: they are owed from sign up. 0 days means due on the sign-up date.">
+          {due('officerIncentiveDue', 'Incentives with a referral due', false)}
         </Row>
         <Row icon="clock" title="First month's rent usually arrives" text="For fees that wait for it: the date it is expected goes on the calendar, and you are asked to check if it is late.">
           {due('firstRentExpected', 'First rent expected', false)}

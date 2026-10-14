@@ -113,6 +113,10 @@ supabase/migrations/
 - Finances leads with the ghost total: everything owed plus a fee for every client with a viewing booked or further
   (viewing, viewed, offered, accepted; `ghostTotal` and `potentials` in money.ts). Properties only sent or "interested" never
   count. Several clients booked to view one property each count; each client counts once (they move in once).
+- Clients referred directly by a housing officer (`fromHousingOfficer`: officer details on the client) often come with a council
+  incentive attached: it is owed from sign up with nothing to claim (status Due, `officerIncentiveDue` in Team settings, on sign up
+  as standard; `cameWithReferral`). Other incentives are claimed (To claim, then Claim submitted) and fall due on `incentiveDue`.
+  Not every officer client has one, so it is not added by itself: once placed, their Finances card asks for it.
 
 ## Env vars
 

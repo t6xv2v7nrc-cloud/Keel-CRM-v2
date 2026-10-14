@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Button, Card, CardHeader, Empty, Help, Icon, PageHeader } from '../../components/ui';
 import { useApplicants, useDeals, useProperties, useProviders, useReceivables } from '../../lib/hooks';
 import { money, moneyFee, moneyShort } from '../../lib/format';
-import { byMonth, financesCsv, ghostTotal, incentiveFor, isOpen, lettingFeeFor, owed, periodDay, periods, placementOf, POTENTIAL_STEPS, potentials, potentialTotals, totals } from '../../lib/money';
+import { byMonth, financesCsv, fromHousingOfficer, ghostTotal, incentiveFor, isOpen, lettingFeeFor, owed, periodDay, periods, placementOf, POTENTIAL_STEPS, potentials, potentialTotals, totals } from '../../lib/money';
 import { saveFile } from '../../lib/files';
 import type { GhostTotal, MonthTotal, ReceivableDraft } from '../../lib/money';
 import { councilOf, isActive } from '../../lib/search';
@@ -59,7 +59,7 @@ export function MoneyPage() {
     const client = applicants.find((a) => a.full_name.toLowerCase() === clientName.trim().toLowerCase());
     if (!client) return;
     const { base, provider, rentPcm } = placementOf(client.id, deals, properties, providers);
-    setAdding(addKind === 'letting_fee' ? lettingFeeFor({ ...base, provider, rentPcm }) : incentiveFor({ ...base, council: councilOf(client) }));
+    setAdding(addKind === 'letting_fee' ? lettingFeeFor({ ...base, provider, rentPcm }) : incentiveFor({ ...base, council: councilOf(client), fromOfficer: fromHousingOfficer(client) }));
     setAddOpen(false);
   };
   const addingFor = adding ? byId.get(adding.applicant_id) ?? null : null;
