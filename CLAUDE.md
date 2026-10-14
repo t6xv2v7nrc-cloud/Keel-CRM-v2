@@ -117,6 +117,10 @@ supabase/migrations/
   incentive attached: it is owed from sign up with nothing to claim (status Due, `officerIncentiveDue` in Team settings, on sign up
   as standard; `cameWithReferral`). Other incentives are claimed (To claim, then Claim submitted) and fall due on `incentiveDue`.
   Not every officer client has one, so it is not added by itself: once placed, their Finances card asks for it.
+- Nothing is owed before the client signs up. A fee or incentive with no sign-up date (added at the offer stage), or one
+  still to come, waits as "Waiting for sign up" (`awaitingSignUp`): not in Owed totals, never overdue, not in targets, counted
+  under Potential and with the offers in the ghost total. Moving the client in on Progress dates it from the move-in day
+  (`signingUpWith`, `signUpPatch`); so does the Signed up button on the row.
 
 ## Env vars
 

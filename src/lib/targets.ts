@@ -5,7 +5,8 @@
 
 import type { Deal, Receivable } from './types';
 import type { Target } from './settings';
-import { isoDay } from './calls';
+import { isoDay, todayIso } from './calls';
+import { awaitingSignUp } from './money';
 import { money, shortDay } from './format';
 
 export type PeriodKey = 'week' | 'month' | 'year';
@@ -39,13 +40,13 @@ export function periodOf(key: PeriodKey, now = new Date()): Period {
 
 const within = (iso: string | null | undefined, p: Pick<Period, 'from' | 'to'>) => !!iso && iso.slice(0, 10) >= p.from && iso.slice(0, 10) <= p.to;
 
-/** Placements and fees in a period. */
-export function progressIn(p: Pick<Period, 'from' | 'to'>, deals: Deal[], receivables: Receivable[]): { placements: number; fees: number } {
+/** Placements and fees in a period. Fees still waiting for the client to sign up do not count yet. */
+export function progressIn(p: Pick<Period, 'from' | 'to'>, deals: Deal[], receivables: Receivable[], today = todayIso()): { placements: number; fees: number } {
   const placed = new Set<string>();
+  const signed = receivables.filter((r) => r.status !== 'declined' && !awaitingSignUp(r, today) && within(r.sign_up_on, p));
   for (const d of deals) if (d.status === 'moved_in' && within(d.move_in_on ?? d.updated_at, p)) placed.add(d.applicant_id);
-  for (const r of receivables) if (r.kind === 'letting_fee' && r.status !== 'declined' && within(r.sign_up_on, p)) placed.add(r.applicant_id);
-  const fees = receivables
-    .filter((r) => r.status !== 'declined' && within(r.sign_up_on, p))
+  for (const r of signed) if (r.kind === 'letting_fee') placed.add(r.applicant_id);
+  const fees = signed
     .reduce((s, r) => s + (r.amount ?? 0), 0);
   return { placements: placed.size, fees: Math.round(fees * 100) / 100 };
 }

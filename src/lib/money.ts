@@ -173,6 +173,32 @@ type WaitFields = Pick<Receivable, 'status'> & Pick<Partial<Receivable>, 'due_af
 /** Still owed, and waiting for the client's first month's rent, which is not in yet. Not overdue while it waits. */
 export const awaitingFirstRent = (r: WaitFields) => isOpen(r) && r.due_after === 'first_rent' && !r.first_rent_paid_on;
 
+/**
+ * Still waiting for the client to sign up: no sign-up date yet, or one still to come. Not owed yet (and never overdue):
+ * it counts as potential until they sign up, when moving them in on Progress (or Signed up) dates it and it falls due.
+ */
+export const awaitingSignUp = (r: Pick<Receivable, 'status'> & Pick<Partial<Receivable>, 'sign_up_on'>, today = todayIso()) =>
+  isOpen(r) && (r.sign_up_on === null || (!!r.sign_up_on && r.sign_up_on > today));
+
+/** Signing a fee or incentive up on a day: the sign-up date, and the due date (and expected first rent) worked out again from it. */
+export function signUpPatch(r: Receivable | ReceivableDraft, onDay: string, provider?: Pick<Provider, 'rules'> | null): Pick<Receivable, 'sign_up_on' | 'due_on'> & Pick<Partial<Receivable>, 'first_rent_due_on'> {
+  const waits = r.due_after === 'first_rent' && !r.first_rent_paid_on;
+  const next = { ...r, sign_up_on: onDay, ...(waits ? { first_rent_due_on: firstRentExpected(onDay) } : {}) };
+  return {
+    sign_up_on: onDay, due_on: dueOn(next, provider, cameWithReferral(r)),
+    ...(waits ? { first_rent_due_on: next.first_rent_due_on } : {}),
+  };
+}
+
+/**
+ * When a client moves in, what signs up with that deal: anything already on the deal, and anything of theirs still waiting
+ * for a sign-up (incentives from any of their deals, which go with the client; letting fees with no deal). Paid and declined stay.
+ */
+export function signingUpWith<T extends Receivable>(theirs: T[], deal: Pick<Deal, 'id'>, onDay: string, today = todayIso()): T[] {
+  return theirs.filter((r) => isOpen(r) && r.sign_up_on !== onDay
+    && (r.deal_id === deal.id || (awaitingSignUp(r, today) && (r.kind === 'incentive' || !r.deal_id))));
+}
+
 /** Days past the date the first month's rent was expected, while it is still not marked paid; null otherwise. */
 export function firstRentLate(r: WaitFields, today = todayIso()): number | null {
   if (!awaitingFirstRent(r) || !r.first_rent_due_on || r.first_rent_due_on >= today) return null;
@@ -180,14 +206,16 @@ export function firstRentLate(r: WaitFields, today = todayIso()): number | null 
 }
 
 /** Days past its due date, for something still owed; null if it is not overdue (or still waits for the first rent). */
-export function overdueDays(r: Pick<Receivable, 'status' | 'due_on'> & Pick<Partial<Receivable>, 'due_after' | 'first_rent_paid_on'>, today = todayIso()): number | null {
-  if (!isOpen(r) || !r.due_on || r.due_on >= today || awaitingFirstRent(r)) return null;
+export function overdueDays(r: Pick<Receivable, 'status' | 'due_on'> & Pick<Partial<Receivable>, 'due_after' | 'first_rent_paid_on' | 'sign_up_on'>, today = todayIso()): number | null {
+  if (!isOpen(r) || !r.due_on || r.due_on >= today || awaitingFirstRent(r) || awaitingSignUp(r, today)) return null;
   return dayNumber(today) - dayNumber(r.due_on);
 }
 
-/** Everything still owed, soonest due first (so overdue comes first); undated last. */
-export function owed(list: Receivable[]): Receivable[] {
+/** Everything still to come in, soonest due first (so overdue comes first); undated last, then what waits for a sign-up. */
+export function owed(list: Receivable[], today = todayIso()): Receivable[] {
   return list.filter(isOpen).sort((a, b) => {
+    const wa = awaitingSignUp(a, today), wb = awaitingSignUp(b, today);
+    if (wa !== wb) return wa ? 1 : -1;
     if (!a.due_on !== !b.due_on) return a.due_on ? -1 : 1;
     return (a.due_on ?? '').localeCompare(b.due_on ?? '') || a.created_at.localeCompare(b.created_at);
   });
@@ -197,17 +225,28 @@ export interface MoneyTotals {
   owed: number; owedCount: number; overdue: number; overdueCount: number; soon: number; soonCount: number; paid30: number; unpriced: number;
   /** waiting for a first month's rent; checkRent of them should have had it by now */
   waiting: number; waitingCount: number; checkRent: number;
+  /** waiting for the client to sign up: not owed yet, so not in owed (signingUnpriced of them have no amount yet) */
+  signing: number; signingCount: number; signingUnpriced: number;
 }
 
-/** Totals for the top of the Finances page. "Soon" is due within 7 days; "unpriced" counts open items with no amount yet. */
+/** Totals for the top of the Finances page. "Soon" is due within 7 days; "unpriced" counts owed items with no amount yet.
+ *  Anything waiting for the client to sign up is kept apart: it is not owed until they do. */
 export function totals(list: Receivable[], today = todayIso()): MoneyTotals {
-  const t: MoneyTotals = { owed: 0, owedCount: 0, overdue: 0, overdueCount: 0, soon: 0, soonCount: 0, paid30: 0, unpriced: 0, waiting: 0, waitingCount: 0, checkRent: 0 };
+  const t: MoneyTotals = {
+    owed: 0, owedCount: 0, overdue: 0, overdueCount: 0, soon: 0, soonCount: 0, paid30: 0, unpriced: 0, waiting: 0, waitingCount: 0, checkRent: 0,
+    signing: 0, signingCount: 0, signingUnpriced: 0,
+  };
   const week = isoDay(new Date(new Date(`${today}T12:00:00`).getTime() + 7 * 86_400_000));
   const monthAgo = isoDay(new Date(new Date(`${today}T12:00:00`).getTime() - 30 * 86_400_000));
   for (const r of list) {
     const amount = r.amount ?? 0;
     if (r.status === 'paid') { if ((r.paid_on ?? '') >= monthAgo) t.paid30 += amount; continue; }
     if (!isOpen(r)) continue;
+    if (awaitingSignUp(r, today)) {
+      t.signing += amount; t.signingCount += 1;
+      if (r.amount == null) t.signingUnpriced += 1;
+      continue;
+    }
     t.owed += amount; t.owedCount += 1;
     if (r.amount == null) t.unpriced += 1;
     if (awaitingFirstRent(r)) {
@@ -221,8 +260,9 @@ export function totals(list: Receivable[], today = todayIso()): MoneyTotals {
 
 const day = (iso: string) => shortDay(`${iso}T12:00:00`);
 
-/** "Overdue 5 days", "Due today", "Due Thu 9 Oct", "Waiting for first rent, Fri 6 Nov", "No due date" */
-export function dueWords(r: Pick<Receivable, 'status' | 'due_on'> & Pick<Partial<Receivable>, 'due_after' | 'first_rent_paid_on' | 'first_rent_due_on'>, today = todayIso()): string {
+/** "Overdue 5 days", "Due today", "Due Thu 9 Oct", "Waiting for first rent, Fri 6 Nov", "Waiting for sign up", "No due date" */
+export function dueWords(r: Pick<Receivable, 'status' | 'due_on'> & Pick<Partial<Receivable>, 'due_after' | 'first_rent_paid_on' | 'first_rent_due_on' | 'sign_up_on'>, today = todayIso()): string {
+  if (awaitingSignUp(r, today)) return r.sign_up_on ? `Waiting for sign up, ${day(r.sign_up_on)}` : 'Waiting for sign up';
   if (awaitingFirstRent(r)) {
     if (!r.first_rent_due_on) return 'Waiting for first rent';
     return firstRentLate(r, today) !== null ? `Check first rent, expected ${day(r.first_rent_due_on)}` : `Waiting for first rent, ${day(r.first_rent_due_on)}`;
@@ -255,13 +295,15 @@ export function lettingFeeFor(v: { applicantId: string; dealId: string | null; a
   return { ...draft, due_on: dueOn(draft, v.provider) };
 }
 
-/** Where a client was placed, for a new fee or incentive: the move-in (or the accepted offer), its provider and its rent. */
+/** Where a client was placed, for a new fee or incentive: the move-in (or the accepted offer, not signed up yet), its provider and its rent. */
 export function placementOf(applicantId: string, deals: Deal[], properties: Property[], providers: Provider[]) {
   const placed = deals.find((d) => d.applicant_id === applicantId && d.status === 'moved_in') ?? deals.find((d) => d.applicant_id === applicantId && d.status === 'accepted') ?? null;
   const property = placed ? (placed.property_id ? properties.find((p) => p.id === placed.property_id) : undefined) ?? properties.find((p) => p.address_line === placed.address) ?? null : null;
   return {
     placed,
-    base: { applicantId, dealId: placed?.id ?? null, address: placed?.address ?? null, signUpOn: placed?.move_in_on ?? todayIso() },
+    // signed up once moved in; an accepted offer has not signed up yet (unless a move-in date is booked)
+    base: { applicantId, dealId: placed?.id ?? null, address: placed?.address ?? null,
+      signUpOn: placed?.move_in_on ?? (placed && placed.status !== 'moved_in' ? null : todayIso()) },
     provider: property ? providerFor(property, providers) : null,
     rentPcm: rentOf(property),
   };
@@ -282,10 +324,10 @@ export function incentiveFor(v: { applicantId: string; dealId: string | null; ad
 }
 
 /** A line for the client's timeline: "Letting fee of £300 from Watermint, due 6 Nov". */
-export function describe(r: Pick<Receivable, 'kind' | 'payer' | 'amount' | 'due_on'> & Pick<Partial<Receivable>, 'due_after' | 'first_rent_paid_on'>): string {
+export function describe(r: Pick<Receivable, 'kind' | 'payer' | 'amount' | 'due_on'> & Pick<Partial<Receivable>, 'due_after' | 'first_rent_paid_on' | 'sign_up_on'>): string {
   const waits = r.due_after === 'first_rent' && !r.first_rent_paid_on;
   return `${KIND_LABEL[r.kind]}${r.amount != null ? ` of ${moneyFee(r.amount)}` : ''} from ${r.payer}${
-    waits ? ', due once the first month\'s rent is paid' : r.due_on ? `, due ${day(r.due_on)}` : ''}`;
+    r.sign_up_on === null ? ', due once they sign up' : waits ? ', due once the first month\'s rent is paid' : r.due_on ? `, due ${day(r.due_on)}` : ''}`;
 }
 
 /** The WhatsApp message chasing a provider for a letting fee, from the team's wording. */
@@ -391,7 +433,8 @@ export interface GhostTotal {
  */
 export function ghostTotal(receivables: Receivable[], pipeline: Potential[], today = todayIso()): GhostTotal {
   const t = totals(receivables, today);
-  const g: GhostTotal = { total: 0, owed: t.owed, likely: 0, viewings: 0, unknown: t.unpriced };
+  // waiting for a sign-up: an offer accepted, so it counts with the offers until they sign
+  const g: GhostTotal = { total: 0, owed: t.owed, likely: t.signing, viewings: 0, unknown: t.unpriced + t.signingUnpriced };
   for (const p of pipeline) {
     if (!POTENTIAL_STEPS.includes(p.deal.status)) continue;
     if (p.amount == null) { g.unknown += 1; continue; }

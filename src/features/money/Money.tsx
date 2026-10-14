@@ -10,8 +10,8 @@ import { todayIso } from '../../lib/calls';
 import { money, moneyExact, moneyFee, shortDate } from '../../lib/format';
 import { BOROUGHS } from '../../lib/london';
 import {
-  amountWords, awaitingFirstRent, BASIS_LABEL, basisWords, cameWithReferral, dueOn, dueWords, feeChaseText, feeFrom, firstRentExpected, firstRentLate, gapFor,
-  fromHousingOfficer, incentiveFor, incentiveStatuses, isOpen, KIND_LABEL, LANDLORD, lettingFeeFor, overdueDays, owed, placementOf, potentials, potentialTotals, ruleWords, STATUS_LABEL,
+  amountWords, awaitingFirstRent, awaitingSignUp, BASIS_LABEL, basisWords, cameWithReferral, dueOn, dueWords, feeChaseText, feeFrom, firstRentExpected, firstRentLate, gapFor,
+  fromHousingOfficer, incentiveFor, incentiveStatuses, isOpen, KIND_LABEL, LANDLORD, lettingFeeFor, overdueDays, owed, placementOf, potentials, potentialTotals, ruleWords, signUpPatch, STATUS_LABEL,
   STATUSES, totals, usualFee,
 } from '../../lib/money';
 import type { ReceivableDraft } from '../../lib/money';
@@ -44,7 +44,7 @@ function DueChip({ r }: { r: Receivable }) {
     <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[12px] font-semibold"
       style={late ? { background: 'var(--note-bg)', color: 'var(--note-fg)' } : paid ? { background: 'var(--accent-soft)', color: 'var(--accent-ink)' } : { background: 'var(--chip-bg)', color: 'var(--chip-fg)' }}>
       {late && <Icon name="alert" size={11} strokeWidth={2.2} />}
-      {!late && awaitingFirstRent(r) && <Icon name="clock" size={11} strokeWidth={2.2} />}
+      {!late && (awaitingFirstRent(r) || awaitingSignUp(r)) && <Icon name="clock" size={11} strokeWidth={2.2} />}
       {paid ? `Paid${r.paid_on ? ` ${shortDate(r.paid_on)}` : ''}` : r.status === 'declined' ? 'Declined' : dueWords(r)}
     </span>
   );
@@ -63,6 +63,14 @@ export function MoneyRow({ r, client, provider, showClient = true }: { r: Receiv
       onError: (e) => toast((e as Error).message, 'danger'),
     });
   const waiting = awaitingFirstRent(r);
+  const signing = awaitingSignUp(r);
+  const signedUp = () => {
+    const next = signUpPatch(r, todayIso(), provider);
+    save.mutate({ draft: { ...r, ...next }, was: r }, {
+      onSuccess: () => toast(`Signed up. ${KIND_LABEL[r.kind]} from ${r.payer} ${next.due_on ? `now due ${shortDate(next.due_on)}` : 'now owed'}`, 'success'),
+      onError: (e) => toast((e as Error).message, 'danger'),
+    });
+  };
   const rentIn = () => {
     const next = { ...r, first_rent_paid_on: todayIso() };
     const due = dueOn(next, provider);
@@ -87,7 +95,7 @@ export function MoneyRow({ r, client, provider, showClient = true }: { r: Receiv
         <div className="text-[13px] text-[var(--ink-muted)]">
           {showClient && client && <><Link to={`/applicants/${client.id}`} className="text-[var(--ink)] hover:underline">{client.full_name}</Link> · </>}
           {r.property_address ? shortAddress(r.property_address) : 'No property set'}
-          {r.sign_up_on && ` · signed up ${shortDate(r.sign_up_on)}`}
+          {r.sign_up_on && !signing && ` · signed up ${shortDate(r.sign_up_on)}`}
           {r.kind === 'incentive' && r.claim_submitted_on && ` · claimed ${shortDate(r.claim_submitted_on)}`}
           {isOpen(r) && r.status !== 'due' && ` · ${STATUS_LABEL[r.status]}`}
         </div>
@@ -100,13 +108,16 @@ export function MoneyRow({ r, client, provider, showClient = true }: { r: Receiv
         {r.notes && <div className="text-[13px] text-[var(--ink-muted)]">{r.notes}</div>}
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        {waiting && (
+        {signing && (
+          <Button className={small} disabled={save.isPending} onClick={signedUp} title="The client has signed up today, so this falls due">Signed up</Button>
+        )}
+        {waiting && !signing && (
           <Button className={small} disabled={save.isPending} onClick={rentIn} title="The client's first month's rent has been paid, so the fee falls due">First rent paid</Button>
         )}
         {isOpen(r) && r.kind === 'incentive' && r.status === 'to_claim' && (
           <Button className={small} disabled={save.isPending} onClick={() => set('submitted', { claim_submitted_on: todayIso() }, 'claim submitted')}>Claim submitted</Button>
         )}
-        {isOpen(r) && !waiting && r.status !== 'to_claim' && (chase ? (
+        {isOpen(r) && !waiting && !signing && r.status !== 'to_claim' && (chase ? (
           <a href={chase} target="_blank" rel="noreferrer" onClick={() => set('chased')} title={`Chase ${r.payer} on WhatsApp`}
             className="inline-flex items-center gap-1.5 rounded-md border border-[var(--line-strong)] px-3 py-1.5 text-[13px] font-medium text-[var(--accent-ink)] hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]">
             <Icon name="chat" size={14} /> Chase
@@ -274,11 +285,12 @@ export function ReceivableForm({ initial, was = null, council, onDone }: { initi
             <datalist id="keel-councils">{BOROUGHS.map((b) => <option key={b} value={b} />)}</datalist>
           </Field>
         )}
-        <Field label="Sign-up date">
+        <Field label="Sign-up date" hint={d.sign_up_on ? undefined : 'Leave empty until they sign up: it is not owed until then'}>
           <input type="date" value={d.sign_up_on ?? ''} className={input}
             onChange={(e) => {
               const signUp = e.target.value || null;
-              patch({ sign_up_on: signUp, ...(waits && !d.first_rent_paid_on ? { first_rent_due_on: firstRentExpected(signUp) } : {}) }, true);
+              // no sign-up date: not signed up yet, so no due date either until they do
+              patch({ sign_up_on: signUp, ...(waits && !d.first_rent_paid_on ? { first_rent_due_on: firstRentExpected(signUp) } : {}) }, signUp ? true : 'force');
             }} />
         </Field>
         {fee ? (
@@ -370,7 +382,9 @@ export function MoneyCard({ applicant }: { applicant: Applicant }) {
   const open = owed(mine);
   const t = totals(mine);
   const summary = [
-    open.length ? `${money(t.owed)} owed${t.overdueCount ? ` · ${t.overdueCount} overdue` : ''}` : mine.length ? 'All paid' : null,
+    t.owedCount ? `${money(t.owed)} owed${t.overdueCount ? ` · ${t.overdueCount} overdue` : ''}` : null,
+    t.signingCount ? `${t.signing ? money(t.signing) : `${t.signingCount} ${t.signingCount === 1 ? 'item' : 'items'}`} once they sign up` : null,
+    !open.length && mine.length ? 'All paid' : null,
     // folded away, the potential fee still shows
     !fold.open && potential ? `Potential ${potential.amount != null ? moneyFee(potential.amount) : 'fee not known'}` : null,
   ].filter(Boolean).join(' · ') || undefined;
@@ -419,14 +433,14 @@ export function MoneyOwedSummary({ applicants }: { applicants: Applicant[] }) {
   const { deals } = useDeals();
   const { data: properties = [] } = useProperties();
   const pt = useMemo(() => potentialTotals(potentials(deals, receivables, properties, providers)), [deals, receivables, properties, providers]);
-  const list = owed(receivables);
+  const list = owed(receivables).filter((r) => !awaitingSignUp(r));
   if (!ready || list.length === 0) return null;
   const t = totals(receivables);
   const byId = new Map(applicants.map((a) => [a.id, a]));
   return (
     <Card>
       <CardHeader icon="pound" title="Finances" help="money"
-        sub={`${money(t.owed)} owed${t.overdueCount ? ` · ${money(t.overdue)} overdue` : ''}${pt.total ? ` · ${money(pt.total)} potential` : ''}`}>
+        sub={`${money(t.owed)} owed${t.overdueCount ? ` · ${money(t.overdue)} overdue` : ''}${pt.total + t.signing ? ` · ${money(pt.total + t.signing)} potential` : ''}`}>
         <Link to="/finances" className="text-[13px] text-[var(--link)] hover:underline">See all {list.length}</Link>
       </CardHeader>
       <ul className="m-0 flex list-none flex-col divide-y divide-[var(--line)] px-5 py-0">

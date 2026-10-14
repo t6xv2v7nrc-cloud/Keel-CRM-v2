@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button, Card, CardHeader, Empty, Help, Icon, PageHeader } from '../../components/ui';
 import { useApplicants, useDeals, useProperties, useProviders, useReceivables } from '../../lib/hooks';
 import { money, moneyFee, moneyShort } from '../../lib/format';
-import { byMonth, financesCsv, fromHousingOfficer, ghostTotal, incentiveFor, isOpen, lettingFeeFor, owed, periodDay, periods, placementOf, POTENTIAL_STEPS, potentials, potentialTotals, totals } from '../../lib/money';
+import { awaitingSignUp, byMonth, financesCsv, fromHousingOfficer, ghostTotal, incentiveFor, isOpen, lettingFeeFor, owed, periodDay, periods, placementOf, POTENTIAL_STEPS, potentials, potentialTotals, totals } from '../../lib/money';
 import { saveFile } from '../../lib/files';
 import type { GhostTotal, MonthTotal, ReceivableDraft } from '../../lib/money';
 import { councilOf, isActive } from '../../lib/search';
@@ -67,7 +67,7 @@ export function MoneyPage() {
   return (
     <div className="mx-auto flex max-w-[1100px] flex-col gap-5 p-4 pb-24 sm:p-6">
       <PageHeader icon="pound" title="Finances" help="money"
-        sub={ready ? <>{money(t.owed)} owed{t.overdueCount > 0 && <> · <strong className="text-[var(--note-fg)]">{money(t.overdue)} overdue</strong></>}{pt.total > 0 && <> · {money(pt.total)} potential</>}</> : undefined}>
+        sub={ready ? <>{money(t.owed)} owed{t.overdueCount > 0 && <> · <strong className="text-[var(--note-fg)]">{money(t.overdue)} overdue</strong></>}{pt.total + t.signing > 0 && <> · {money(pt.total + t.signing)} potential</>}</> : undefined}>
         {ready && <Button variant="primary" onClick={() => setAddOpen((v) => !v)}><Icon name="plus" size={16} />Add a fee or incentive</Button>}
       </PageHeader>
 
@@ -80,13 +80,15 @@ export function MoneyPage() {
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <Tile label="Owed" value={money(t.owed)} onClick={() => setView('owed')}
-              hint={`${t.owedCount} ${t.owedCount === 1 ? 'item' : 'items'}${t.unpriced ? `, ${t.unpriced} with no amount yet` : ''}${t.waitingCount ? `, ${t.waitingCount} waiting for first rent` : ''}`} />
+              hint={`${t.owedCount} ${t.owedCount === 1 ? 'item' : 'items'}${t.unpriced ? `, ${t.unpriced} with no amount yet` : ''}${t.waitingCount ? `, ${t.waitingCount} waiting for first rent` : ''}${
+                t.signingCount ? `, plus ${t.signingCount} waiting for sign up (not counted)` : ''}`} />
             <Tile label="Overdue" value={money(t.overdue)} warn={t.overdueCount > 0 || t.checkRent > 0} onClick={() => setView('owed')}
               hint={[t.overdueCount ? `${t.overdueCount} to chase` : 'Nothing overdue', t.checkRent ? `${t.checkRent} first rent to check` : null].filter(Boolean).join(', ')} />
             <Tile label="Due in 7 days" value={money(t.soon)} onClick={() => setView('calendar')}
               hint={`${t.soonCount} ${t.soonCount === 1 ? 'item' : 'items'}`} />
-            <Tile label="Potential" value={money(pt.total)} onClick={() => setView('potential')}
-              hint={pt.count ? `${pt.count} ${pt.count === 1 ? 'client' : 'clients'}${pt.likelyCount ? `, ${money(pt.likely)} likely` : ''}` : 'No viewings or offers yet'} />
+            <Tile label="Potential" value={money(pt.total + t.signing)} onClick={() => setView('potential')}
+              hint={[pt.count ? `${pt.count} ${pt.count === 1 ? 'client' : 'clients'}${pt.likelyCount ? `, ${money(pt.likely)} likely` : ''}` : null,
+                t.signingCount ? `${t.signing ? money(t.signing) : t.signingCount} waiting for sign up` : null].filter(Boolean).join(', ') || 'No viewings or offers yet'} />
             <Tile label="Paid, last 30 days" value={money(t.paid30)} onClick={() => setView('paid')} hint="Letting fees and incentives" className="col-span-2 sm:col-span-1" />
           </div>
 
@@ -170,7 +172,14 @@ export function MoneyPage() {
                   </Empty>
                 ) : (
                   <ul className="m-0 flex list-none flex-col divide-y divide-[var(--line)] px-4 py-0 sm:px-5">
-                    {list.map((r) => <MoneyRow key={r.id} r={r} client={byId.get(r.applicant_id) ?? null} provider={providers.find((p) => p.id === r.provider_id) ?? null} />)}
+                    {list.map((r, i) => (
+                      <Fragment key={r.id}>
+                        {view === 'owed' && awaitingSignUp(r) && !(i > 0 && awaitingSignUp(list[i - 1])) && (
+                          <li className="pb-1 pt-4 text-[13px] font-semibold uppercase tracking-wide text-[var(--ink-muted)]">Waiting for sign up: not owed yet</li>
+                        )}
+                        <MoneyRow r={r} client={byId.get(r.applicant_id) ?? null} provider={providers.find((p) => p.id === r.provider_id) ?? null} />
+                      </Fragment>
+                    ))}
                   </ul>
                 )}
               </Card>

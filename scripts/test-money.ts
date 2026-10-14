@@ -3,7 +3,7 @@ import {
   addRule, awaitingFirstRent, basisRule, basisWords, byMonth, calendarEntries, describe, dueDate, dueOn, dueRuleFor, dueWords, feeChaseText, feeFrom,
   firstRentExpected, firstRentLate, icsFile, incentiveFor, isOpen, lettingFeeFor, moneyEvents, monthGrid, nextMonth, overdueDays, owed, potentials,
   potentialTotals, rentOf, ruleWords, totals, usualFee, usualFeeWords, ghostTotal, periods, financesCsv,
-  cameWithReferral, fromHousingOfficer, gapFor, incentiveStatuses,
+  cameWithReferral, fromHousingOfficer, gapFor, incentiveStatuses, awaitingSignUp, signUpPatch, signingUpWith, placementOf,
 } from '../src/lib/money';
 import { DEFAULT_SETTINGS, setActiveSettings } from '../src/lib/settings';
 import type { Deal, Property, Provider, Receivable } from '../src/lib/types';
@@ -74,7 +74,7 @@ check('timeline wording', describe({ kind: 'letting_fee', payer: 'Watermint', am
 let n = 0;
 const r = (p: Partial<Receivable>): Receivable => ({
   id: `r${++n}`, kind: 'letting_fee', applicant_id: 'a1', deal_id: null, property_address: 'Broadfield Close, London NW2 6NR', payer: 'Watermint',
-  provider_id: 'wm', amount: 300, sign_up_on: null, due_on: null, claim_submitted_on: null, status: 'due', paid_on: null, notes: null,
+  provider_id: 'wm', amount: 300, sign_up_on: '2026-09-01', due_on: null, claim_submitted_on: null, status: 'due', paid_on: null, notes: null,
   created_at: '2026-09-01', updated_at: '2026-09-01', ...p,
 });
 const today = '2026-10-06';
@@ -230,6 +230,56 @@ check('totals paid and still owed', csvLines[5].endsWith('Total paid,450.00') &&
 check('starts with a byte-order mark so Excel reads the £ sign', csv.startsWith('\uFEFF'));
 const allCsv = financesCsv(list, ps[4], () => 'X').trim().split('\r\n');
 check('everything: every fee, oldest first', allCsv.length === 1 + list.length + 3 && allCsv[1].startsWith('2026-09-01'), allCsv[1]);
+
+// Not signed up yet: not owed, not overdue, counted with the offers in the ghost total
+const day0 = '2026-10-14';
+const waitInc = r({ id: 'w1', kind: 'incentive', payer: 'Barnet council', provider_id: null, amount: 750, sign_up_on: null, due_on: null, status: 'due', deal_id: 'dA', applicant_id: 'ben' });
+const owedFee = r({ id: 'w2', applicant_id: 'cara', sign_up_on: '2026-10-01', due_on: '2026-10-08', amount: 300 });
+const planned = r({ id: 'w3', applicant_id: 'dev', sign_up_on: '2026-10-20', due_on: '2026-11-20', amount: 400 });
+check('no sign-up date yet: waiting for sign up', awaitingSignUp(waitInc, day0) && dueWords(waitInc, day0) === 'Waiting for sign up');
+check('a sign-up date still to come: waiting, with the day', awaitingSignUp(planned, day0) && dueWords(planned, day0) === 'Waiting for sign up, Tue 20 Oct');
+check('signed up: not waiting', !awaitingSignUp(owedFee, day0) && !awaitingSignUp({ ...planned, sign_up_on: day0 }, day0));
+check('paid or declined never waits', !awaitingSignUp({ ...waitInc, status: 'paid' }, day0) && !awaitingSignUp({ ...waitInc, status: 'declined' }, day0));
+check('never overdue while waiting, even with a due date', overdueDays({ ...waitInc, due_on: '2026-10-01' }, day0) === null);
+const tsu = totals([waitInc, owedFee, planned], day0);
+check('owed leaves out what waits for a sign-up', tsu.owed === 300 && tsu.owedCount === 1 && tsu.overdue === 300 && tsu.soon === 0, JSON.stringify(tsu));
+check('and keeps it apart', tsu.signing === 1150 && tsu.signingCount === 2 && tsu.signingUnpriced === 0);
+check('a waiting one with no amount is not "no amount yet" on Owed', totals([{ ...waitInc, amount: null }], day0).unpriced === 0 && totals([{ ...waitInc, amount: null }], day0).signingUnpriced === 1);
+const gw = ghostTotal([waitInc, owedFee], [], day0);
+check('ghost total: owed £300, the £750 waiting counts with the offers', gw.owed === 300 && gw.likely === 750 && gw.total === 1050, JSON.stringify(gw));
+const ow = owed([waitInc, planned, owedFee], day0);
+check('the Owed list puts what waits for a sign-up last', ow[0].id === 'w2' && ow.slice(1).every((x) => awaitingSignUp(x, day0)));
+check('timeline wording while waiting', describe(waitInc) === 'Incentive of £750 from Barnet council, due once they sign up');
+
+// Signing up
+const signedRef = signUpPatch(waitInc, day0);
+check('an incentive that came with the referral is due the day they sign up', signedRef.sign_up_on === day0 && signedRef.due_on === day0, JSON.stringify(signedRef));
+const claimed = { ...waitInc, status: 'to_claim' as const };
+check('a claimed one falls due on the incentive rule from then', signUpPatch(claimed, day0).due_on === '2026-11-25');
+const waitsRent = r({ id: 'w4', applicant_id: 'ben', deal_id: 'dA', sign_up_on: null, due_after: 'first_rent', first_rent_due_on: null, first_rent_paid_on: null });
+const sp = signUpPatch(waitsRent, day0, zuber);
+check('a fee that waits for the first rent gets the date it is expected', sp.first_rent_due_on === firstRentExpected(day0) && sp.due_on === firstRentExpected(day0) && sp.due_on !== null, JSON.stringify(sp));
+const benRows = [
+  waitInc,                                                                                    // incentive on the accepted deal
+  r({ id: 'x1', kind: 'incentive', applicant_id: 'ben', deal_id: 'dOld', sign_up_on: null, status: 'due' }), // incentive from a deal that fell through: goes with the client
+  r({ id: 'x2', applicant_id: 'ben', deal_id: 'dOld', sign_up_on: null }),                     // a letting fee from another property: not this one
+  r({ id: 'x3', applicant_id: 'ben', deal_id: null, sign_up_on: null }),                       // a fee added by hand with no deal
+  r({ id: 'x4', applicant_id: 'ben', deal_id: 'dA', sign_up_on: '2026-10-10', due_on: '2026-11-10' }), // on this deal, dated by hand earlier
+  r({ id: 'x5', kind: 'incentive', applicant_id: 'ben', deal_id: 'dA', sign_up_on: null, status: 'paid', paid_on: '2026-10-02' }), // paid already
+  r({ id: 'x6', kind: 'incentive', applicant_id: 'ben', deal_id: 'dPrev', sign_up_on: '2025-03-01', status: 'due' }), // an earlier placement, signed long ago
+];
+const signs = signingUpWith(benRows, { id: 'dA' }, day0, day0).map((x) => x.id).sort();
+check('moving in signs up this deal\'s items, incentives still waiting, and fees with no deal; not other properties\' fees, paid ones or earlier placements',
+  JSON.stringify(signs) === JSON.stringify(['w1', 'x1', 'x3', 'x4']), JSON.stringify(signs));
+check('nothing to do when it is already dated that day', signingUpWith([{ ...waitInc, sign_up_on: day0 }], { id: 'dA' }, day0, day0).length === 0);
+
+// A new fee or incentive at the offer stage has no sign-up date yet
+const accepted = [deal({ id: 'dA', applicant_id: 'ben', status: 'accepted' })];
+check('at an accepted offer: no sign-up date, so nothing is owed yet', placementOf('ben', accepted, props, []).base.signUpOn === null);
+check('an accepted offer with a move-in date booked signs up that day', placementOf('ben', [deal({ id: 'dA', applicant_id: 'ben', status: 'accepted', move_in_on: '2026-10-20' })], props, []).base.signUpOn === '2026-10-20');
+check('moved in: signed up on the move-in day', placementOf('ben', [deal({ id: 'dA', applicant_id: 'ben', status: 'moved_in', move_in_on: '2026-10-09' })], props, []).base.signUpOn === '2026-10-09');
+const incAtOffer = incentiveFor({ ...placementOf('ben', accepted, props, []).base, council: 'Barnet', fromOfficer: true });
+check('the officer incentive added at the offer waits for the sign-up', incAtOffer.sign_up_on === null && incAtOffer.due_on === null && awaitingSignUp(incAtOffer, day0));
 
 console.log(failed ? `\n${failed} failed` : '\nAll passed');
 process.exit(failed ? 1 : 0);

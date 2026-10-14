@@ -24,15 +24,19 @@ const fee = (p: Partial<Receivable>): Receivable => ({ id: 'r', kind: 'letting_f
 const deals = [deal({ applicant_id: 'a' }), deal({ id: 'd2', applicant_id: 'b', move_in_on: '2026-10-05' }), deal({ id: 'd3', applicant_id: 'c', status: 'accepted' })];
 const recs = [
   fee({ applicant_id: 'a' }),                                         // a: already counted by their move-in
-  fee({ id: 'r2', applicant_id: 'e', amount: 250, sign_up_on: '2026-10-14' }), // e: placed with no deal tracked
+  fee({ id: 'r2', applicant_id: 'e', amount: 250, sign_up_on: '2026-10-13' }), // e: placed with no deal tracked
+  fee({ id: 'r6', kind: 'incentive', applicant_id: 'c', amount: 700, sign_up_on: null, status: 'due' }), // c: offer accepted, not signed up yet
+  fee({ id: 'r7', applicant_id: 'h', amount: 900, sign_up_on: '2026-10-16' }),  // h: signs up on Friday, not yet
   fee({ id: 'r3', kind: 'incentive', applicant_id: 'a', amount: 1000, sign_up_on: '2026-10-13', status: 'to_claim' }),
   fee({ id: 'r4', applicant_id: 'f', amount: 500, status: 'declined' }),  // declined: left out
   fee({ id: 'r5', applicant_id: 'g', amount: 400, sign_up_on: '2026-09-30', status: 'paid' }), // last month
 ];
-const w = progressIn(week, deals, recs);
+const w = progressIn(week, deals, recs, '2026-10-13');
 check('placements this week: a moved in, e signed up; not b (last week) or c (only accepted)', w.placements === 2, String(w.placements));
 check('fees this week: £300 + £250 + £1,000 incentive, not the declined one', w.fees === 1550, String(w.fees));
-const m = progressIn(month, deals, recs);
+check('nothing still waiting for a sign-up counts: no date yet, or a date still to come', w.fees === 1550 && w.placements === 2);
+check('once Friday comes, the fee signed up that day counts', progressIn(week, deals, recs, '2026-10-16').fees === 2450);
+const m = progressIn(month, deals, recs, '2026-10-13');
 check('placements this month count last week too', m.placements === 3, String(m.placements));
 
 const lines = targetLines({ placements: 2, fees: 2000 }, w, week);

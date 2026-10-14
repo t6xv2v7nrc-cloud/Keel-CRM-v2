@@ -270,7 +270,7 @@ function DealRow({ applicant, deal, all, property }: { applicant: Applicant; dea
             Confirm {first(applicant.full_name)} moved in
           </Button>
           <button type="button" onClick={() => setMode(null)} className="text-[var(--ink-muted)] hover:text-[var(--ink)]">Cancel</button>
-          <span className="w-full text-[12px] text-[var(--ink-muted)]">The property is marked as let, and anyone else going for it is told it was let.</span>
+          <span className="w-full text-[12px] text-[var(--ink-muted)]">The property is marked as let, and anyone else going for it is told it was let. The letting fee, and anything waiting for {first(applicant.full_name)} to sign up, falls due from that day.</span>
         </div>
       )}
       {mode === 'fell_through' && (

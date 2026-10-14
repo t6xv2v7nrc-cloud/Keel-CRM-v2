@@ -12,7 +12,7 @@ import type {
   Activity, Applicant, Call, CallOutcome, Deal, DealStatus, Profile, Property, Provider, ProviderRequest, Receivable, RequestStatus, RequestType,
 } from './types';
 import { followUpFrom, PROVIDER_OFF, PROVIDER_ON, providerFor, providerNumber, REQUEST_LABEL, tagOf, withdrawnBySwitchOff } from './requests';
-import { basisWords, describe, KIND_LABEL, lettingFeeFor, rentOf, STATUS_LABEL } from './money';
+import { basisWords, describe, KIND_LABEL, lettingFeeFor, rentOf, signingUpWith, signUpPatch, STATUS_LABEL } from './money';
 import { invoiceNumber } from './invoice';
 import { CONTACT_KINDS, lastContacts, noteActivity } from './contacts';
 import { changedFields, changeWords } from './propertyEdit';
@@ -850,10 +850,23 @@ export function useMoveDeal() {
       // The letting fee is owed from now, so it goes on Receivables straight away (once; before 0012 this is skipped)
       let fee: string | null = null;
       if (to === 'moved_in') {
+        const provs = await supabase.from('providers').select('*');
+        const provider = property && !provs.error ? providerFor(property, (provs.data ?? []) as Provider[]) : null;
+        // they have signed up: anything waiting for that (an incentive that came with the referral, a fee added at the offer) falls due from today
+        const onDay = patch.move_in_on ?? todayIso();
+        const theirs = await supabase.from('receivables').select('*').eq('applicant_id', applicant.id);
+        if (!theirs.error) {
+          for (const r of signingUpWith((theirs.data ?? []) as Receivable[], deal, onDay)) {
+            const payer = r.provider_id && !provs.error ? ((provs.data ?? []) as Provider[]).find((p) => p.id === r.provider_id) ?? null : null;
+            const next = signUpPatch(r, onDay, payer);
+            const saved = await writeReceivable({ ...next, deal_id: deal.id, property_address: deal.address }, r.id);
+            if (!saved.error) {
+              await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: applicant.id, kind: 'money', body: `Signed up: ${describe({ ...r, ...next })}` });
+            }
+          }
+        }
         const had = await supabase.from('receivables').select('id').eq('deal_id', deal.id).eq('kind', 'letting_fee').limit(1);
         if (!had.error && (had.data ?? []).length === 0) {
-          const provs = await supabase.from('providers').select('*');
-          const provider = property && !provs.error ? providerFor(property, (provs.data ?? []) as Provider[]) : null;
           const rentPcm = property ? rentOf({
             address_line: property.address_line, postcode: property.postcode ?? null, borough: property.borough ?? null, property_type: property.property_type ?? null,
             bedrooms: property.bedrooms ?? null, rent_pcm: property.rent_pcm ?? null, rent_text: property.rent_text ?? null, lha_area: property.lha_area ?? null,
@@ -1298,6 +1311,7 @@ export function useSaveReceivable() {
             : row.status === 'declined' ? `${payer} declined the ${what}`
             : `${KIND_LABEL[row.kind]} from ${payer}: ${STATUS_LABEL[row.status].toLowerCase()}`
           : !was.first_rent_paid_on && row.first_rent_paid_on ? `First month's rent paid ${shortDate(row.first_rent_paid_on)}: ${describe(row)}`
+          : !was.sign_up_on && row.sign_up_on ? `Signed up ${shortDate(row.sign_up_on)}: ${describe(row)}`
           : `${describe(row)} updated`;
       await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: row.applicant_id, kind: 'money', body });
     },
