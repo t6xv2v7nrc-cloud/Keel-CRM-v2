@@ -1,0 +1,1367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Keel Mailer</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#1a2332; --paper:#f6f4ef; --card:#ffffff;
+  --brass:#a8853c; --brass-dark:#8a6d2f;
+  --line:#e2ddd2; --muted:#7a7466;
+  --ok:#2e7d32; --warn:#c62828; --wa:#128c7e;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'IBM Plex Sans',sans-serif;background:var(--paper);color:var(--ink);font-size:14px;line-height:1.45;padding-bottom:80px}
+header{display:flex;align-items:baseline;gap:14px;padding:22px 28px 14px;border-bottom:3px solid var(--ink)}
+header h1{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:26px;letter-spacing:-0.5px}
+header h1 span{color:var(--brass)}
+header .sub{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+main{max-width:1180px;margin:0 auto;padding:22px 28px}
+
+.bin{border:2px dashed var(--brass);background:var(--card);border-radius:10px;padding:22px;transition:border-color .15s, background .15s}
+.bin.drag{border-color:var(--brass-dark);background:#fbf7ec}
+.bin h2{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:17px;margin-bottom:4px;text-align:center}
+.bin>p{color:var(--muted);font-size:13px;text-align:center}
+.bin .srcpick{display:flex;justify-content:center;gap:8px;margin-top:14px;flex-wrap:wrap;align-items:center}
+.srcbtn{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:500;padding:5px 14px;border:1.5px solid var(--line);border-radius:20px;background:#fff;cursor:pointer;transition:all .12s}
+.srcbtn.sel{border-color:var(--ink);background:var(--ink);color:#fff}
+.srcbtn.add{border-style:dashed;color:var(--muted)}
+#newtag{display:none;font-family:'IBM Plex Mono',monospace;font-size:12px;width:80px;padding:5px 10px;border:1.5px solid var(--brass);border-radius:20px;text-transform:uppercase}
+#newtag.open{display:inline-block}
+.inputs{display:flex;gap:10px;margin-top:14px;align-items:stretch}
+.inputs textarea{flex:1;min-height:64px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-family:'IBM Plex Sans',sans-serif;font-size:13px;resize:vertical;background:#fcfbf8}
+.inputs textarea:focus{outline:none;border-color:var(--brass)}
+.inputs .col{display:flex;flex-direction:column;gap:8px;justify-content:center}
+button.act{font-family:'IBM Plex Sans',sans-serif;font-size:13px;font-weight:600;padding:8px 16px;border-radius:6px;border:1.5px solid var(--ink);background:#fff;color:var(--ink);cursor:pointer;transition:all .12s;white-space:nowrap}
+button.act:hover{background:var(--ink);color:#fff}
+button.act.primary{background:var(--brass);border-color:var(--brass);color:#fff}
+button.act.primary:hover{background:var(--brass-dark);border-color:var(--brass-dark)}
+button.act.wa{background:var(--wa);border-color:var(--wa);color:#fff}
+button.act.wa:hover{background:#0d6e63;border-color:#0d6e63}
+button.act.ghost{border-color:var(--line);color:var(--muted)}
+button.act.ghost:hover{border-color:var(--warn);color:var(--warn);background:#fff}
+button.act.danger{border-color:var(--warn);background:var(--warn);color:#fff}
+button:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+.bin .status{margin-top:12px;font-family:'IBM Plex Mono',monospace;font-size:12px;min-height:18px;text-align:center}
+.bin .status.busy{color:var(--brass-dark)}
+.bin .status.err{color:var(--warn)}
+.bin .status.done{color:var(--ok)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+.status.busy{animation:pulse 1.2s ease-in-out infinite}
+
+/* minimap */
+.mapwrap{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-top:16px;padding:14px 16px 10px;display:none}
+.mapwrap.on{display:block}
+.mapwrap .maptitle{font-family:'IBM Plex Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:8px;display:flex;justify-content:space-between}
+.mapflex{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}
+.mapflex svg{flex:0 1 auto;max-width:100%;height:auto}
+.tile{cursor:pointer}
+.tile rect{fill:#efece4;stroke:var(--line);stroke-width:1;rx:4}
+.tile text{font-family:'IBM Plex Mono',monospace;fill:#b9b2a2;font-size:9px;text-anchor:middle;pointer-events:none}
+.tile.hot rect{fill:var(--brass);stroke:var(--brass-dark)}
+.tile.hot text.abbr{fill:#fff;font-weight:700}
+.tile.hot text.cnt{fill:#fff;font-weight:700;font-size:11px}
+.tile:hover rect{stroke:var(--ink);stroke-width:1.5}
+.oolchips{display:flex;flex-direction:column;gap:6px;min-width:150px}
+.oolchips .chiptitle{font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 10px;border:1px solid var(--line);border-radius:16px;background:#fbf9f4;cursor:pointer;width:fit-content}
+.chip b{font-family:'IBM Plex Mono',monospace;color:var(--brass-dark)}
+.chip:hover{border-color:var(--brass)}
+
+/* housing officers: a short local list each */
+.panel{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-top:16px;padding:16px 18px}
+.phead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.phead h2{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:17px}
+.phead .sub{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-right:auto}
+.hint{color:var(--muted);font-size:13px;margin-top:4px}
+.offadd{display:none;gap:10px;margin-top:12px;align-items:stretch}
+.offadd.open{display:flex}
+.offadd textarea{flex:1;min-width:0;min-height:96px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-family:'IBM Plex Sans',sans-serif;font-size:13px;resize:vertical;background:#fcfbf8}
+.offadd textarea:focus{outline:none;border-color:var(--brass)}
+.offadd .col{display:flex;flex-direction:column;gap:6px;justify-content:center;max-width:220px}
+.offadd .col small{color:var(--muted);font-size:12px}
+.patch{border-top:1px solid var(--line);margin-top:14px;padding-top:12px}
+.ptop{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.ptop h3{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:15px}
+.ptop .n{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-right:auto}
+.areas{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0 4px}
+.areas .lbl{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-right:2px}
+.area{font-family:'IBM Plex Sans',sans-serif;font-size:12px;padding:4px 10px;border:1.5px solid var(--line);border-radius:16px;background:#fff;color:var(--muted);cursor:pointer}
+.area b{font-family:'IBM Plex Mono',monospace;font-weight:500;margin-left:3px}
+.area:hover{border-color:var(--ink)}
+.area.on{border-color:var(--brass);background:#fbf3df;color:var(--ink)}
+.area.on::before{content:'✓ ';color:var(--brass-dark);font-weight:700}
+.area.on b{color:var(--brass-dark)}
+.areas select{font-family:'IBM Plex Sans',sans-serif;font-size:12px;border:1.5px dashed var(--line);border-radius:16px;padding:4px 8px;background:#fff;color:var(--muted);max-width:100%;cursor:pointer}
+.linkbtn{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--brass-dark);background:none;border:none;text-decoration:underline;cursor:pointer;padding:0}
+.nolist{font-size:12px;color:#b26a00;font-weight:600;margin:4px 0}
+.offrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:6px 0;border-bottom:1px solid var(--line)}
+.offrow:last-child{border-bottom:none}
+.offrow .who{display:flex;gap:6px;flex:1 1 340px;min-width:0}
+.offrow input,.offrow select{font-family:'IBM Plex Sans',sans-serif;font-size:13px;border:1px solid transparent;background:transparent;padding:4px 5px;border-radius:4px;color:var(--ink);min-width:0;max-width:100%}
+.offrow input{flex:1 1 50%}
+.offrow input:hover{border-color:var(--line)}
+.offrow input:focus{border-color:var(--brass);background:#fff;outline:none}
+.offrow select{border-color:var(--line);background:#fff;cursor:pointer}
+.offrow .sent{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);min-width:78px}
+.offrow .sent.today{color:var(--ok);font-weight:600}
+button.act.sm{font-size:12px;padding:5px 11px}
+button.act:disabled{opacity:.4;pointer-events:none}
+
+.toolbar{display:flex;align-items:center;gap:10px;margin:22px 0 10px;flex-wrap:wrap}
+.toolbar .count{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin-right:auto}
+.toolbar .tlabel{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-left:8px}
+
+.group{margin-bottom:6px}
+.group h3{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:14px;padding:10px 2px 4px;border-bottom:2px solid var(--ink);display:flex;align-items:baseline;gap:8px;scroll-margin-top:10px}
+.group h3 .n{font-family:'IBM Plex Mono',monospace;font-weight:400;font-size:11px;color:var(--muted)}
+.group.flash h3{background:#fbf3df}
+.ool-divider{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:15px;letter-spacing:1px;text-transform:uppercase;color:var(--brass-dark);margin:26px 0 4px;padding-top:14px;border-top:3px double var(--brass)}
+table{width:100%;border-collapse:collapse}
+td{padding:4px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
+td input{width:100%;border:1px solid transparent;background:transparent;font-family:'IBM Plex Sans',sans-serif;font-size:13px;padding:4px 5px;border-radius:4px;color:var(--ink)}
+td input:hover{border-color:var(--line)}
+td input:focus{border-color:var(--brass);background:#fff;outline:none}
+td.addr{width:30%} td.boro{width:10%} td.type{width:13%} td.bills{width:14%} td.rent{width:11%} td.calc{width:16%}
+td.rent input{text-align:right;color:var(--muted);font-size:12px}
+td.calc{text-align:right;line-height:1.2}
+td.calc .amt{font-weight:700;font-size:13px;display:block}
+td.calc .amt.raw{color:var(--muted);font-weight:500}
+.brma{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;padding:1px 0;text-align:right;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brma:hover{color:var(--ink);text-decoration:underline}
+.brma.check{color:#b26a00;font-weight:600}
+.brma.missing{color:var(--warn);font-weight:600}
+td.calc select{font-family:'IBM Plex Mono',monospace;font-size:11px;max-width:100%;border:1px solid var(--brass);border-radius:4px;padding:2px}
+.lhabar{display:flex;align-items:center;gap:10px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-top:-4px;margin-bottom:8px;flex-wrap:wrap}
+.lhabar a,.lhabar button{font-family:inherit;font-size:11px;color:var(--brass-dark);background:none;border:none;cursor:pointer;text-decoration:underline;padding:0}
+.lhabar .warn{color:#b26a00;font-weight:600}
+td.src{width:70px;text-align:center} td.del{width:34px;text-align:center}
+.badge{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;padding:2px 8px;border-radius:3px;cursor:pointer;user-select:none}
+.delbtn{border:none;background:none;color:#c9c2b4;cursor:pointer;font-size:15px;padding:2px 6px;border-radius:4px}
+.delbtn:hover{color:var(--warn);background:#fdeaea}
+.empty{color:var(--muted);text-align:center;padding:36px 0;font-size:13px}
+
+.overlay{position:fixed;inset:0;background:rgba(26,35,50,.55);display:none;align-items:flex-start;justify-content:center;padding:30px;z-index:50;overflow:auto}
+.overlay.open{display:flex}
+.modal{background:#fff;border-radius:10px;max-width:1000px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.modal .mhead{display:flex;align-items:center;gap:8px;padding:14px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.modal .mhead h2{font-family:'Bricolage Grotesque',sans-serif;font-size:16px;font-weight:700;margin-right:auto}
+.tabbtn{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 14px;border:1.5px solid var(--line);background:#fff;border-radius:6px;cursor:pointer}
+.tabbtn.on{border-color:var(--ink);background:var(--ink);color:#fff}
+.modal .mbody{padding:18px;max-height:65vh;overflow:auto}
+.mbody pre{font-family:'IBM Plex Sans',sans-serif;font-size:13.5px;white-space:pre-wrap;background:#e5ddd5;border-radius:8px;padding:16px 18px;line-height:1.5}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 20px;border-radius:6px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:99}
+.toast.show{opacity:1}
+@media (max-width:760px){ main{padding:14px} td.boro,td.bills{display:none} .inputs,.offadd.open{flex-direction:column} .offadd .col{max-width:none} .offrow .who{flex-basis:100%} }
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Keel <span>Mailer</span></h1>
+  <div class="sub">paste in &middot; standardise &middot; send out</div>
+</header>
+
+<main>
+  <div class="bin" id="bin">
+    <h2>The Bin</h2>
+    <p>Paste a screenshot (Ctrl/Cmd+V anywhere), drop an image file, upload one, or dump raw text below.</p>
+    <div class="srcpick" id="srcpick"></div>
+    <div class="inputs">
+      <textarea id="rawtext" placeholder="Or paste a raw list here — WhatsApp messages, half-formatted lists, anything. Shared notes like 'all rooms have ensuite, rent is 1 bed LHA' get applied to every unit."></textarea>
+      <div class="col">
+        <button class="act primary" id="extractBtn">Extract from text</button>
+        <button class="act" id="uploadBtn">Upload screenshot</button>
+        <input type="file" id="fileinput" accept="image/*" multiple style="display:none">
+      </div>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="mapwrap" id="mapwrap">
+    <div class="maptitle"><span>Coverage map</span><span id="mapstats"></span></div>
+    <div class="mapflex">
+      <svg id="minimap" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="oolchips" id="oolchips"></div>
+    </div>
+  </div>
+
+  <section class="panel" id="offPanel">
+    <div class="phead">
+      <h2>Housing officers</h2>
+      <span class="sub" id="offCount"></span>
+      <button class="act sm" id="offCopyAll" title="Every officer's address, ready for the Bcc box">Copy all addresses</button>
+      <button class="act sm" id="offAddToggle">+ Add officers</button>
+    </div>
+    <p class="hint">Each officer gets a short list: their council's area and up to 3 neighbouring areas, picked from where you have the most properties. Click an area to put it in or take it out. Set an officer to "Full list" if they want everything.</p>
+    <div class="offadd" id="offAdd">
+      <textarea id="offText" aria-label="Housing officers to add" placeholder="One officer per line, or paste straight from Outlook's To box:&#10;Sarah Jones, sarah.jones@brent.gov.uk&#10;Ali Khan &lt;ali.khan@ealing.gov.uk&gt;; Jo Patel &lt;jo.patel@harrow.gov.uk&gt;&#10;Sam Lee, sam.lee@outlook.com, Barnet"></textarea>
+      <div class="col">
+        <button class="act primary" id="offAddBtn">Add officers</button>
+        <small>Their council is read from the email (…@brent.gov.uk), or name it on the line. Keel's "Copy emails" on the Pipeline pastes straight in.</small>
+      </div>
+    </div>
+    <div id="patches"></div>
+  </section>
+
+  <div class="toolbar">
+    <span class="count" id="count"></span>
+    <button class="act ghost" id="clearBtn">Clear all</button>
+    <button class="act" id="addBtn">+ Add row</button>
+    <span class="tlabel">Full list</span>
+    <button class="act" id="previewBtn">Preview</button>
+    <button class="act wa" id="waBtn">Copy for WhatsApp</button>
+    <button class="act primary" id="copyBtn">Copy email for Outlook</button>
+    <button class="act" id="bccAllBtn" style="display:none">Email to all officers (Bcc)</button>
+  </div>
+  <div class="lhabar">
+    <span id="lhaLabel"></span>
+    <span id="lhaWarn" class="warn"></span>
+    <button id="lhaImportBtn" title="Load next year's gov.uk LHA rates CSV">Update LHA rates</button>
+    <input type="file" id="lhaFile" accept=".csv,text/csv" style="display:none">
+    <a href="https://lha-direct.voa.gov.uk/search.aspx" target="_blank" rel="noopener">Check a postcode on LHA Direct</a>
+  </div>
+
+  <div id="groups"></div>
+</main>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <div class="mhead">
+      <h2 id="mtitle">Preview</h2>
+      <button class="tabbtn on" id="tabEmail">Email</button>
+      <button class="tabbtn" id="tabWa">WhatsApp</button>
+      <button class="act" id="copyBtn2">Copy this version</button>
+      <button class="act ghost" id="closeBtn">Close</button>
+    </div>
+    <div class="mbody" id="mbody"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- state ---------- */
+const LONDON = ["Barking and Dagenham","Barnet","Bexley","Brent","Bromley","Camden","City of London","Croydon","Ealing","Enfield","Greenwich","Hackney","Hammersmith and Fulham","Haringey","Harrow","Havering","Hillingdon","Hounslow","Islington","Kensington and Chelsea","Kingston upon Thames","Lambeth","Lewisham","Merton","Newham","Redbridge","Richmond upon Thames","Southwark","Sutton","Tower Hamlets","Waltham Forest","Wandsworth","Westminster"];
+/* schematic tile-grid positions [col,row] + short code */
+const TILES = {
+  "Enfield":[4,0,"ENF"],
+  "Harrow":[2,1,"HRW"],"Barnet":[3,1,"BAR"],"Haringey":[4,1,"HGY"],"Waltham Forest":[5,1,"WF"],
+  "Hillingdon":[0,2,"HDN"],"Ealing":[1,2,"EAL"],"Brent":[2,2,"BRT"],"Camden":[3,2,"CAM"],"Islington":[4,2,"ISL"],"Hackney":[5,2,"HCK"],"Redbridge":[6,2,"RDB"],"Havering":[7,2,"HAV"],
+  "Hounslow":[0,3,"HNS"],"Hammersmith and Fulham":[1,3,"H&F"],"Kensington and Chelsea":[2,3,"K&C"],"Westminster":[3,3,"WST"],"City of London":[4,3,"CTY"],"Tower Hamlets":[5,3,"TH"],"Newham":[6,3,"NWM"],"Barking and Dagenham":[7,3,"B&D"],
+  "Richmond upon Thames":[1,4,"RCH"],"Wandsworth":[2,4,"WND"],"Lambeth":[3,4,"LAM"],"Southwark":[4,4,"SWK"],"Lewisham":[5,4,"LEW"],"Greenwich":[6,4,"GRN"],"Bexley":[7,4,"BEX"],
+  "Kingston upon Thames":[1,5,"KNG"],"Merton":[2,5,"MER"],"Sutton":[3,5,"SUT"],"Croydon":[4,5,"CRD"],"Bromley":[5,5,"BRM"]
+};
+const SRC_PALETTE = [
+  ["#fff3e0","#e65100"],["#e3f2fd","#1565c0"],["#e8f5e9","#2e7d32"],
+  ["#f3e5f5","#6a1b9a"],["#fce4ec","#ad1457"],["#e0f7fa","#00695c"],
+  ["#fffde7","#9e7c0c"],["#ede7f6","#4527a0"],["#efebe9","#4e342e"]
+];
+let props = [];
+let sources = ["BP","SR","SL"];
+let activeSrc = "SL";
+let officers = [];   /* {id, name, email, council, full, sent}: full = wants the whole list, sent = last emailed */
+let patches = {};    /* council -> areas picked by hand; councils not here get their nearest areas */
+const uid = () => Math.random().toString(36).slice(2,9);
+const LHA_DEFAULT = {label:"2026 to 2027", rates:{"Ashford":[393.24,750.0,850.0,1097.8,1440.0],"Aylesbury":[442.67,800.0,995.0,1330.0,1650.0],"Barnsley":[316.33,415.0,450.0,550.0,775.0],"Barrow-in-Furness":[395.42,475.0,500.0,635.0,807.5],"Basingstoke":[406.33,780.0,950.0,1150.0,1400.0],"Bath":[540.0,815.0,980.0,1200.0,1945.0],"Bedford":[450.0,650.0,825.0,1000.0,1300.0],"Birmingham":[341.58,695.0,750.0,825.0,1100.0],"Black Country":[320.0,495.0,625.0,750.0,925.0],"Blackwater Valley":[477.98,800.0,1000.0,1295.0,1700.0],"Bolton and Bury":[341.51,475.0,575.0,700.0,950.0],"Bournemouth":[426.33,695.0,875.0,1150.0,1550.0],"Bradford and South Dales":[326.33,450.0,525.0,635.0,750.0],"Brighton and Hove":[586.61,920.0,1200.0,1450.0,2000.0],"Bristol":[511.33,900.0,1095.0,1300.0,1850.0],"Bury St Edmunds":[451.33,630.0,775.0,955.0,1300.0],"Cambridge":[526.33,900.0,950.0,1125.0,1450.0],"Canterbury":[425.0,675.0,895.0,1100.0,1315.0],"Central Greater Manchester":[411.58,775.0,875.0,950.0,1350.0],"Central Lancs":[304.17,450.0,575.0,650.0,925.0],"Central London":[829.83,1439.97,1793.98,2160.02,3060.0],"Central Norfolk and Norwich":[393.5,590.0,695.0,800.0,1150.0],"Chelmsford":[426.33,795.0,950.0,1200.0,1450.0],"Cheltenham":[436.5,625.0,800.0,1000.0,1470.0],"Cherwell Valley":[466.5,775.0,950.0,1185.0,1450.0],"Chesterfield":[351.33,450.0,525.0,600.0,850.0],"Chichester":[450.0,788.0,950.0,1225.0,1600.0],"Chilterns":[525.0,850.0,1100.0,1450.0,2000.0],"Colchester":[401.33,625.0,795.0,975.0,1250.0],"Coventry":[432.35,575.0,675.0,775.0,1000.0],"Crawley and Reigate":[476.33,860.0,1100.0,1365.0,1750.0],"Darlington":[288.96,360.0,450.0,530.0,695.0],"Derby":[359.83,450.0,595.0,700.0,935.0],"Doncaster":[304.17,425.0,500.0,550.0,725.0],"Dover-Shepway":[431.5,510.0,695.0,865.0,1200.0],"Durham":[393.25,393.25,400.0,475.0,659.87],"East Cheshire":[421.5,550.0,725.0,995.0,1750.0],"East Lancs":[291.5,425.0,475.0,595.0,795.0],"East Thames Valley":[591.5,900.0,1200.0,1450.0,1900.0],"Eastbourne":[422.5,720.0,900.0,1083.0,1400.0],"Eastern Staffordshire":[321.33,495.0,600.0,725.0,985.8],"Exeter":[537.0,630.0,795.0,950.0,1300.0],"Fylde Coast":[350.88,400.0,542.0,625.0,742.5],"Gloucester":[406.33,550.0,725.0,850.0,1200.0],"Grantham and Newark":[376.33,425.0,575.0,655.0,875.01],"Greater Liverpool":[344.36,500.0,595.0,650.0,875.0],"Grimsby":[317.2,395.0,480.0,521.43,720.0],"Guildford":[515.0,950.0,1225.0,1480.0,1978.0],"Halifax":[356.31,440.0,525.0,625.0,750.0],"Harlow and Stortford":[451.33,810.0,1025.0,1210.0,1375.0],"Harrogate":[421.33,595.0,735.86,875.0,1275.0],"Herefordshire":[351.5,475.0,600.0,750.0,975.0],"High Weald":[459.83,800.0,1075.0,1323.0,1825.0],"Hull and East Riding":[335.83,380.0,475.0,550.0,700.0],"Huntingdon":[460.0,650.0,795.0,950.0,1250.0],"Inner East London":[699.5,1439.97,1750.0,2160.02,3000.0],"Inner North London":[708.27,1439.97,1793.98,2160.02,3060.0],"Inner South East London":[650.0,1295.5,1550.0,1950.0,2625.0],"Inner South West London":[685.0,1420.0,1700.0,2160.02,2900.0],"Inner West London":[760.0,1350.0,1625.0,2050.0,2550.0],"Ipswich":[366.5,595.0,717.0,800.0,1100.0],"Isle of Wight":[343.27,515.0,650.0,815.0,995.0],"Kendal":[325.89,575.0,650.0,775.0,995.0],"Kernow West":[392.5,550.0,695.0,815.0,1100.0],"Kings Lynn":[399.83,548.23,650.0,775.0,1050.0],"Kirklees":[316.33,450.0,525.0,650.0,825.0],"Lancaster":[394.33,475.0,575.0,650.0,725.0],"Leeds":[347.62,675.0,775.0,850.0,1200.0],"Leicester":[395.42,540.0,650.0,775.0,1050.0],"Lincoln":[354.14,495.0,600.0,675.0,925.0],"Lincolnshire Fens":[368.33,500.0,625.0,735.0,865.03],"Lowestoft and Great Yarmouth":[376.33,441.07,575.0,630.0,825.0],"Luton":[436.17,700.0,875.0,1100.0,1350.0],"Maidstone":[444.83,750.0,905.0,1200.0,1550.0],"Medway and Swale":[410.0,675.0,850.0,940.0,1300.0],"Mendip":[405.0,600.0,775.0,975.0,1350.0],"Mid and East Devon":[404.11,530.0,685.0,825.0,1100.0],"Mid and West Dorset":[426.33,595.0,750.0,900.0,1250.0],"Mid Staffs":[352.4,500.0,625.0,740.0,995.0],"Milton Keynes":[501.33,775.0,925.0,1195.0,1495.0],"Newbury":[451.33,750.0,895.0,1200.0,1605.0],"North Cheshire":[341.5,475.0,590.0,695.0,1000.0],"North Cornwall and Devon Borders":[368.33,475.0,609.0,725.0,950.0],"North Cumbria":[319.83,395.0,475.0,590.0,740.0],"North Devon":[425.0,485.0,645.0,775.0,995.0],"North Nottingham":[338.93,445.0,550.0,585.0,810.0],"North West Kent":[451.33,750.0,995.0,1200.0,1450.0],"North West London":[621.33,1100.0,1350.0,1680.0,2100.0],"Northampton":[410.62,645.0,750.0,900.0,1160.0],"Northants Central":[375.86,550.0,695.0,795.0,995.0],"Northumberland":[356.33,375.0,425.0,530.0,760.0],"Nottingham":[380.0,550.0,650.0,750.0,970.0],"Oldham and Rochdale":[344.83,475.0,577.5,695.0,950.0],"Outer East London":[561.33,1200.0,1400.0,1675.0,1950.0],"Outer North East London":[549.83,1000.0,1250.0,1500.0,1800.0],"Outer North London":[595.0,1150.0,1400.0,1695.0,2200.0],"Outer South East London":[600.0,1050.0,1300.0,1550.0,1800.0],"Outer South London":[569.33,950.0,1200.0,1500.0,1950.0],"Outer South West London":[591.5,1200.0,1495.0,1800.0,2550.0],"Outer West London":[576.33,1000.0,1300.0,1475.0,1800.0],"Oxford":[550.0,900.0,1125.0,1325.0,1750.0],"Peaks and Dales":[347.62,475.0,595.0,695.0,900.0],"Peterborough":[344.83,575.0,700.0,810.0,1050.0],"Plymouth":[400.0,550.0,675.0,800.0,975.0],"Portsmouth":[422.83,695.0,845.0,1000.0,1300.0],"Reading":[391.5,850.0,1095.0,1300.0,1654.0],"Richmond and Hambleton":[417.67,450.0,550.0,650.0,830.0],"Rotherham":[351.33,430.0,500.0,550.0,817.5],"Rugby and East":[425.0,595.0,725.0,850.0,1200.0],"Salisbury":[426.33,650.0,780.0,915.0,1250.0],"Scarborough":[309.83,425.0,550.0,650.0,725.0],"Scunthorpe":[310.68,410.0,495.0,575.0,725.0],"Sheffield":[350.0,575.0,620.0,680.0,950.0],"Shropshire":[369.35,475.0,595.0,725.0,975.0],"Solihull":[412.5,700.0,825.0,1000.0,1375.0],"South Cheshire":[325.0,475.0,575.0,680.0,995.0],"South Devon":[367.17,505.0,675.0,840.0,1100.0],"South East Herts":[475.0,835.0,1050.0,1370.0,1700.0],"South West Essex":[476.33,775.0,950.0,1200.0,1500.0],"South West Herts":[501.33,950.0,1250.0,1500.0,2000.0],"Southampton":[425.0,700.0,875.0,1075.0,1450.0],"Southend":[406.33,680.0,875.0,1100.0,1350.0],"Southern Greater Manchester":[411.58,625.0,750.0,900.0,1400.0],"Southport":[369.35,475.0,600.0,775.0,925.0],"St Helens":[324.75,425.0,525.0,625.0,800.0],"Staffordshire North":[301.33,425.0,480.0,595.0,800.0],"Stevenage and North Herts":[436.17,775.0,975.0,1250.0,1600.0],"Sunderland":[321.33,425.0,475.0,550.0,700.0],"Sussex East":[361.0,595.0,750.0,950.0,1150.0],"Swindon":[451.33,675.0,785.0,950.0,1300.0],"Tameside and Glossop":[321.08,525.0,600.0,750.0,1150.0],"Taunton and West Somerset":[404.11,575.0,725.0,850.0,1000.0],"Teesside":[288.96,410.0,475.0,550.0,750.0],"Thanet":[380.0,577.84,750.0,900.0,1150.0],"Tyneside":[381.33,490.0,550.0,650.0,925.0],"Wakefield":[326.98,500.0,595.0,725.0,885.0],"Walton":[620.0,950.0,1212.0,1450.0,1975.0],"Warwickshire South":[412.5,700.0,850.0,1045.0,1350.0],"West Cheshire":[375.86,550.0,675.0,795.0,1224.0],"West Cumbria":[319.83,385.0,475.0,550.0,700.0],"West Pennine":[310.68,400.0,450.0,505.0,762.5],"West Wiltshire":[450.0,595.0,725.0,900.0,1200.0],"Weston-S-Mare":[451.33,580.0,750.0,925.0,1250.0],"Wigan":[339.83,400.0,500.0,595.0,775.0],"Winchester":[525.0,825.0,1050.0,1275.0,1700.0],"Wirral":[318.71,425.0,525.0,650.0,825.0],"Wolds and Coast":[344.36,400.0,495.0,600.0,675.0],"Worcester North":[329.83,515.0,650.0,750.0,995.0],"Worcester South":[382.58,569.0,700.0,825.0,1150.0],"Worthing":[445.0,760.0,950.0,1180.0,1465.0],"Yeovil":[435.0,525.0,695.0,850.0,1250.0],"York":[417.67,675.0,775.0,825.0,1200.0]}};
+
+/* ---------- LHA: rates + postcode -> BRMA ---------- */
+/* LHA_DEFAULT is the gov.uk 2026 to 2027 England table: [SAR, 1 bed, 2 bed, 3 bed, 4 bed] per month */
+const C='Central London', INL='Inner North London', IEL='Inner East London', ISEL='Inner South East London',
+  ISWL='Inner South West London', IWL='Inner West London', NWL='North West London', OEL='Outer East London',
+  ONEL='Outer North East London', ONL='Outer North London', OSEL='Outer South East London', OSL='Outer South London',
+  OSWL='Outer South West London', OWL='Outer West London';
+const SWE='South West Essex', NWK='North West Kent', CR='Crawley and Reigate', HS='Harlow and Stortford',
+  SEH='South East Herts', SWH='South West Herts', ETV='East Thames Valley', BWV='Blackwater Valley', MS='Medway and Swale';
+/* Postcode district (or sector, or area) -> BRMA. An array means the area straddles BRMAs:
+   first is the best guess, the rest are alternatives. Rows only get a "check" flag when the
+   alternatives would give a different rate. Picking a BRMA on any row teaches the tool for that postcode. */
+const BRMA_MAP = {
+  EC:C, WC:C, W1:C, W2:C, W8:C, W9:C, W10:C, W11:C, W14:[IWL,C], SW1:C, SW3:C, SW5:C, SW7:C, SW10:C,
+  NW1:C, NW8:C, SE1:[C,ISEL], SE11:[ISWL,C], SE17:[ISEL,C], SW8:[ISWL,C], SW6:[ISWL,IWL],
+  N1:[INL,C], N2:[ONL,INL], N3:ONL, N4:INL, N5:INL, N6:INL, N7:INL, N8:[INL,ONL], N10:[INL,ONL], N16:INL, N19:INL,
+  NW2:INL, NW3:INL, NW5:INL, NW6:INL, NW10:INL, 'NW10 4':[INL,IWL], 'NW10 6':[IWL,INL], 'NW10 7':[IWL,INL], 'NW10 8':[INL,IWL],
+  NW11:[INL,ONL],
+  N9:ONL, N11:ONL, N12:ONL, N13:ONL, N14:ONL, N15:ONL, N17:ONL, N18:ONL, N20:ONL, N21:ONL, N22:ONL,
+  EN1:ONL, EN2:ONL, EN3:ONL, EN4:ONL, EN5:ONL, EN6:ONL, EN7:[SEH,HS], EN8:[SEH,HS], EN9:[HS,ONEL], EN10:[SEH,HS], EN11:[SEH,HS],
+  NW4:NWL, NW7:[NWL,ONL], NW9:NWL, HA0:[NWL,IWL], HA1:NWL, HA2:NWL, HA3:NWL, HA4:[OWL,NWL], HA5:NWL, HA6:[OWL,NWL], HA7:NWL, HA8:NWL, HA9:NWL,
+  E1:[IEL,C], E2:IEL, E3:IEL, E5:[INL,IEL], E8:[IEL,INL], E9:IEL, E14:IEL, E15:IEL, E20:IEL,
+  E13:[IEL,OEL], E16:[IEL,OEL], E10:[IEL,ONEL], E11:[IEL,OEL,ONEL], E17:[IEL,ONEL], E7:[OEL,IEL], E12:[OEL,IEL], E6:OEL,
+  E4:[ONEL,ONL], E18:[ONEL,OEL],
+  IG1:[OEL,ONEL], IG2:[ONEL,OEL], IG3:[OEL,ONEL], IG4:[ONEL,OEL], IG5:[ONEL,OEL], IG6:[ONEL,OEL], IG11:OEL,
+  IG7:[ONEL,HS], IG8:[ONEL,OEL], IG9:[ONEL,HS], IG10:[ONEL,HS],
+  RM1:ONEL, RM2:ONEL, RM3:ONEL, RM4:ONEL, RM5:ONEL, RM7:ONEL, RM11:ONEL, RM12:ONEL, RM13:ONEL, RM14:ONEL,
+  RM6:[ONEL,OEL], RM8:[OEL,ONEL], RM9:[OEL,ONEL], RM10:[OEL,ONEL],
+  RM15:SWE, RM16:SWE, RM17:SWE, RM18:SWE, RM19:SWE, RM20:SWE,
+  SE2:OSEL, SE3:ISEL, SE4:ISEL, SE5:[ISEL,ISWL], SE6:ISEL, SE7:[ISEL,OSEL], SE8:ISEL, SE9:OSEL, SE10:ISEL,
+  SE12:[ISEL,OSEL], SE13:ISEL, SE14:ISEL, SE15:ISEL, SE16:ISEL, SE18:[OSEL,ISEL], SE19:[OSL,ISEL,ISWL],
+  SE20:[OSEL,ISEL], SE21:ISEL, SE22:ISEL, SE23:ISEL, SE24:[ISEL,ISWL], SE25:OSL, SE26:ISEL, SE27:[ISWL,ISEL], SE28:OSEL,
+  'SW16 5':ISWL, 'NW11 8':INL,
+  SW2:ISWL, SW4:ISWL, SW9:ISWL, SW11:ISWL, SW12:ISWL, SW15:ISWL, SW16:[ISWL,OSL], SW17:ISWL, SW18:ISWL,
+  SW19:[OSWL,ISWL], SW20:OSWL, SW13:[OSWL,IWL], SW14:OSWL,
+  W3:IWL, W4:IWL, W5:IWL, W6:IWL, W7:IWL, W12:IWL, W13:IWL, UB6:IWL, UB5:[OWL,IWL],
+  UB1:OWL, UB2:OWL, UB3:OWL, UB4:OWL, UB7:OWL, UB8:OWL, UB9:OWL, UB10:OWL, UB11:OWL, UB18:OWL,
+  TW3:OWL, TW4:OWL, TW5:OWL, TW6:OWL, TW7:[OWL,IWL], TW8:[IWL,OWL], TW13:OWL, TW14:OWL,
+  TW1:OSWL, TW2:OSWL, TW9:OSWL, TW10:OSWL, TW11:OSWL, TW12:OSWL,
+  TW15:'Walton', TW16:'Walton', TW17:'Walton', TW18:'Walton', TW19:'Walton', TW20:['Walton','Guildford'],
+  CR0:OSL, CR2:OSL, CR3:[OSL,CR], CR4:[OSWL,OSL], CR5:OSL, CR6:[OSL,CR], CR7:OSL, CR8:OSL,
+  SM:[OSL,OSWL], SM4:[OSWL,OSL],
+  KT1:OSWL, KT2:OSWL, KT3:OSWL, KT5:OSWL, KT6:OSWL, KT9:OSWL, KT4:[OSWL,OSL],
+  KT7:'Walton', KT8:'Walton', KT10:'Walton', KT11:'Walton', KT12:'Walton', KT13:'Walton',
+  KT14:['Walton','Guildford'], KT15:['Walton','Guildford'], KT16:['Walton','Guildford'],
+  KT17:['Walton',OSL], KT18:['Walton',OSL], KT19:['Walton',OSL], KT20:CR, KT21:[CR,'Walton'], KT22:[CR,'Walton'], KT23:[CR,'Walton'], KT24:[CR,'Guildford'],
+  BR:OSEL, BR8:[NWK,OSEL], DA1:NWK, DA2:NWK, DA3:NWK, DA4:NWK, DA9:NWK, DA10:NWK, DA11:NWK, DA12:NWK, DA13:NWK,
+  DA5:OSEL, DA6:OSEL, DA7:OSEL, DA8:OSEL, DA14:OSEL, DA15:OSEL, DA16:OSEL, DA17:OSEL, DA18:OSEL,
+  SL1:ETV, SL2:ETV, SL3:ETV, SL4:ETV, SL6:ETV, SL0:[ETV,OWL], SL5:[ETV,'Reading',BWV], SL7:'Chilterns', SL8:'Chilterns', SL9:'Chilterns',
+  RG1:'Reading', RG2:'Reading', RG4:'Reading', RG5:'Reading', RG6:'Reading', RG7:'Reading', RG8:'Reading', RG30:'Reading', RG31:'Reading',
+  RG10:['Reading',ETV], RG40:'Reading', RG41:'Reading', RG12:['Reading',BWV], RG42:['Reading',BWV], RG14:'Newbury',
+  RG21:'Basingstoke', RG22:'Basingstoke', RG23:'Basingstoke', RG24:'Basingstoke',
+  GU1:'Guildford', GU2:'Guildford', GU3:'Guildford', GU4:'Guildford', GU5:'Guildford', GU7:'Guildford', GU8:'Guildford',
+  GU21:['Guildford','Walton'], GU22:['Guildford','Walton'], GU23:['Guildford','Walton'], GU24:['Guildford','Walton'], GU25:['Walton','Guildford'],
+  GU9:[BWV,'Guildford'], GU10:[BWV,'Guildford'], GU11:BWV, GU12:BWV, GU14:BWV, GU15:BWV, GU16:BWV, GU17:BWV, GU18:BWV, GU19:BWV,
+  GU46:BWV, GU47:BWV, GU51:BWV, GU52:BWV,
+  HP1:SWH, HP2:SWH, HP3:SWH, HP4:SWH, HP23:[SWH,'Aylesbury'],
+  HP5:'Chilterns', HP6:'Chilterns', HP7:'Chilterns', HP8:'Chilterns', HP9:'Chilterns', HP10:'Chilterns', HP11:'Chilterns',
+  HP12:'Chilterns', HP13:'Chilterns', HP14:'Chilterns', HP15:'Chilterns', HP16:['Chilterns','Aylesbury'],
+  HP17:'Aylesbury', HP18:'Aylesbury', HP19:'Aylesbury', HP20:'Aylesbury', HP21:'Aylesbury', HP22:'Aylesbury',
+  WD:SWH, WD6:[SWH,ONL], AL:[SWH,'Stevenage and North Herts'], LU:'Luton',
+  SG1:'Stevenage and North Herts', SG2:'Stevenage and North Herts', SG4:'Stevenage and North Herts', SG5:'Stevenage and North Herts',
+  SG6:'Stevenage and North Herts', SG7:'Stevenage and North Herts', SG12:SEH, SG13:SEH, SG14:SEH,
+  CM1:'Chelmsford', CM2:'Chelmsford', CM3:'Chelmsford', CM4:'Chelmsford', CM9:'Chelmsford',
+  CM7:['Chelmsford','Colchester'], CM8:['Chelmsford','Colchester'], CM11:[SWE,'Chelmsford'], CM12:[SWE,'Chelmsford'],
+  CM13:[SWE,'Chelmsford'], CM14:[SWE,'Chelmsford'], CM15:[SWE,'Chelmsford'], CM16:HS, CM17:HS, CM18:HS, CM19:HS, CM20:HS, CM21:HS, CM22:HS, CM23:HS, CM24:HS,
+  SS0:'Southend', SS1:'Southend', SS2:'Southend', SS3:'Southend', SS4:'Southend', SS5:'Southend', SS6:'Southend', SS7:'Southend', SS8:'Southend', SS9:'Southend',
+  SS11:SWE, SS12:SWE, SS13:SWE, SS14:SWE, SS15:SWE, SS16:SWE, SS17:SWE, CO:'Colchester',
+  ME1:MS, ME2:MS, ME3:MS, ME4:MS, ME5:MS, ME7:MS, ME8:MS, ME9:MS, ME10:MS, ME11:MS, ME12:MS, ME13:['Canterbury',MS],
+  ME14:'Maidstone', ME15:'Maidstone', ME16:'Maidstone', ME17:'Maidstone', ME18:['Maidstone','High Weald'], ME19:['Maidstone','High Weald'], ME20:['Maidstone','High Weald'], ME6:['Maidstone',MS],
+  CT1:'Canterbury', CT2:'Canterbury', CT3:'Canterbury', CT4:'Canterbury', CT5:'Canterbury', CT6:'Canterbury',
+  CT7:'Thanet', CT8:'Thanet', CT9:'Thanet', CT10:'Thanet', CT11:'Thanet', CT12:'Thanet',
+  CT13:'Dover-Shepway', CT14:'Dover-Shepway', CT15:'Dover-Shepway', CT16:'Dover-Shepway', CT17:'Dover-Shepway', CT18:'Dover-Shepway', CT19:'Dover-Shepway', CT20:'Dover-Shepway', CT21:'Dover-Shepway',
+  TN23:'Ashford', TN24:'Ashford', TN25:'Ashford', TN26:'Ashford', TN27:'Ashford', TN28:'Dover-Shepway', TN29:'Dover-Shepway',
+  TN1:'High Weald', TN2:'High Weald', TN3:'High Weald', TN4:'High Weald', TN8:'High Weald', TN9:'High Weald', TN10:'High Weald', TN11:'High Weald', TN12:'High Weald',
+  TN13:[NWK,'High Weald'], TN14:[NWK,'High Weald'], TN15:[NWK,'High Weald'], TN16:['High Weald',OSEL],
+  RH1:CR, RH2:CR, RH3:CR, RH4:CR, RH5:CR, RH6:CR, RH10:CR, RH11:CR, RH7:[CR,'High Weald'], RH8:[CR,'High Weald'], RH9:[CR,'High Weald'],
+  RH12:[CR,'Worthing'], RH13:[CR,'Worthing'], RH15:[CR,'Brighton and Hove','High Weald'], RH16:[CR,'High Weald'], RH17:[CR,'High Weald'], RH19:['High Weald',CR],
+  BN1:'Brighton and Hove', BN2:'Brighton and Hove', BN3:'Brighton and Hove', BN41:'Brighton and Hove', BN42:'Brighton and Hove',
+  BN11:'Worthing', BN12:'Worthing', BN13:'Worthing', BN14:'Worthing', BN15:'Worthing',
+  MK:'Milton Keynes', OX1:'Oxford', OX2:'Oxford', OX3:'Oxford', OX4:'Oxford', DT1:'Mid and West Dorset', DT2:'Mid and West Dorset',
+  BH:'Bournemouth', PO:'Portsmouth', SO:'Southampton', CB:'Cambridge', PE1:'Peterborough', PE2:'Peterborough', PE3:'Peterborough', PE4:'Peterborough',
+  B:'Birmingham', LS:'Leeds', M:'Central Greater Manchester', L:'Greater Liverpool', S:'Sheffield', NG:'Nottingham', LE:'Leicester', CV:'Coventry', BS:'Bristol'
+};
+let lhaData = LHA_DEFAULT;          /* replaced if the user imports a newer CSV */
+let brmaOv = {};                     /* learned picks: full postcode or district -> BRMA */
+const PC_RE = /\b([A-Z]{1,2}\d[A-Z\d]?)\s*(\d)([A-Z]{2})\b/i;
+function pcOf(addr){
+  const m = String(addr||'').toUpperCase().match(PC_RE);
+  if(!m) return null;
+  return { full: m[1]+' '+m[2]+m[3], out: m[1], sector: m[1]+' '+m[2], area: m[1].replace(/\d.*$/,'') };
+}
+function lookupBrma(p){
+  const pc = pcOf(p.address);
+  if(!pc) return {brma:null, alts:[], src:'nopc'};
+  /* most specific wins: this exact postcode, then this sector, then the district */
+  const ov = brmaOv[pc.full] || brmaOv[pc.sector] || (!BRMA_MAP[pc.sector] && brmaOv[pc.out]);
+  if(ov) return {brma:ov, alts:[], src:'set', pc};
+  const e = BRMA_MAP[pc.sector] || BRMA_MAP[pc.out] || BRMA_MAP[pc.out.replace(/[A-Z]$/,'')] || BRMA_MAP[pc.area];
+  if(!e) return {brma:null, alts:[], src:'none', pc};
+  const arr = Array.isArray(e) ? e : [e];
+  return {brma:arr[0], alts:arr.slice(1), src:'map', pc};
+}
+/* Which LHA band a row is on: 0 = SAR, 1..4 = beds. null = fixed £ rent, not LHA. */
+function bedsFor(p){
+  const r = String(p.rent||''), t = String(p.type||'');
+  if(!/LHA|SAR|shared accommodation rate/i.test(r)) return null;
+  if(/SAR|shared accommodation rate/i.test(r)) return 0;
+  let m = r.match(/(\d)\s*-?\s*bed/i) || t.match(/(\d)\s*-?\s*bed/i);
+  if(m) return Math.min(4, Math.max(1, +m[1]));
+  return 1;   /* studios, en-suite rooms, HMO units on full LHA */
+}
+function money(n){ return '£' + Number(n).toLocaleString('en-GB',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+function rentInfo(p){
+  const beds = bedsFor(p);
+  const uncapped = /uncapped/i.test(p.rent||'');
+  if(beds === null){
+    const raw = String(p.rent||'-');
+    const n = raw.replace(/[£,\s]/g,'');
+    return { text: /^\d+(\.\d+)?$/.test(n) ? money(n) : raw, lha:false };
+  }
+  const L = lookupBrma(p);
+  const R = L.brma && lhaData.rates[L.brma];
+  if(!R) return { text: p.rent, lha:true, missing:true, L, beds };
+  const val = R[beds];
+  const check = L.src==='map' && L.alts.some(a => lhaData.rates[a] && lhaData.rates[a][beds] !== val);
+  return { text: money(val) + (uncapped ? ' (Uncapped)' : ''), lha:true, brma:L.brma, check, L, beds };
+}
+function setBrma(p, name){
+  const pc = pcOf(p.address);
+  if(!pc || !name) return;
+  /* remember for this postcode and its sector (e.g. NW11 9), and for the whole district only if it was unmapped */
+  brmaOv[pc.full] = name;
+  brmaOv[pc.sector] = name;
+  const known = BRMA_MAP[pc.out] || BRMA_MAP[pc.out.replace(/[A-Z]$/,'')] || BRMA_MAP[pc.area];
+  if(!known && !brmaOv[pc.out]) brmaOv[pc.out] = name;
+  save(); render();
+}
+function parseRatesCsv(text){
+  const rates = {};
+  const lines = text.split(/\r?\n/);
+  const label = (text.match(/(\d{4})\s*to\s*(\d{4})/) || [])[0] || 'imported';
+  for(const line of lines.slice(1)){
+    const cells = []; let cur = '', q = false;
+    for(const ch of line){
+      if(ch === '"'){ q = !q; continue; }
+      if(ch === ',' && !q){ cells.push(cur); cur = ''; continue; }
+      cur += ch;
+    }
+    cells.push(cur);
+    const name = (cells[0]||'').trim();
+    const nums = cells.slice(1,6).map(c => parseFloat(String(c).replace(/[^0-9.]/g,'')));
+    if(name && nums.length === 5 && nums.every(n => !isNaN(n))) rates[name] = nums;
+  }
+  return Object.keys(rates).length > 50 ? {label, rates} : null;
+}
+
+/* ---------- storage ---------- */
+/* window.storage is the Claude artifact's store; opened as a plain file, the browser keeps it instead */
+const store = window.storage || {
+  get: async k => { const v = localStorage.getItem(k); return v === null ? null : {value:v}; },
+  set: async (k,v) => localStorage.setItem(k,v)
+};
+async function load(){
+  try{
+    const r = await store.get('keel-mailer-state');
+    if(r && r.value){
+      const s = JSON.parse(r.value);
+      props = s.props||[]; sources = s.sources||sources; activeSrc = s.activeSrc||activeSrc;
+      brmaOv = s.brmaOv||{};
+      officers = s.officers||[]; patches = s.patches||{};
+      if(s.lhaData && s.lhaData.rates) lhaData = s.lhaData;
+    }
+  }catch(e){ /* first run */ }
+  renderLhaLabel();
+  renderSources(); render();
+}
+let saveT;
+function save(){
+  clearTimeout(saveT);
+  saveT = setTimeout(async ()=>{
+    try{ await store.set('keel-mailer-state', JSON.stringify({props,sources,activeSrc,brmaOv,officers,patches,lhaData: lhaData===LHA_DEFAULT ? null : lhaData})); }
+    catch(e){ console.error('save failed',e); }
+  }, 400);
+}
+
+/* ---------- source picker ---------- */
+function srcColor(s){ const i = sources.indexOf(s); return SRC_PALETTE[(i<0?0:i) % SRC_PALETTE.length]; }
+function renderSources(){
+  const el = document.getElementById('srcpick');
+  el.innerHTML = '';
+  const lbl = document.createElement('span');
+  lbl.style.cssText='font-family:IBM Plex Mono,monospace;font-size:11px;color:var(--muted)';
+  lbl.textContent='Tag incoming as:';
+  el.appendChild(lbl);
+  sources.forEach(s=>{
+    const b = document.createElement('button');
+    b.className='srcbtn'+(s===activeSrc?' sel':'');
+    b.textContent=s;
+    b.title = s===activeSrc ? 'Active tag' : 'Set as active tag';
+    b.onclick=()=>{ activeSrc=s; renderSources(); save(); };
+    el.appendChild(b);
+  });
+  const add = document.createElement('button');
+  add.className='srcbtn add'; add.textContent='+ new tag';
+  add.onclick=()=>{ add.style.display='none'; inp.classList.add('open'); inp.focus(); };
+  el.appendChild(add);
+  const inp = document.createElement('input');
+  inp.id='newtag'; inp.maxLength=4; inp.placeholder='TAG';
+  const commit = ()=>{
+    const t = inp.value.trim().toUpperCase().slice(0,4);
+    if(t){ if(!sources.includes(t)) sources.push(t); activeSrc = t; save(); }
+    renderSources();
+  };
+  inp.onkeydown=(e)=>{ if(e.key==='Enter'){ commit(); } if(e.key==='Escape'){ renderSources(); } };
+  inp.onblur=commit;
+  el.appendChild(inp);
+}
+
+/* ---------- status ---------- */
+const statusEl = document.getElementById('status');
+function setStatus(msg, cls){ statusEl.textContent = msg; statusEl.className = 'status '+(cls||''); }
+
+/* ---------- input capture ---------- */
+const queue = [];
+let working = false;
+function enqueue(job){ queue.push(job); pump(); }
+async function pump(){
+  if(working) return;
+  working = true;
+  let batchAdded = 0, batchSkipped = 0, fails = 0, batchMissed = 0, done = 0;
+  while(queue.length){
+    const job = queue.shift();
+    done++;
+    setStatus(`Reading batch ${done}${queue.length? ' of '+(done+queue.length):''}…`, 'busy');
+    try{
+      const {added, skipped, missed} = await extract(job);
+      batchAdded += added; batchSkipped += skipped; batchMissed += missed;
+    }catch(err){ console.error(err); fails++; }
+  }
+  working = false;
+  if(fails && !batchAdded){ setStatus('Could not read that. Try again, or paste the text version into the box instead.', 'err'); }
+  else{
+    let m = `Added ${batchAdded} propert${batchAdded===1?'y':'ies'} as ${activeSrc}`;
+    if(batchSkipped) m += ` · ${batchSkipped} duplicate${batchSkipped>1?'s':''} skipped`;
+    if(fails) m += ` · ${fails} batch${fails>1?'es':''} failed, paste again to retry`;
+    if(batchMissed) m += ` · ⚠ ${batchMissed} line${batchMissed>1?'s':''} may be missing, paste again (duplicates are skipped)`;
+    setStatus(m, (fails||batchMissed)? 'err' : 'done');
+  }
+}
+
+document.addEventListener('paste', (e)=>{
+  /* pasting into a box (the Bin's text box, the officers box, a row) is just typing; text pasted anywhere else goes to the Bin */
+  const typing = e.target && e.target.closest && e.target.closest('input, textarea, select');
+  let gotImage = false;
+  for(const it of e.clipboardData.items){
+    if(it.type.startsWith('image/')){
+      gotImage = true;
+      const f = it.getAsFile();
+      if(f) enqueue({file:f});
+    }
+  }
+  if(gotImage){ e.preventDefault(); return; }
+  if(!typing){
+    const txt = e.clipboardData.getData('text/plain');
+    if(txt && txt.trim().length > 20){ enqueueText(txt); }
+  }
+});
+
+const bin = document.getElementById('bin');
+['dragover','dragenter'].forEach(ev=>bin.addEventListener(ev,(e)=>{e.preventDefault();bin.classList.add('drag');}));
+['dragleave','drop'].forEach(ev=>bin.addEventListener(ev,(e)=>{e.preventDefault();bin.classList.remove('drag');}));
+bin.addEventListener('drop',(e)=>{
+  for(const f of e.dataTransfer.files){ if(f.type.startsWith('image/')) enqueue({file:f}); }
+});
+
+document.getElementById('uploadBtn').onclick = ()=>document.getElementById('fileinput').click();
+document.getElementById('fileinput').onchange = (e)=>{
+  for(const f of e.target.files){ if(f.type.startsWith('image/')) enqueue({file:f}); }
+  e.target.value='';
+};
+/* Split long lists into small batches of address lines.
+   Section headers ride along with their batch; shared notes
+   ("all are en-suite studios...") are copied into every batch. */
+const POSTCODE = /\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/i;
+const PER_BATCH = 12;
+function enqueueText(t){
+  const lines = t.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const isAddr = l => POSTCODE.test(l) || /^[•\-*]?\s*(flat|unit|studio|room|gff|ff|sf|\d)/i.test(l);
+  const notes = lines.filter(l => !isAddr(l) && l.length > 40);
+  const batches = [];
+  let cur = [], curCount = 0, header = '';
+  for(const l of lines){
+    if(isAddr(l)){
+      if(curCount >= PER_BATCH){ batches.push(cur); cur = header ? [header] : []; curCount = 0; }
+      cur.push(l); curCount++;
+    } else if(l.length <= 40){
+      header = l; cur.push(l);
+    }
+  }
+  if(curCount) batches.push(cur);
+  if(!batches.length){ enqueue({text:t, expect:0}); return; }
+  for(const b of batches){
+    const expect = b.filter(isAddr).length;
+    const body = b.join('\n') + (notes.length ? '\n\nShared notes (apply to every listing above):\n' + notes.join('\n') : '');
+    enqueue({text:body, expect});
+  }
+}
+document.getElementById('extractBtn').onclick = ()=>{
+  const t = document.getElementById('rawtext').value;
+  if(t.trim().length < 10){ toast('Paste some text in the box first'); return; }
+  document.getElementById('rawtext').value='';
+  enqueueText(t);
+};
+
+/* ---------- Claude extraction ---------- */
+const SYS = `You extract UK rental property listings into JSON. Respond ONLY with a raw JSON array — no markdown fences, no commentary. Each object: {"address": string ("Flat/Unit X, Street, Area POSTCODE"), "borough": string (infer London borough or local authority from postcode/area: NW2/NW10=Brent, NW11/N3=Barnet, SE6/SE13/SE23=Lewisham, SE27=Lambeth, SW16=Lambeth or Croydon by street, N1/N4/N7=Islington, UB1/UB2=Ealing, UB5/UB6=Ealing, UB7=Hillingdon, HA2=Harrow, EN6=Hertsmere, KT17/KT19=Epsom & Ewell, KT3=Kingston upon Thames, KT12=Elmbridge, TW17=Spelthorne, TW13=Hounslow, W4=Hounslow, CR0=Croydon, CR3=Tandridge, DA17/DA8=Bexley, BR5=Bromley, RM17=Thurrock, SE3=Greenwich, SL1=Slough; outside London use the council district, not the town: Hertsmere for Borehamwood, Thurrock for Grays, Elmbridge for Walton-on-Thames, Spelthorne for Staines), "type": string (Studio, Self-Contained Studio, En-suite Studio, En-suite Room, 1-Bed Flat, 2-Bed Flat, HMO Unit, etc.), "bills": string ("All Included", "Electric Included", "Exc. Council Tax & Electricity", "Excluded", or "-" if not stated), "rent": string (a £ figure only when the listing states a landlord rent, e.g. "£750.00"; when the rent is described as LHA in any wording, e.g. "full LHA", "LHA rate", "1 bed LHA", output "1-Bed LHA", "2-Bed LHA", "SAR" etc. and append " (Uncapped)" if marked uncapped; never convert LHA into a £ amount yourself)}.
+
+CRITICAL rules:
+- Shared/global notes anywhere in the input (e.g. "They are all rooms with ensuite bathroom and mini kitchenette", "Rent is full LHA rate for 1 bed") apply to EVERY listing that lacks its own value. Read the whole input before deciding fields.
+- Bare address lists with no per-line details are still valid listings — output every address, filling type/bills/rent from shared notes or "-".
+- Expand multi-unit lines ("2 Studios Unit 1 & 2 ...") into one object per unit.
+- Skip listings that are struck through or marked let/gone/taken.
+- If a postcode is missing keep the address as given and infer borough from the street/area name if possible, else "".
+- Never invent addresses. Never skip a listing because it looks incomplete.`;
+
+function parseProps(raw){
+  const clean = raw.replace(/```json|```/gi,'').trim();
+  try{ const a = JSON.parse(clean); if(Array.isArray(a)) return a; }catch(e){}
+  const objs = [];
+  const re = /\{[^{}]*\}/g; let m;
+  while((m = re.exec(clean))){ try{ const o = JSON.parse(m[0]); if(o.address) objs.push(o); }catch(e){} }
+  if(objs.length) return objs;
+  throw new Error('unparseable');
+}
+
+async function extract(job){
+  const content = [];
+  if(job.file){
+    const b64 = await new Promise((res,rej)=>{
+      const r = new FileReader();
+      r.onload = ()=>res(r.result.split(',')[1]);
+      r.onerror = ()=>rej(new Error('read failed'));
+      r.readAsDataURL(job.file);
+    });
+    content.push({type:'image', source:{type:'base64', media_type:job.file.type, data:b64}});
+    content.push({type:'text', text:'Extract every available property listing from this screenshot. Remember shared notes apply to all listings.'});
+  } else {
+    content.push({type:'text', text:'Extract every property listing from this text. Remember shared notes apply to all listings:\n\n'+job.text});
+  }
+  const resp = await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:8000, system:SYS, messages:[{role:'user', content}] })
+  });
+  if(!resp.ok) throw new Error('api '+resp.status);
+  const data = await resp.json();
+  const raw = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n');
+  const arr = parseProps(raw);
+  const cutOff = data.stop_reason === 'max_tokens';
+  const missed = Math.max(0, (job.expect||0) - arr.length) || (cutOff ? 1 : 0);
+  const norm = s => String(s||'').toLowerCase().replace(/[,.]/g,'').replace(/\s+/g,' ').trim();
+  const existing = new Set(props.map(p=>norm(p.address)));
+  let added = 0, skipped = 0;
+  for(const p of arr){
+    if(!p.address) continue;
+    if(existing.has(norm(p.address))){ skipped++; continue; }
+    existing.add(norm(p.address));
+    props.push({ id:uid(), address:p.address, borough:p.borough||'', type:p.type||'Studio', bills:p.bills||'-', rent:p.rent||'-', src:activeSrc });
+    added++;
+  }
+  save(); render();
+  return {added, skipped, missed, cutOff};
+}
+
+/* ---------- areas: one name per council ---------- */
+/* Councils around London that turn up in providers' lists or officers' emails */
+const OUTER = ["Basildon","Brentwood","Broxbourne","Buckinghamshire","Dartford","Elmbridge","Epping Forest","Epsom and Ewell","Hertsmere","Mole Valley","Reigate and Banstead","Runnymede","Sevenoaks","Slough","Spelthorne","Tandridge","Three Rivers","Thurrock","Watford","Welwyn Hatfield","Windsor and Maidenhead"];
+const KNOWN_AREAS = [...LONDON, ...OUTER];
+/* Other ways an area gets written: short forms, email domains and the towns inside a council */
+const AREA_ALIASES = {
+  'hammersmith':'Hammersmith and Fulham', 'fulham':'Hammersmith and Fulham', 'lbhf':'Hammersmith and Fulham', 'h and f':'Hammersmith and Fulham',
+  'kensington':'Kensington and Chelsea', 'chelsea':'Kensington and Chelsea', 'rbkc':'Kensington and Chelsea', 'k and c':'Kensington and Chelsea',
+  'barking':'Barking and Dagenham', 'dagenham':'Barking and Dagenham', 'lbbd':'Barking and Dagenham', 'b and d':'Barking and Dagenham',
+  'kingston':'Kingston upon Thames', 'richmond':'Richmond upon Thames', 'royal greenwich':'Greenwich',
+  'city':'City of London', 'city of westminster':'Westminster',
+  'epsom':'Epsom and Ewell', 'ewell':'Epsom and Ewell', 'epsom ewell':'Epsom and Ewell',
+  'reigate banstead':'Reigate and Banstead', 'reigate':'Reigate and Banstead', 'redhill':'Reigate and Banstead', 'banstead':'Reigate and Banstead',
+  'eppingforestdc':'Epping Forest', 'epping':'Epping Forest', 'loughton':'Epping Forest', 'chigwell':'Epping Forest', 'waltham abbey':'Epping Forest',
+  'welhat':'Welwyn Hatfield', 'rbwm':'Windsor and Maidenhead', 'windsor':'Windsor and Maidenhead', 'maidenhead':'Windsor and Maidenhead',
+  'borehamwood':'Hertsmere', 'potters bar':'Hertsmere', 'bushey':'Hertsmere', 'radlett':'Hertsmere', 'elstree':'Hertsmere',
+  'grays':'Thurrock', 'tilbury':'Thurrock', 'purfleet':'Thurrock', 'south ockendon':'Thurrock', 'stanford le hope':'Thurrock',
+  'staines':'Spelthorne', 'staines upon thames':'Spelthorne', 'sunbury':'Spelthorne', 'sunbury on thames':'Spelthorne', 'shepperton':'Spelthorne',
+  'walton on thames':'Elmbridge', 'weybridge':'Elmbridge', 'esher':'Elmbridge', 'molesey':'Elmbridge', 'east molesey':'Elmbridge',
+  'caterham':'Tandridge', 'oxted':'Tandridge', 'warlingham':'Tandridge', 'whyteleafe':'Tandridge',
+  'cheshunt':'Broxbourne', 'hoddesdon':'Broxbourne', 'waltham cross':'Broxbourne', 'swanley':'Sevenoaks',
+  'romford':'Havering', 'hornchurch':'Havering', 'ilford':'Redbridge', 'wembley':'Brent', 'harlesden':'Brent', 'willesden':'Brent',
+  'uxbridge':'Hillingdon', 'southall':'Ealing', 'acton':'Ealing', 'edmonton':'Enfield', 'tottenham':'Haringey', 'wood green':'Haringey',
+  'walthamstow':'Waltham Forest', 'leyton':'Waltham Forest', 'chingford':'Waltham Forest', 'stratford':'Newham', 'east ham':'Newham',
+  'woolwich':'Greenwich', 'eltham':'Greenwich', 'erith':'Bexley', 'bexleyheath':'Bexley', 'orpington':'Bromley', 'feltham':'Hounslow',
+  'twickenham':'Richmond upon Thames', 'surbiton':'Kingston upon Thames', 'mitcham':'Merton', 'morden':'Merton', 'thornton heath':'Croydon',
+  'edgware':'Barnet', 'hendon':'Barnet', 'finchley':'Barnet', 'brixton':'Lambeth', 'streatham':'Lambeth', 'peckham':'Southwark', 'catford':'Lewisham'
+};
+function areaKey(s){
+  return String(s||'').toLowerCase().replace(/&/g,' and ')
+    .replace(/\b(the )?(london|royal) borough of\b|\bborough of\b|\b(borough|district|city|county) council\b|\bcouncil\b|^lb /g,' ')
+    .replace(/[^a-z]+/g,' ').trim();
+}
+const AREA_INDEX = {};
+KNOWN_AREAS.forEach(a=>{ const k = areaKey(a); AREA_INDEX[k] = a; AREA_INDEX[k.replace(/ /g,'')] = a; });
+Object.entries(AREA_ALIASES).forEach(([k,a])=>{ AREA_INDEX[k] = a; AREA_INDEX[k.replace(/ /g,'')] = a; });
+/* "Hammersmith & Fulham", "LB Brent", "Ilford" -> the council's name, or null when it is not one we know */
+function knownArea(s){ const k = areaKey(s); return k ? (AREA_INDEX[k] || AREA_INDEX[k.replace(/ /g,'')] || null) : null; }
+function canonArea(s){ return knownArea(s) || String(s||'').trim() || 'Unsorted'; }
+
+/* Areas that share a border: Keel's own list (src/lib/london.ts) plus the councils around London */
+const BORDERS = [
+  ['Barking and Dagenham','Newham'],['Barking and Dagenham','Redbridge'],['Barking and Dagenham','Havering'],
+  ['Barnet','Enfield'],['Barnet','Haringey'],['Barnet','Camden'],['Barnet','Brent'],['Barnet','Harrow'],['Barnet','Hertsmere'],
+  ['Bexley','Greenwich'],['Bexley','Bromley'],['Bexley','Dartford'],['Bexley','Sevenoaks'],
+  ['Brent','Camden'],['Brent','Westminster'],['Brent','Kensington and Chelsea'],['Brent','Hammersmith and Fulham'],['Brent','Ealing'],['Brent','Harrow'],
+  ['Bromley','Greenwich'],['Bromley','Lewisham'],['Bromley','Southwark'],['Bromley','Lambeth'],['Bromley','Croydon'],['Bromley','Tandridge'],['Bromley','Sevenoaks'],
+  ['Camden','Haringey'],['Camden','Islington'],['Camden','City of London'],['Camden','Westminster'],
+  ['City of London','Westminster'],['City of London','Islington'],['City of London','Hackney'],['City of London','Tower Hamlets'],['City of London','Southwark'],
+  ['Croydon','Lambeth'],['Croydon','Southwark'],['Croydon','Merton'],['Croydon','Sutton'],['Croydon','Tandridge'],['Croydon','Reigate and Banstead'],
+  ['Ealing','Harrow'],['Ealing','Hillingdon'],['Ealing','Hounslow'],['Ealing','Hammersmith and Fulham'],
+  ['Enfield','Haringey'],['Enfield','Waltham Forest'],['Enfield','Hertsmere'],['Enfield','Broxbourne'],['Enfield','Welwyn Hatfield'],['Enfield','Epping Forest'],
+  ['Greenwich','Lewisham'],
+  ['Hackney','Haringey'],['Hackney','Islington'],['Hackney','Tower Hamlets'],['Hackney','Newham'],['Hackney','Waltham Forest'],
+  ['Hammersmith and Fulham','Kensington and Chelsea'],['Hammersmith and Fulham','Hounslow'],['Hammersmith and Fulham','Richmond upon Thames'],['Hammersmith and Fulham','Wandsworth'],
+  ['Haringey','Waltham Forest'],['Haringey','Islington'],
+  ['Harrow','Hillingdon'],['Harrow','Hertsmere'],['Harrow','Three Rivers'],
+  ['Havering','Redbridge'],['Havering','Thurrock'],['Havering','Brentwood'],['Havering','Epping Forest'],
+  ['Hillingdon','Hounslow'],['Hillingdon','Slough'],['Hillingdon','Spelthorne'],['Hillingdon','Three Rivers'],['Hillingdon','Buckinghamshire'],
+  ['Hounslow','Richmond upon Thames'],['Hounslow','Spelthorne'],
+  ['Kensington and Chelsea','Westminster'],['Kensington and Chelsea','Wandsworth'],
+  ['Kingston upon Thames','Richmond upon Thames'],['Kingston upon Thames','Merton'],['Kingston upon Thames','Sutton'],['Kingston upon Thames','Wandsworth'],
+  ['Kingston upon Thames','Epsom and Ewell'],['Kingston upon Thames','Elmbridge'],
+  ['Lambeth','Wandsworth'],['Lambeth','Southwark'],['Lambeth','Westminster'],['Lambeth','Merton'],
+  ['Lewisham','Southwark'],
+  ['Merton','Wandsworth'],['Merton','Sutton'],
+  ['Newham','Tower Hamlets'],['Newham','Waltham Forest'],['Newham','Redbridge'],
+  ['Redbridge','Waltham Forest'],['Redbridge','Epping Forest'],
+  ['Richmond upon Thames','Wandsworth'],['Richmond upon Thames','Elmbridge'],['Richmond upon Thames','Spelthorne'],
+  ['Southwark','Tower Hamlets'],['Southwark','Westminster'],
+  ['Sutton','Epsom and Ewell'],['Sutton','Reigate and Banstead'],
+  ['Waltham Forest','Epping Forest'],
+  ['Wandsworth','Westminster'],
+  ['Hertsmere','Three Rivers'],['Hertsmere','Watford'],['Hertsmere','Welwyn Hatfield'],['Watford','Three Rivers'],['Broxbourne','Epping Forest'],
+  ['Brentwood','Epping Forest'],['Brentwood','Thurrock'],['Brentwood','Basildon'],['Thurrock','Basildon'],['Dartford','Sevenoaks'],
+  ['Tandridge','Reigate and Banstead'],['Tandridge','Sevenoaks'],['Epsom and Ewell','Reigate and Banstead'],['Epsom and Ewell','Mole Valley'],
+  ['Elmbridge','Epsom and Ewell'],['Elmbridge','Mole Valley'],['Elmbridge','Spelthorne'],['Elmbridge','Runnymede'],['Spelthorne','Runnymede'],
+  ['Slough','Buckinghamshire'],['Slough','Windsor and Maidenhead']
+];
+const NEAR = {};
+BORDERS.forEach(([a,b])=>{ (NEAR[a]=NEAR[a]||[]).push(b); (NEAR[b]=NEAR[b]||[]).push(a); });
+
+/* ---------- grouping helpers ---------- */
+function londonish(b){ return LONDON.includes(canonArea(b)); }
+function grouped(list = props){
+  const by = {};
+  list.forEach(p=>{ const k = canonArea(p.borough); (by[k]=by[k]||[]).push(p); });
+  const names = Object.keys(by);
+  return { by, lon: names.filter(londonish).sort(), out: names.filter(n=>!londonish(n)).sort() };
+}
+function areaCounts(){
+  const c = {};
+  props.forEach(p=>{ const k = canonArea(p.borough); c[k] = (c[k]||0)+1; });
+  return c;
+}
+
+/* ---------- housing officers: a short local list each ---------- */
+/* Officers find a long list overwhelming. Each gets their council's area and the NEAR_PICK
+   neighbouring areas with the most properties (changeable per council), or the full list. */
+const NEAR_PICK = 3;
+const MAILTO_LIMIT = 1800;   /* past this a mail app may not open the link: copy the addresses instead */
+const EMAIL_RE = /[^\s<>"',;:()\[\]]+@[^\s<>"',;:()\[\]]+\.[a-z]{2,}/gi;
+
+function orderAreas(council, areas, counts){
+  return [...new Set(areas)].sort((a,b)=> (b===council)-(a===council) || (counts[b]||0)-(counts[a]||0) || a.localeCompare(b));
+}
+function nearestAreas(council, counts){
+  const near = (NEAR[council]||[]).filter(a=>counts[a]);
+  return [council, ...orderAreas(null, near, counts).slice(0, NEAR_PICK)];
+}
+function areasFor(council, counts){ return orderAreas(council, patches[council] || nearestAreas(council, counts), counts); }
+
+/* "sarah.jones@brent.gov.uk" -> Brent */
+function councilFromEmail(email){
+  const domain = String(email||'').split('@')[1] || '';
+  const label = domain.toLowerCase().replace(/\.(gov|org|nhs|co|ac)\.uk$/,'').replace(/\.(com|org|net|uk)$/,'').split('.').pop();
+  if(!label || label === 'richmondandwandsworth') return null;   /* a shared service: pick by hand */
+  return knownArea(label.replace(/-/g,' '));
+}
+/* "sarah.jones@..." -> Sarah Jones; "housingoptions@..." gives no name */
+function nameFromEmail(email){
+  const bits = String(email||'').split('@')[0].split(/[._-]+/).filter(b=>/^[a-z]{2,}$/i.test(b));
+  return bits.length >= 2 ? bits.map(b=>b[0].toUpperCase()+b.slice(1).toLowerCase()).join(' ') : '';
+}
+function parseOfficerLine(s){
+  const email = ((s.match(EMAIL_RE)||[])[0]||'').toLowerCase();
+  const fields = s.replace(EMAIL_RE,' ').replace(/[<>"()\[\]]/g,' ').split(/[,;\t|]/).map(f=>f.trim()).filter(Boolean);
+  let council = '', name = '';
+  for(const f of fields){
+    const a = knownArea(f);
+    if(a && !council){ council = a; continue; }
+    if(/\d{6,}/.test(f.replace(/[\s+()-]/g,''))) continue;   /* a phone number */
+    if(/^name not given$/i.test(f)) continue;
+    if(!name && /[a-z]/i.test(f)) name = f.replace(/\s+/g,' ');
+  }
+  if(!council && email) council = councilFromEmail(email) || '';
+  if(!name && email) name = nameFromEmail(email);
+  return email || name ? {name, email, council} : null;
+}
+/* One officer per line, Outlook's To box ("A <a@x>; B <b@y>"), or Keel's "details as text" (a block of lines per officer) */
+function parseOfficers(text){
+  const entries = [];
+  for(const block of String(text||'').split(/\n\s*\n/)){
+    const lines = block.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+    const emails = block.match(EMAIL_RE) || [];
+    if(emails.length === 1 && lines.length > 1 && lines.every(l=>!/[,;\t]/.test(l))){ entries.push(lines.join(', ')); continue; }
+    for(const line of lines){
+      if((line.match(EMAIL_RE)||[]).length <= 1){ entries.push(line); continue; }
+      line.split(';')
+        .flatMap(seg => (seg.match(EMAIL_RE)||[]).length > 1 ? seg.split(/[,\t]/) : [seg])
+        .map(seg=>seg.trim()).filter(Boolean).forEach(seg=>entries.push(seg));
+    }
+  }
+  return entries.map(parseOfficerLine).filter(Boolean);
+}
+function addOfficers(text){
+  let added = 0, already = 0;
+  for(const f of parseOfficers(text)){
+    const same = f.email ? officers.find(o=>o.email && o.email.toLowerCase()===f.email)
+                         : officers.find(o=>!o.email && o.name.toLowerCase()===f.name.toLowerCase());
+    if(same){ same.name = same.name || f.name; same.council = same.council || f.council; already++; continue; }
+    officers.push({id:uid(), name:f.name, email:f.email, council:f.council, full:false, sent:null});
+    added++;
+  }
+  return {added, already};
+}
+
+function officerById(id){ return officers.find(o=>o.id===id); }
+function who(o){ return (o && (o.name || o.email)) || 'this officer'; }
+/* For "Hi Sarah,": the first name, or none when there is only a title and surname */
+function firstName(o){
+  const words = String(o.name||'').replace(/\s+/g,' ').trim().split(' ').filter(Boolean);
+  if(!words.length || /^(mr|mrs|ms|miss|mx|dr)\.?$/i.test(words[0]) || /@/.test(words[0])) return '';
+  const w = words[0];
+  if(!/^[a-z][a-z'-]+$/i.test(w)) return '';
+  return w === w.toUpperCase() ? w[0] + w.slice(1).toLowerCase() : w[0].toUpperCase() + w.slice(1);
+}
+function bccGroup(council){ return officers.filter(o=>o.council===council && !o.full && o.email); }
+function addressLine(o){
+  if(!o.email) return null;
+  if(!o.name) return o.email;
+  const name = o.name.replace(/"/g,'');
+  return /[,;<>@]/.test(name) ? `"${name}" <${o.email}>` : `${name} <${o.email}>`;
+}
+
+/* What one send covers: the full list ({kind:'all'} or 'all-officers'), one officer's list
+   ({kind:'officer', id}) or one council's officers together ({kind:'council', council}) */
+function scopeOf(scope){
+  const o = scope.kind==='officer' ? officerById(scope.id) : null;
+  const first = o ? firstName(o) : '';
+  const greeting = first ? `Hi ${first},` : 'Good Afternoon,';
+  const local = scope.kind==='council' || (o && !o.full);
+  if(!local) return { local:false, greeting, list:props, areas:null, subject:'Available properties' };
+  const council = scope.kind==='council' ? scope.council : o.council;
+  if(!council) return { local:true, council:'', greeting, list:[], areas:[], subject:'' };
+  const counts = areaCounts();
+  const areas = areasFor(council, counts).filter(a=>counts[a]);
+  const set = new Set(areas);
+  return { local:true, council, greeting, areas, list: props.filter(p=>set.has(canonArea(p.borough))),
+    subject:`Available properties in and around ${council}` };
+}
+function emptyNote(s){
+  if(!s.local) return 'Nothing to copy yet';
+  return s.council ? `Nothing in or near ${s.council} right now. Put another area in, or send them the full list` : 'Pick their council first';
+}
+function markSent(scope){
+  const now = Date.now();
+  const sent = scope.kind==='officer' ? [officerById(scope.id)].filter(Boolean)
+    : scope.kind==='council' ? bccGroup(scope.council)
+    : scope.kind==='all-officers' ? officers.filter(o=>o.email) : [];
+  if(!sent.length) return;
+  sent.forEach(o=>o.sent = now);
+  save(); renderOfficers();
+}
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function sentLabel(ts){
+  if(!ts) return '';
+  const d = new Date(ts), now = new Date();
+  if(d.toDateString() === now.toDateString()) return 'Sent today';
+  return `Sent ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
+
+/* A new email in Outlook (or whatever opens mailto links), addressed and with a subject; the body is pasted in */
+function mailtoUrl({to=[], bcc=[], subject=''}){
+  const enc = s => encodeURIComponent(s).replace(/%40/g,'@');
+  const q = [];
+  if(bcc.length) q.push('bcc=' + bcc.map(enc).join(','));
+  if(subject) q.push('subject=' + encodeURIComponent(subject));
+  return 'mailto:' + to.map(enc).join(',') + (q.length ? '?' + q.join('&') : '');
+}
+function openMail(url){
+  const a = document.createElement('a');
+  a.href = url; a.target = '_blank'; a.rel = 'noopener';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+async function sendTo(scope, recipients, label){
+  const s = await copyEmail(scope, true);
+  if(!s) return;
+  const to = recipients.to||[], bcc = recipients.bcc||[];
+  if(!to.length && !bcc.length){ toast(lhaNote(`Email copied. There is no address for ${label}: paste it into a new email`)); return; }
+  const url = mailtoUrl({to, bcc, subject:s.subject});
+  if(url.length > MAILTO_LIMIT){ toast(lhaNote('Email copied. Too many addresses to open in one go: paste the email, then use Copy all addresses for the Bcc box')); return; }
+  openMail(url);
+  toast(lhaNote(`Email copied. A new email to ${label} is opening: paste into the body with Ctrl/Cmd+V`));
+}
+
+/* ---------- housing officers: the panel ---------- */
+function councilOptions(cur){
+  const opt = a => `<option value="${esc(a)}"${a===cur?' selected':''}>${esc(a)}</option>`;
+  let h = `<option value=""${cur?'':' selected'}>Council?</option><optgroup label="London">${LONDON.map(opt).join('')}</optgroup><optgroup label="Around London">${OUTER.map(opt).join('')}</optgroup>`;
+  if(cur && !KNOWN_AREAS.includes(cur)) h += opt(cur);
+  return h;
+}
+function officerRow(o, n){
+  const first = firstName(o);
+  const s = sentLabel(o.sent);
+  const empty = o.full ? !props.length : (!o.council || !n);
+  return `<div class="offrow" data-oid="${o.id}">
+    <div class="who">
+      <input data-of="name" value="${esc(o.name)}" placeholder="Name" aria-label="Name">
+      <input data-of="email" value="${esc(o.email)}" placeholder="Add their email" aria-label="Email" type="email">
+    </div>
+    <select data-of="council" aria-label="Council">${councilOptions(o.council)}</select>
+    <select data-of="full" aria-label="Which list"><option value="">Local list</option><option value="1"${o.full?' selected':''}>Full list</option></select>
+    <button class="act primary sm" data-send="${o.id}"${empty?' disabled':''} title="Copies the email and opens a new one to them">Email ${esc(first || 'them')}</button>
+    <button class="act sm" data-copyo="${o.id}"${empty?' disabled':''}>Copy</button>
+    <button class="act sm" data-prev="${o.id}"${empty?' disabled':''}>Preview</button>
+    <span class="sent${s==='Sent today'?' today':''}">${s}</span>
+    <button class="delbtn" data-odel="${o.id}" title="Remove ${esc(who(o))}">×</button>
+  </div>`;
+}
+function renderOfficers(){
+  const el = document.getElementById('patches');
+  const withEmail = officers.filter(o=>o.email);
+  const councils = [...new Set(officers.map(o=>o.council||''))].sort((a,b)=> !a !== !b ? (a?-1:1) : a.localeCompare(b));
+  const placed = councils.filter(Boolean).length;
+  document.getElementById('offCount').textContent = officers.length
+    ? `${officers.length} officer${officers.length===1?'':'s'} · ${placed} council${placed===1?'':'s'}` : '';
+  document.getElementById('offCopyAll').style.display = withEmail.length ? '' : 'none';
+  const bccAll = document.getElementById('bccAllBtn');
+  bccAll.style.display = withEmail.length ? '' : 'none';
+  bccAll.textContent = `Email to all ${withEmail.length} officers (Bcc)`;
+  if(!officers.length){
+    document.getElementById('offAdd').classList.add('open');
+    el.innerHTML = '';
+    return;
+  }
+  const counts = areaCounts();
+  let h = '';
+  for(const c of councils){
+    const group = officers.filter(o=>(o.council||'')===c);
+    if(!c){
+      h += `<div class="patch"><div class="ptop"><h3>Council not known</h3><span class="n">pick their council to give them a local list</span></div>${group.map(o=>officerRow(o,0)).join('')}</div>`;
+      continue;
+    }
+    const areas = areasFor(c, counts);
+    const live = areas.filter(a=>counts[a]);
+    const n = live.reduce((t,a)=>t+counts[a],0);
+    const on = new Set(areas);
+    const off = orderAreas(null, [c, ...(NEAR[c]||[])].filter(a=>!on.has(a)), counts);
+    const chips = [...(on.has(c) ? [] : [c]), ...areas, ...off.filter(a=>a!==c)];
+    const chip = a => `<button class="area${on.has(a)?' on':''}" data-area="${esc(a)}" data-council="${esc(c)}" aria-pressed="${on.has(a)}" title="${on.has(a)?'Take '+esc(a)+' out of':'Put '+esc(a)+' in'} their list">${esc(a)} <b>${counts[a]||0}</b></button>`;
+    const others = [...new Set([...Object.keys(counts).filter(k=>k!=='Unsorted'), ...KNOWN_AREAS])]
+      .filter(a=>!chips.includes(a)).sort((a,b)=> (!!counts[b] - !!counts[a]) || a.localeCompare(b));
+    const local = bccGroup(c);
+    h += `<div class="patch">
+      <div class="ptop">
+        <h3>${esc(c)}</h3>
+        <span class="n">${n} propert${n===1?'y':'ies'} in their list</span>
+        ${local.length > 1 ? `<button class="act sm" data-bccprev="${esc(c)}"${n?'':' disabled'}>Preview</button><button class="act sm" data-bcc="${esc(c)}"${n?'':' disabled'} title="One email to all of them, in Bcc">Email all ${local.length} at once (Bcc)</button>` : ''}
+      </div>
+      <div class="areas">
+        <span class="lbl">Areas</span>${chips.map(chip).join('')}
+        <select data-addarea="${esc(c)}" aria-label="Put another area in"><option value="">+ another area</option>${others.map(a=>`<option value="${esc(a)}">${esc(a)}${counts[a]?' ('+counts[a]+')':''}</option>`).join('')}</select>
+        ${patches[c] ? `<button class="linkbtn" data-reset="${esc(c)}" title="Their council and the ${NEAR_PICK} nearest areas with the most properties">Back to nearest</button>` : ''}
+      </div>
+      ${n ? '' : `<p class="nolist">Nothing in or near ${esc(c)} right now. Put another area in, or set them to the full list.</p>`}
+      ${group.map(o=>officerRow(o,n)).join('')}
+    </div>`;
+  }
+  el.innerHTML = h;
+}
+function toggleArea(council, area){
+  const cur = areasFor(council, areaCounts());
+  patches[council] = cur.includes(area) ? cur.filter(a=>a!==area) : [...cur, area];
+  save(); renderOfficers();
+}
+
+const patchesEl = document.getElementById('patches');
+patchesEl.addEventListener('click', (e)=>{
+  const b = e.target.closest('button');
+  if(!b) return;
+  const d = b.dataset;
+  if(d.area) toggleArea(d.council, d.area);
+  else if(d.reset){ delete patches[d.reset]; save(); renderOfficers(); }
+  else if(d.send){ const o = officerById(d.send); if(o) sendTo({kind:'officer', id:o.id}, {to: o.email ? [o.email] : []}, who(o)); }
+  else if(d.copyo) copyEmail({kind:'officer', id:d.copyo});
+  else if(d.prev) showPreview({kind:'officer', id:d.prev});
+  else if(d.bccprev) showPreview({kind:'council', council:d.bccprev});
+  else if(d.bcc){ const g = bccGroup(d.bcc); sendTo({kind:'council', council:d.bcc}, {bcc: g.map(o=>o.email)}, `the ${g.length} ${d.bcc} officers (Bcc)`); }
+  else if(d.odel){ officers = officers.filter(o=>o.id!==d.odel); save(); renderOfficers(); }
+});
+patchesEl.addEventListener('change', (e)=>{
+  const t = e.target;
+  if(t.dataset.addarea){
+    if(t.value){ const cur = areasFor(t.dataset.addarea, areaCounts()); patches[t.dataset.addarea] = [...cur, t.value]; save(); }
+    renderOfficers();
+    return;
+  }
+  const row = t.closest('[data-oid]');
+  const o = row && officerById(row.dataset.oid);
+  if(!o) return;
+  const f = t.dataset.of;
+  if(f==='name') o.name = t.value.trim();
+  else if(f==='email'){ o.email = t.value.trim().toLowerCase(); if(!o.council) o.council = councilFromEmail(o.email) || ''; }
+  else if(f==='council') o.council = t.value;
+  else if(f==='full') o.full = t.value==='1';
+  save(); renderOfficers();
+});
+document.getElementById('offAddToggle').onclick = ()=>{
+  const box = document.getElementById('offAdd');
+  box.classList.toggle('open');
+  if(box.classList.contains('open')) document.getElementById('offText').focus();
+};
+document.getElementById('offAddBtn').onclick = ()=>{
+  const ta = document.getElementById('offText');
+  const {added, already} = addOfficers(ta.value);
+  if(!added && !already){ toast('No names or emails found. Put one officer on each line'); return; }
+  ta.value = '';
+  save(); renderOfficers();
+  const unplaced = officers.filter(o=>!o.council).length;
+  let m = added ? `Added ${added} officer${added===1?'':'s'}` : 'Nobody new';
+  if(already) m += ` · ${already} already here`;
+  if(unplaced) m += ` · ${unplaced} need${unplaced===1?'s':''} a council`;
+  toast(m);
+  if(added) document.getElementById('offAdd').classList.remove('open');
+};
+document.getElementById('offCopyAll').onclick = async ()=>{
+  const lines = officers.map(addressLine).filter(Boolean);
+  await copyPlain(lines.join('; '));
+  toast(`Copied ${lines.length} address${lines.length===1?'':'es'}. Paste them into the Bcc box`);
+};
+function esc(s){ return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+function anchorId(name){ return 'grp-'+name.toLowerCase().replace(/[^a-z0-9]+/g,'-'); }
+
+/* ---------- minimap ---------- */
+function renderMap(){
+  const wrap = document.getElementById('mapwrap');
+  if(!props.length){ wrap.classList.remove('on'); return; }
+  wrap.classList.add('on');
+
+  const counts = areaCounts();
+
+  const T = 46, G = 5;
+  const cols = 8, rows = 6;
+  const svg = document.getElementById('minimap');
+  svg.setAttribute('viewBox', `0 0 ${cols*(T+G)} ${rows*(T+G)}`);
+  svg.setAttribute('width', Math.min(cols*(T+G), 420));
+  let s = '';
+  for(const [name,[c,r,ab]] of Object.entries(TILES)){
+    const n = counts[name]||0;
+    const x = c*(T+G), y = r*(T+G);
+    s += `<g class="tile${n?' hot':''}" data-boro="${esc(name)}"><title>${esc(name)}${n? ' — '+n+' available':''}</title>`;
+    s += `<rect x="${x}" y="${y}" width="${T}" height="${T}" rx="5"></rect>`;
+    if(n){
+      s += `<text class="abbr" x="${x+T/2}" y="${y+17}">${ab}</text>`;
+      s += `<text class="cnt" x="${x+T/2}" y="${y+34}">${n}</text>`;
+    } else {
+      s += `<text class="abbr" x="${x+T/2}" y="${y+T/2+3}">${ab}</text>`;
+    }
+    s += `</g>`;
+  }
+  svg.innerHTML = s;
+  svg.querySelectorAll('.tile.hot').forEach(t=>{
+    t.addEventListener('click', ()=>scrollToGroup(t.dataset.boro));
+  });
+
+  /* out-of-london + unsorted chips */
+  const chips = document.getElementById('oolchips');
+  const ool = Object.keys(counts).filter(k=>!LONDON.includes(k) && k!=='Unsorted').sort();
+  let ch = '';
+  if(ool.length || counts['Unsorted']){
+    ch += '<span class="chiptitle">Out of London</span>';
+    ool.forEach(k=>{ ch += `<span class="chip" data-boro="${esc(k)}">${esc(k)} <b>${counts[k]}</b></span>`; });
+    if(counts['Unsorted']) ch += `<span class="chip" data-boro="Unsorted" style="border-style:dashed">Unsorted <b>${counts['Unsorted']}</b></span>`;
+  }
+  chips.innerHTML = ch;
+  chips.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>scrollToGroup(c.dataset.boro)));
+
+  const lonN = props.filter(p=>londonish(p.borough)).length;
+  document.getElementById('mapstats').textContent = `${lonN} London · ${props.length-lonN} outside`;
+}
+function scrollToGroup(name){
+  const el = document.getElementById(anchorId(name));
+  if(el){
+    el.scrollIntoView({behavior:'smooth', block:'start'});
+    el.classList.add('flash');
+    setTimeout(()=>el.classList.remove('flash'), 1200);
+  }
+}
+
+/* ---------- render editor ---------- */
+/* ---------- LHA cell + bar ---------- */
+function calcCell(p){
+  const i = rentInfo(p);
+  if(!i.lha) return `<span class="amt">${esc(i.text)}</span>`;
+  if(i.missing){
+    const why = i.L && i.L.src==='nopc' ? 'no postcode' : 'set BRMA';
+    return `<span class="amt raw">${esc(p.rent)}</span><button class="brma missing" data-brma="${p.id}" title="Pick the BRMA for this postcode">⚠ ${why}</button>`;
+  }
+  const cls = i.check ? 'brma check' : 'brma';
+  const tip = i.check ? 'Postcode straddles BRMAs, click to confirm' : 'Click to change BRMA';
+  return `<span class="amt">${esc(i.text)}</span><button class="${cls}" data-brma="${p.id}" title="${tip}">${i.check?'check · ':''}${esc(i.brma)}</button>`;
+}
+function brmaSelect(p){
+  const names = Object.keys(lhaData.rates).sort((a,b)=>{
+    const la = /London/.test(a), lb = /London/.test(b);
+    return la===lb ? a.localeCompare(b) : (la ? -1 : 1);
+  });
+  const cur = lookupBrma(p).brma;
+  return `<select data-brmasel="${p.id}"><option value="">Pick BRMA…</option>` +
+    names.map(n=>`<option value="${esc(n)}"${n===cur?' selected':''}>${esc(n)}</option>`).join('') + `</select>`;
+}
+function renderLhaLabel(){
+  const el = document.getElementById('lhaLabel');
+  if(el) el.textContent = `LHA rates ${lhaData.label} · ${Object.keys(lhaData.rates).length} areas`;
+}
+function lhaIssues(){
+  let check = 0, missing = 0;
+  props.forEach(p=>{ const i = rentInfo(p); if(i.missing) missing++; else if(i.check) check++; });
+  return {check, missing};
+}
+
+function render(){
+  const wrap = document.getElementById('groups');
+  document.getElementById('count').textContent = props.length + ' properties';
+  const iss = lhaIssues();
+  const w = [];
+  if(iss.missing) w.push(`${iss.missing} need a BRMA`);
+  if(iss.check) w.push(`${iss.check} to confirm`);
+  document.getElementById('lhaWarn').textContent = w.length ? '⚠ ' + w.join(' · ') : '';
+  renderMap();
+  /* counts in the officers panel follow the list, unless someone is typing in it (it catches up when they finish) */
+  const typingIn = document.activeElement && patchesEl.contains(document.activeElement) && document.activeElement.tagName === 'INPUT';
+  if(!typingIn) renderOfficers();
+  if(!props.length){ wrap.innerHTML = '<div class="empty">Nothing filed yet. Paste a screenshot or list into the Bin above.</div>'; return; }
+
+  const {by, lon, out} = grouped();
+  let html = '';
+  const grp = (name)=>{
+    let h = `<div class="group" id="${anchorId(name)}"><h3>${esc(name)} <span class="n">${by[name].length}</span></h3><table><tbody>`;
+    by[name].forEach(p=>{
+      const [bg,fg] = srcColor(p.src);
+      h += `<tr>
+        <td class="addr"><input data-id="${p.id}" data-f="address" value="${esc(p.address)}"></td>
+        <td class="boro"><input data-id="${p.id}" data-f="borough" value="${esc(p.borough)}"></td>
+        <td class="type"><input data-id="${p.id}" data-f="type" value="${esc(p.type)}"></td>
+        <td class="bills"><input data-id="${p.id}" data-f="bills" value="${esc(p.bills)}"></td>
+        <td class="rent"><input data-id="${p.id}" data-f="rent" value="${esc(p.rent)}" title="Rent basis: a £ figure, or 1-Bed LHA / 2-Bed LHA / SAR"></td>
+        <td class="calc">${calcCell(p)}</td>
+        <td class="src"><span class="badge" data-cycle="${p.id}" style="background:${bg};color:${fg}" title="Click to change source">${esc(p.src)}</span></td>
+        <td class="del"><button class="delbtn" data-del="${p.id}" title="Remove">×</button></td>
+      </tr>`;
+    });
+    return h + '</tbody></table></div>';
+  };
+  lon.forEach(n=>html+=grp(n));
+  if(out.length){ html += '<div class="ool-divider">Out of London</div>'; out.forEach(n=>html+=grp(n)); }
+  wrap.innerHTML = html;
+
+  wrap.querySelectorAll('input').forEach(inp=>{
+    inp.addEventListener('change', ()=>{
+      const p = props.find(x=>x.id===inp.dataset.id);
+      if(p){ p[inp.dataset.f] = inp.value; save(); if(['borough','rent','type','address'].includes(inp.dataset.f)) render(); }
+    });
+  });
+  wrap.querySelectorAll('[data-cycle]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const p = props.find(x=>x.id===b.dataset.cycle);
+      if(p){ p.src = sources[(sources.indexOf(p.src)+1) % sources.length]; save(); render(); }
+    });
+  });
+  wrap.querySelectorAll('[data-del]').forEach(b=>{
+    b.addEventListener('click', ()=>{ props = props.filter(x=>x.id!==b.dataset.del); save(); render(); });
+  });
+  wrap.querySelectorAll('[data-brma]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const p = props.find(x=>x.id===b.dataset.brma);
+      if(!p) return;
+      if(!pcOf(p.address)){ toast('Add a full postcode to the address first'); return; }
+      const td = b.closest('td');
+      td.innerHTML = brmaSelect(p);
+      const sel = td.querySelector('select');
+      sel.focus();
+      sel.addEventListener('change', ()=>{ if(sel.value) setBrma(p, sel.value); });
+      sel.addEventListener('blur', ()=>setTimeout(()=>{ if(document.body.contains(sel)) render(); }, 150));
+    });
+  });
+}
+
+/* ---------- email generation ---------- */
+function buildEmail(scope = {kind:'all'}){
+  const s = scopeOf(scope);
+  const {by, lon, out} = grouped(s.list);
+  const th = (t,a)=>`<th style="text-align:${a};padding:5px 8px;border-bottom:1px solid #ccc;font-weight:600;background:#eeeeee;">${t}</th>`;
+  const sec = (name)=>{
+    let h = `<p style="font-weight:bold;margin:14px 0 2px;font-family:Calibri,Arial,sans-serif;">${esc(name)}</p>`;
+    h += `<table style="border-collapse:collapse;width:100%;font-size:12px;font-family:Calibri,Arial,sans-serif;"><tr>${th('Address','left')}${th('Type','left')}${th('Bills','left')}${th('Benefits','center')}${th('Monthly Rent','right')}</tr>`;
+    by[name].forEach((p,i)=>{
+      const bg = i%2 ? ' background:#fafafa;' : '';
+      h += `<tr style="${bg}">
+        <td style="padding:5px 8px;border-bottom:1px solid #eee;">${esc(p.address)}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #eee;">${esc(p.type)}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #eee;">${esc(p.bills)}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;">Yes</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right;font-weight:bold;">${esc(rentInfo(p).text)}</td>
+      </tr>`;
+    });
+    return h + '</table>';
+  };
+  let body = `<div style="font-family:Calibri,Arial,sans-serif;font-size:13px;color:#222;max-width:980px;">
+<p>${esc(s.greeting)}</p>
+<p>Please find our latest available properties${s.local ? ` in and around ${esc(s.council)}` : ''} below. All units accept <strong>DSS/Universal Credit</strong> tenants, with <strong>no deposit or RIA required</strong>. Rents are set at or just above LHA rates. Please feel free to reach out if you have any clients who may be suitable and we will be happy to assist.</p>
+<p><strong>PROPERTIES AVAILABLE</strong></p>`;
+  if(s.local){
+    /* their council first, then the neighbouring areas with the most */
+    s.areas.forEach(n=>{ if(by[n]) body += sec(n); });
+    body += `<p style="margin-top:16px;">This is a shorter list for ${esc(s.council)} and nearby. If you would like to see everything we have available, just reply and I will send the full list.</p>`;
+  } else {
+    lon.forEach(n=>body+=sec(n));
+    if(out.length){
+      body += `<p style="font-weight:bold;font-size:13px;margin:20px 0 6px;border-top:2px solid #ccc;padding-top:12px;">OUT OF LONDON</p>`;
+      out.forEach(n=>body+=sec(n));
+    }
+  }
+  body += `<br><p>Kind regards,<br><strong>Ridwan Harir</strong><br>Keel Lettings Ltd</p></div>`;
+  return body;
+}
+
+/* ---------- WhatsApp generation ---------- */
+function buildWhatsApp(scope = {kind:'all'}){
+  const s = scopeOf(scope);
+  const {by, lon, out} = grouped(s.list);
+  const line = (p)=>{
+    let rent = rentInfo(p).text||'-';
+    rent = rent.replace(/^(£[\d,.]+)/, '$1/mo');
+    let l = `*${p.address}*\n💷 ${rent} | ${p.type||'Studio'}`;
+    if(p.bills && p.bills !== '-') l += `\n🔌 Bills: ${p.bills}`;
+    return l;
+  };
+  let t = `🏠 *AVAILABLE PROPERTIES${s.local ? ' IN AND AROUND ' + s.council.toUpperCase() : ''}*\nAll DSS/UC accepted · No deposit · No RIA\n`;
+  const sec = (name)=>{
+    t += `\n*📍 ${name.toUpperCase()}*\n`;
+    t += by[name].map(line).join('\n\n') + '\n';
+  };
+  if(s.local){
+    s.areas.forEach(n=>{ if(by[n]) sec(n); });
+    t += '\nWant our full list? Just ask.';
+  } else {
+    lon.forEach(sec);
+    if(out.length){
+      t += '\n———— *OUT OF LONDON* ————\n';
+      out.forEach(sec);
+    }
+  }
+  t += '\nDM to book a viewing 📲';
+  return t;
+}
+
+async function copyPlain(t){
+  try{ await navigator.clipboard.writeText(t); }
+  catch(e){
+    const ta = document.createElement('textarea');
+    ta.value = t; ta.style.position='fixed'; ta.style.left='-9999px';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); ta.remove();
+  }
+}
+async function copyRich(html, plain){
+  try{
+    await navigator.clipboard.write([new ClipboardItem({
+      'text/html': new Blob([html],{type:'text/html'}),
+      'text/plain': new Blob([plain],{type:'text/plain'})
+    })]);
+  }catch(e){
+    const d = document.createElement('div');
+    d.innerHTML = html; d.style.position='fixed'; d.style.left='-9999px';
+    document.body.appendChild(d);
+    const r = document.createRange(); r.selectNode(d);
+    const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+    document.execCommand('copy'); s.removeAllRanges(); d.remove();
+  }
+}
+/* Returns what was copied (for the subject line), or null when the list is empty */
+async function copyEmail(scope = {kind:'all'}, quiet){
+  const s = scopeOf(scope);
+  if(!s.list.length){ toast(emptyNote(s)); return null; }
+  await copyRich(buildEmail(scope), s.list.map(p=>`${p.address} | ${p.type} | ${rentInfo(p).text}`).join('\n'));
+  markSent(scope);
+  if(!quiet) toast(lhaNote('Email copied. Paste straight into Outlook/Gmail'));
+  return s;
+}
+async function copyWhatsApp(scope = {kind:'all'}){
+  const s = scopeOf(scope);
+  if(!s.list.length){ toast(emptyNote(s)); return; }
+  await copyPlain(buildWhatsApp(scope));
+  markSent(scope);
+  toast(lhaNote('WhatsApp version copied. Bold formatting included'));
+}
+
+function lhaNote(msg){
+  const i = lhaIssues();
+  return i.missing ? `${msg}. ⚠ ${i.missing} row${i.missing>1?'s':''} still show LHA text, set their BRMA` : msg;
+}
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), msg.length > 60 ? 4500 : 2200);
+}
+
+/* ---------- preview modal with tabs ---------- */
+let previewTab = 'email', previewScope = {kind:'all'};
+function previewTitle(scope, s){
+  const n = `${s.list.length} propert${s.list.length===1?'y':'ies'}`;
+  if(scope.kind==='officer') return `${who(officerById(scope.id))}: ${s.local ? s.council + ' and nearby' : 'full list'}, ${n}`;
+  if(scope.kind==='council') return `${scope.council} officers together: ${n}`;
+  return `Full list: ${n}`;
+}
+/* No scope keeps the one already showing (switching tabs) */
+function showPreview(scope){
+  if(scope) previewScope = scope;
+  const s = scopeOf(previewScope);
+  if(!s.list.length){ toast(previewScope.kind==='all' ? 'Nothing to preview yet' : emptyNote(s)); return; }
+  document.getElementById('mtitle').textContent = previewTitle(previewScope, s);
+  const mb = document.getElementById('mbody');
+  if(previewTab === 'email'){ mb.innerHTML = buildEmail(previewScope); }
+  else{ mb.innerHTML = ''; const pre = document.createElement('pre'); pre.textContent = buildWhatsApp(previewScope); mb.appendChild(pre); }
+  document.getElementById('tabEmail').classList.toggle('on', previewTab==='email');
+  document.getElementById('tabWa').classList.toggle('on', previewTab==='wa');
+  document.getElementById('overlay').classList.add('open');
+}
+document.getElementById('tabEmail').onclick = ()=>{ previewTab='email'; showPreview(); };
+document.getElementById('tabWa').onclick = ()=>{ previewTab='wa'; showPreview(); };
+document.getElementById('copyBtn2').onclick = ()=> previewTab==='email' ? copyEmail(previewScope) : copyWhatsApp(previewScope);
+
+/* ---------- toolbar ---------- */
+document.getElementById('lhaImportBtn').onclick = ()=>document.getElementById('lhaFile').click();
+document.getElementById('lhaFile').onchange = async (e)=>{
+  const f = e.target.files[0]; e.target.value = '';
+  if(!f) return;
+  const buf = await f.arrayBuffer();
+  let text = new TextDecoder('utf-8').decode(buf);
+  if(text.includes('�')) text = new TextDecoder('windows-1252').decode(buf);
+  const parsed = parseRatesCsv(text);
+  if(!parsed){ toast('That file does not look like the gov.uk LHA rates CSV'); return; }
+  lhaData = parsed; save(); renderLhaLabel(); render();
+  toast(`LHA rates updated to ${parsed.label}`);
+};
+document.getElementById('copyBtn').onclick = ()=>copyEmail({kind:'all'});
+document.getElementById('waBtn').onclick = ()=>copyWhatsApp({kind:'all'});
+document.getElementById('previewBtn').onclick = ()=>showPreview({kind:'all'});
+document.getElementById('bccAllBtn').onclick = ()=>{
+  const list = officers.filter(o=>o.email);
+  sendTo({kind:'all-officers'}, {bcc: list.map(o=>o.email)}, `all ${list.length} officers (Bcc)`);
+};
+document.getElementById('closeBtn').onclick = ()=>document.getElementById('overlay').classList.remove('open');
+document.getElementById('overlay').onclick = (e)=>{ if(e.target.id==='overlay') e.target.classList.remove('open'); };
+document.getElementById('addBtn').onclick = ()=>{
+  props.push({id:uid(), address:'', borough:'', type:'Studio', bills:'-', rent:'1-Bed LHA', src:activeSrc});
+  save(); render();
+};
+let clearArmed = null;
+document.getElementById('clearBtn').onclick = (e)=>{
+  const b = e.target;
+  if(clearArmed){ clearTimeout(clearArmed); clearArmed=null; props=[]; save(); render(); b.textContent='Clear all'; b.classList.remove('danger'); return; }
+  b.textContent = 'Really clear '+props.length+'?'; b.classList.add('danger');
+  clearArmed = setTimeout(()=>{ b.textContent='Clear all'; b.classList.remove('danger'); clearArmed=null; }, 3000);
+};
+
+load();
+</script>
+</body>
+</html>
