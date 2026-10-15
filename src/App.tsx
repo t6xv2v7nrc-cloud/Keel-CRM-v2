@@ -13,6 +13,7 @@ import { ApplicantPage } from './features/applicants/ApplicantPage';
 import { PropertiesPage } from './features/properties/PropertiesPage';
 import { CallsPage } from './features/calls/CallsPage';
 import { MoneyPage } from './features/money/MoneyPage';
+import { CouncilsPage } from './features/councils/CouncilsPage';
 import { InvoicePage } from './features/money/InvoicePage';
 import { SettingsPage } from './features/settings/SettingsPage';
 import { CommandSearch, openSearch } from './features/search/CommandSearch';
@@ -37,6 +38,7 @@ const NAV: Array<{ to: string; label: string; icon: IconName }> = [
   { to: '/pipeline', label: 'Pipeline', icon: 'list' },
   { to: '/properties', label: 'Properties', icon: 'building' },
   { to: '/finances', label: 'Finances', icon: 'pound' },
+  { to: '/councils', label: 'Councils', icon: 'users' },
 ];
 
 export default function App() {
@@ -155,6 +157,7 @@ function Shell() {
           {/* Out of the top bar on request; still reachable from a client's Next step card and bookmarks */}
           <Route path="/calls" element={<CallsPage />} />
           <Route path="/finances" element={<MoneyPage />} />
+          <Route path="/councils" element={<CouncilsPage />} />
           <Route path="/finances/invoice/:id" element={<InvoicePage />} />
           {/* The page's earlier addresses; old links and bookmarks still land */}
           <Route path="/receivables" element={<Navigate to="/finances" replace />} />

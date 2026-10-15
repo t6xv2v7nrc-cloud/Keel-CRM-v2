@@ -192,6 +192,16 @@ export const HELP = {
       'Lists are saved to the account, so you both see them on every device. Mark a property as let when it goes, or purge old lists under Saved lists.',
     ],
   },
+  councils: {
+    title: 'Councils',
+    body: [
+      'Officers: your housing officer list. Each officer is active, left, on leave, opted out or bounced. Mark as opted out and Mark as left are one click; More has on leave (until a day), bounced, the route, a shared mailbox and how they came to be on the list.',
+      'The mailing list leaves out everyone who has left, is on leave, opted out or bounced, and any housing officer who has not opted in or sent you a client. When a shared mailbox is set (rental.alert@islington.gov.uk, say), that is the only address used. Every list Keel copies for officers follows this rule.',
+      'Record a bulk email after you send one: Keel keeps who was sent what and when, and warns when someone would get a second bulk email or digest inside 30 days.',
+      'The boxes at the top are the list\'s health: who can be emailed, who has not opted in, bounces, leavers, leave, opt-outs, and anyone sent to twice in 30 days. Tap one to see who.',
+      'Schemes: each council\'s procurement or landlord scheme, registered once per council, with its route mailbox, incentive terms, the most it pays and the documents it wants. Focus boroughs (Team settings) come first, marked with a star.',
+    ],
+  },
   propertyChecks: {
     title: 'Ready to send?',
     body: [

@@ -5,6 +5,34 @@ import { shortDate } from '../../lib/format';
 import { isoDay } from '../../lib/calls';
 import type { Extraction, ApplicantStage } from '../../types/extraction';
 
+/**
+ * A housing officer just sent Keel a client: note when on the officer list (last_nominated_client_at, 0020), or add
+ * them to it, as sending a client counts as opting in. Best effort: a list without the 0020 columns is left alone.
+ */
+async function noteNomination(o: { name: string | null; email: string | null; phone: string | null; council: string | null }, at: string, client: string) {
+  const email = o.email?.trim().toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+  try {
+    const found = await supabase.from('officers').select('id, name, last_nominated_client_at').ilike('email', email).limit(1);
+    if (found.error) return;
+    const first = client.split(' ')[0];
+    const row = (found.data ?? [])[0] as { id: string; name: string | null; last_nominated_client_at?: string | null } | undefined;
+    if (row) {
+      if (row.last_nominated_client_at && row.last_nominated_client_at >= at) return;
+      const up = await supabase.from('officers').update({ last_nominated_client_at: at }).eq('id', row.id);
+      if (up.error) return;
+      await supabase.from('activities').insert({ entity_type: 'officer', entity_id: row.id, kind: 'updated', body: `${row.name ?? email} sent a client (${first})` });
+      return;
+    }
+    const added = await supabase.from('officers').insert({
+      name: o.name?.trim() || null, email, phone: o.phone?.trim() || null, council: o.council?.trim() || null,
+      route_type: 'housing_officer', opt_in_source: 'Sent a client', last_nominated_client_at: at,
+    }).select('id').single();
+    if (added.error) return;
+    await supabase.from('activities').insert({ entity_type: 'officer', entity_id: (added.data as { id: string }).id, kind: 'created', body: `Added ${o.name?.trim() || email} to the officer list: sent a client (${first})` });
+  } catch { /* the client is saved either way */ }
+}
+
 /** The user's decision on the review card, per entity. */
 export interface ConfirmChoice {
   applicantTarget: 'create' | 'note_only' | string; // string = existing applicant id
@@ -101,6 +129,7 @@ export async function confirmInboxItem({
     outcome.applicantId = data.id;
     outcome.applicantName = data.full_name;
     logActivity(activities, 'applicant', data.id, 'created', `Created applicant ${data.full_name} at stage ${stage} (from screenshot)`, inboxItemId);
+    await noteNomination({ name: a.officer_name ?? null, email: a.officer_email ?? null, phone: a.officer_phone ?? null, council: a.council ?? null }, createdAt, data.full_name);
   } else if (
     choice.applicantTarget !== 'create' &&
     choice.applicantTarget !== 'note_only'

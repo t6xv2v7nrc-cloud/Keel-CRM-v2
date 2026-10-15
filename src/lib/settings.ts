@@ -150,6 +150,10 @@ export interface AppSettings {
   clientPageOrder: string[];
   /** Targets for the team: placements (clients moved in) and fees secured (letting fees and incentives signed up), 0 = none. */
   targets: Targets;
+  /** Boroughs Keel works hardest: listed and sorted first, and flagged, wherever councils or officers are shown. */
+  focusBoroughs: string[];
+  /** Boroughs Keel would like to work next: sorted after the focus ones. */
+  wishlistBoroughs: string[];
 }
 
 export const DEFAULT_WHATSAPP_MESSAGE = [
@@ -310,6 +314,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   callsView: 'everyone',
   clientPageOrder: [],
   targets: DEFAULT_TARGETS,
+  focusBoroughs: ['Harrow', 'Hounslow', 'Hillingdon', 'Croydon', 'Haringey', 'Islington'],
+  wishlistBoroughs: ['Sutton', 'Kingston upon Thames'],
 };
 
 /** Settings each person sets for themselves; everything else is shared by the team. */

@@ -12,6 +12,7 @@ import type { AppSettings, InvoiceSettings, Target, Targets } from '../../lib/se
 import { URGENCY_LABEL } from '../../lib/tiering';
 import { TierLogicEditor } from './TierLogicEditor';
 import { LhaSettings } from './LhaSettings';
+import { FocusBoroughs } from './FocusBoroughs';
 import { WhatsAppSettings } from './WhatsAppSettings';
 import { ProvidersTab } from './ProvidersTab';
 import { RequestTemplates } from './RequestTemplates';
@@ -253,6 +254,8 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
           </Row>
         </div>
       </Card>
+
+      <FocusBoroughs draft={draft} set={set} />
 
       <LhaSettings draft={draft} set={set} />
 

@@ -31,6 +31,10 @@ src/
                         the app says "Finances", files and the activity kind keep the name "money"),
               invoice.ts (invoice wording, numbering, VAT split, WhatsApp and email text; client first name only to providers),
               officers.ts (housing officers gathered from clients' details, joined on email, phone, name; copy formats),
+              councils.ts (0020: the officer list (HELM's `officers` table) with send status, sends log, council schemes;
+                           THE HARD RULE `mailingList`: every export, mailer list and bulk action of officer addresses goes
+                           through it: no left, on leave, opted out, bounced, or housing officer not opted in or nominated;
+                           a shared mailbox (send_to_mailbox) replaces personal emails; list health; focus boroughs),
               clipboard.ts (copy with a fallback for older phones), files.ts (save a file, share sheet on phones),
               duplicates.ts (clients entered twice: same phone, email or name; a contact on more than 3 clients is shared,
                              not a duplicate; merging is the `merge_applicants` database function, 0014),
@@ -45,7 +49,8 @@ src/
               help.ts (words behind the "?" help buttons)
   components/ ui primitives on tokens (Button, StageBadge, Card, Field, Toast, Icon,
               Visuals: avatars, page headers, stat tiles, SVG charts, UpdateNote for "run this migration")
-  features/   dashboard/ bin/ pipeline/ (with the Housing officers and Possible duplicates boxes) calls/ applicants/ properties/ settings/ map/ (Leaflet, lazy-loaded) progress/ requests/ (request sheet, Awaiting providers) money/ (the Finances page at /finances: Owed, Potential, Calendar, Paid; invoice page at /finances/invoice/:id;
+  features/   councils/ (the Councils page at /councils: officers with one-click opted out / left, list health, schemes)
+              dashboard/ bin/ pipeline/ (with the Housing officers and Possible duplicates boxes) calls/ applicants/ properties/ settings/ map/ (Leaflet, lazy-loaded) progress/ requests/ (request sheet, Awaiting providers) money/ (the Finances page at /finances: Owed, Potential, Calendar, Paid; invoice page at /finances/invoice/:id;
               client card, Home summary)
   types/      extraction.ts (shared contract, imported by netlify functions; also EXTRACTION_SCHEMA for Claude's
               structured output and cleanExtraction(), run on every answer by the function and again by the Bin)
@@ -93,8 +98,9 @@ supabase/checks/live-vs-repo.sql  (read-only: which migrations the live database
 - Invoices to providers or landlords name the client by first name only; a council incentive claim carries the full name.
 - Two people use Keel: Ridwan (owner) and a co-worker. Ridwan invites people from the Supabase dashboard; Claude never
   creates accounts or enters passwords.
-- Contacts was removed on request; do not bring it back unasked. Housing officers live on each client (officer_*); the
-  Pipeline's Housing officers box gathers them for copying into emails. The Bin no longer creates or matches contacts.
+- Contacts was removed on request; do not bring it back unasked. Housing officers live on each client (officer_*) and,
+  since Step 3, on the officer list (`officers`, the Councils page). The Pipeline's Housing officers box gathers them
+  from clients, and its copies go through `mailingList` like every other officer export.
 - Switching a provider off withdraws its available properties (under offer and let stay); switching it back on brings back
   only those (`provider_off` / `provider_on` property activities, `withdrawnBySwitchOff` in requests.ts). Lists pasted
   while it is off come in withdrawn.
@@ -131,12 +137,13 @@ supabase/checks/live-vs-repo.sql  (read-only: which migrations the live database
 ## Update brief (October 2026): ground rules and decisions
 
 Ridwan's brief "make Keel stop bad matches and bad emails before they happen", worked step by step in this order: diff live
-vs repo (done: live has had 0001 to 0017), LHA table (Step 1, done: 0018), property fields (Step 2, done: 0019), officers send status plus `council_schemes`, placements and
+vs repo (done: live has had 0001 to 0017), LHA table (Step 1, done: 0018), property fields (Step 2, done: 0019), officers send status (Step 3, done: 0020) plus `council_schemes`, placements and
 incentives, viewings, matching, a "sendable" view, KPI dashboard. After each step: run it, test it, say what changed in 3 lines.
 - Do not ask Ridwan to run pending migrations until he says; `supabase/checks/live-vs-repo.sql` lists what is pending.
   Live also has tables from HELM (the old name and version of Keel CRM): `leads`, `officers` (108 rows: temp, score,
   last_contact_at, prefers_sms...), `activity_log`, `notifications`, `eod_reports`, all RLS on, unused by this app.
-  Officer send status (Step 3) goes on `officers`.
+  Officer send status (Step 3) is on `officers`; a client arriving from the Bin with their officer's email stamps
+  last_nominated_client_at (or adds the officer: sending a client counts as opting in).
 - One migration per step, with a rollback note at the top. Back up any existing table a migration changes into a separate
   `keel_backup` schema first (never into `public`, which the API serves). Never delete or rename columns; add new ones.
   Keep RLS; new tables get RLS on, signed-in only. Nothing is ever exposed publicly.
@@ -183,7 +190,7 @@ Never commit `.env.local`. Never expose the service role key or Anthropic key to
   then 0015 (move-in checklist), then 0016 (dates clients confirmed from the Bin from when the Bin received them; the
   app already does this for new ones, and the review card's "First got in touch" date can change it), then 0017 (on ice),
   then 0018 (LHA rates and postcode areas with their source), then 0019 (property kind, suits, safety papers; backs up
-  properties into keel_backup first).
+  properties into keel_backup first), then 0020 (officer send status, officer_sends, council_schemes; backs up officers).
 - Check every migration runs, twice, on a scratch Postgres before committing one:
   `npm i --no-save @electric-sql/pglite && node scripts/check-migrations.mjs` (it also tests the merge and invoice numbers).
 
@@ -219,6 +226,8 @@ rules change.
 
 ## Pitfalls
 
+- Never stop the preview with `pkill -f vite` or `pgrep -f "vite --port" | xargs kill`: the pattern matches the shell running
+  the command and kills it. Use `fuser -k 5173/tcp`.
 - Never put code containing backslashes in a bash heredoc: `\n` turns into a line break and `\b` into a stray control
   byte. Use the Edit and Write tools, or write a script file and run it.
 - Dates must read the same everywhere: use `shortDate` / `shortDay` / `longDay` / `weekdayName` / `fullDate` / `clockTime`

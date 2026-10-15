@@ -2,8 +2,11 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button, Card, CardHeader, Empty, Icon, useToast } from '../../components/ui';
 import { copyText } from '../../lib/clipboard';
-import { addressLine, bareEmails, emailList, officersFrom, officersText, officerText } from '../../lib/officers';
+import { addressLine, officersFrom, officersText, officerText } from '../../lib/officers';
 import type { Officer } from '../../lib/officers';
+import { addressBox, mailingList, recordFor, STATUS_WORDS, statusOf } from '../../lib/councils';
+import type { OfficerRecord } from '../../lib/councils';
+import { useOfficers } from '../../lib/hooks';
 import type { Applicant } from '../../lib/types';
 
 const small = 'min-h-0 px-3 py-1.5 text-[13px]';
@@ -28,7 +31,16 @@ export function HousingOfficersBox({ applicants, onClose }: { applicants: Applic
   const terms = q.trim().toLowerCase();
   const shown = officers.filter((o) => (org === 'any' || (o.org ?? '') === org) && (!activeOnly || o.active > 0)
     && (!terms || [o.name, o.email, o.phone, o.org].some((x) => x?.toLowerCase().includes(terms))));
-  const emails = bareEmails(shown);
+  // The hard rule (councils.ts): each officer as they stand on the officer list, if they are on it. Everyone here sent a client.
+  const { officers: records } = useOfficers();
+  const asRecord = (o: Officer): OfficerRecord & { gathered: Officer } => {
+    const r = recordFor(o, records);
+    return r ? { ...r, gathered: o, last_nominated_client_at: [r.last_nominated_client_at, o.latest].filter(Boolean).sort().pop() ?? null }
+      : { id: o.key, name: o.name, email: o.email, phone: o.phone, last_nominated_client_at: o.latest, gathered: o };
+  };
+  const list = mailingList(shown.map(asRecord));
+  const sendable = list.to.map((t) => ({ ...t.officer.gathered, email: t.address }));
+  const emails = list.addresses;
   const mailto = `mailto:?bcc=${encodeURIComponent(emails.join(','))}`;
 
   const copy = async (text: string, what: string) => {
@@ -62,7 +74,7 @@ export function HousingOfficersBox({ applicants, onClose }: { applicants: Applic
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="primary" className={small} disabled={!emails.length} onClick={() => copy(emailList(shown), `${emails.length} ${emails.length === 1 ? 'email' : 'emails'}`)}>
+            <Button variant="primary" className={small} disabled={!emails.length} onClick={() => copy(addressBox(list), `${emails.length} ${emails.length === 1 ? 'email' : 'emails'}`)}>
               <Icon name="mail" size={14} />Copy {emails.length} {emails.length === 1 ? 'email' : 'emails'}
             </Button>
             {emails.length > 0 && mailto.length <= MAILTO_LIMIT && (
@@ -70,17 +82,18 @@ export function HousingOfficersBox({ applicants, onClose }: { applicants: Applic
                 <Icon name="send" size={14} />Email them (Bcc)
               </a>
             )}
-            <Button className={small} disabled={!shown.length} onClick={() => copy(officersText(shown), `${shown.length} ${shown.length === 1 ? 'officer' : 'officers'} as text`)}>
+            <Button className={small} disabled={!sendable.length} onClick={() => copy(officersText(sendable), `${sendable.length} ${sendable.length === 1 ? 'officer' : 'officers'} as text`)}>
               <Icon name="file" size={14} />Copy details as text
             </Button>
             <span className="text-[13px] text-[var(--ink-muted)]">
               {shown.length === officers.length ? `${shown.length} ${shown.length === 1 ? 'officer' : 'officers'}` : `${shown.length} of ${officers.length} shown`}
-              {shown.length - emails.length > 0 ? `, ${shown.length - emails.length} with no email` : ''}
+              {list.left.length > 0 ? `, ${list.left.length} left out (${[...new Set(list.left.map((l) => l.why.replace(/ until .*/, '').toLowerCase()))].join(', ')})` : ''}
             </span>
+            <Link to="/councils" className="text-[13px] text-[var(--link)] hover:underline">Opt-outs and leavers are kept in Councils</Link>
           </div>
 
           <ul className="m-0 flex list-none flex-col divide-y divide-[var(--line)] rounded-lg border border-[var(--line)] p-0">
-            {shown.map((o) => <OfficerRow key={o.key} o={o} onCopy={copy} />)}
+            {shown.map((o) => <OfficerRow key={o.key} o={o} record={recordFor(o, records)} onCopy={copy} />)}
             {shown.length === 0 && <li className="p-4 text-[14px] text-[var(--ink-muted)]">Nobody matches that.</li>}
           </ul>
         </div>
@@ -89,9 +102,12 @@ export function HousingOfficersBox({ applicants, onClose }: { applicants: Applic
   );
 }
 
-function OfficerRow({ o, onCopy }: { o: Officer; onCopy: (text: string, what: string) => void }) {
+function OfficerRow({ o, record, onCopy }: { o: Officer; record: OfficerRecord | null; onCopy: (text: string, what: string) => void }) {
   const [open, setOpen] = useState(false);
-  const line = addressLine(o);
+  const status = record ? statusOf(record) : 'active';
+  const stopped = status !== 'active';
+  // their team's mailbox, when the list says to use it
+  const line = stopped ? null : record?.send_to_mailbox ? record.send_to_mailbox : addressLine(o);
   const who = o.name ?? o.email ?? o.phone ?? 'Officer';
   return (
     <li className="flex flex-wrap items-start gap-x-3 gap-y-1.5 px-3 py-2.5">
@@ -99,6 +115,8 @@ function OfficerRow({ o, onCopy }: { o: Officer; onCopy: (text: string, what: st
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[15px] font-medium text-[var(--ink)]">{o.name ?? 'Name not given'}</span>
           {o.org && <span className="rounded px-1.5 py-0.5 text-[12px] font-medium" style={{ background: 'var(--chip-bg)', color: 'var(--chip-fg)' }}>{o.org}</span>}
+          {stopped && <span className="rounded px-1.5 py-0.5 text-[12px] font-semibold" style={{ background: 'var(--note-bg)', color: 'var(--note-fg)' }}>{STATUS_WORDS[status]}: not emailed</span>}
+          {!stopped && record?.send_to_mailbox && <span className="text-[12px] text-[var(--ink-muted)]">Sends to {record.send_to_mailbox}</span>}
         </div>
         <div className="flex flex-wrap gap-x-3 text-[13px]">
           {o.email ? <a href={`mailto:${o.email}`} className="break-all text-[var(--link)] hover:underline">{o.email}</a> : <span className="text-[var(--ink-muted)]">No email</span>}
@@ -113,10 +131,12 @@ function OfficerRow({ o, onCopy }: { o: Officer; onCopy: (text: string, what: st
           </div>
         )}
       </div>
-      <Button className={small} onClick={() => onCopy(line ?? officerText(o), line ? `${who}'s email` : `${who}'s details`)}
-        title={line ? `Copy ${line}` : 'Copy their details'}>
-        <Icon name="file" size={14} />Copy
-      </Button>
+      {!stopped && (
+        <Button className={small} onClick={() => onCopy(line ?? officerText(o), line ? `${who}'s email` : `${who}'s details`)}
+          title={line ? `Copy ${line}` : 'Copy their details'}>
+          <Icon name="file" size={14} />Copy
+        </Button>
+      )}
     </li>
   );
 }

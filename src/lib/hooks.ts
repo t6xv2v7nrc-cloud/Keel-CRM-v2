@@ -20,6 +20,8 @@ import type { EditableProperty } from './propertyEdit';
 import type { Channel } from './contacts';
 import type { ReceivableDraft } from './money';
 import { tableFromRows } from './lha';
+import { STATUS_WORDS } from './councils';
+import type { CouncilScheme, OfficerRecord, OfficerSend, OfficerStatus, SendKind } from './councils';
 import type { LhaRateRow, LhaTable } from './lha';
 import type { ApplicantStage } from '../types/extraction';
 
@@ -590,6 +592,141 @@ export function useSetPostcodeBrma() {
       }
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['lha'] }); qc.invalidateQueries({ queryKey: ['activities'] }); },
+  });
+}
+
+// ── Council contacts: officers (HELM's table) with send status, sends, schemes (0020) ──
+
+export const COUNCILS_UPDATE = 'Send status and council schemes need a one-off database update: run 0020_council_contacts.sql in the Supabase SQL Editor.';
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** activities.entity_id is a uuid: an officer's own id when it is one, else the person doing it (the body names the officer). */
+async function officerActivity(o: Pick<OfficerRecord, 'id'> | null, body: string, kind = 'updated') {
+  const id = o && UUID.test(String(o.id)) ? String(o.id) : await currentUserId();
+  if (id) await supabase.from('activities').insert({ entity_type: 'officer', entity_id: id, kind, body });
+}
+const who = (o: Pick<OfficerRecord, 'name' | 'email'>) => o.name?.trim() || o.email || 'an officer';
+
+/** The officer list. `ready` is false without the table; `sendStatus` is false until 0020 adds the send columns. */
+export function useOfficers() {
+  const q = useQuery({
+    queryKey: ['officers'],
+    queryFn: async (): Promise<{ officers: OfficerRecord[]; ready: boolean; sendStatus: boolean }> => {
+      const { data, error } = await supabase.from('officers').select('*').order('name');
+      if (error) {
+        if (missingTable(error)) return { officers: [], ready: false, sendStatus: false };
+        throw error;
+      }
+      const rows = (data ?? []) as OfficerRecord[];
+      const sendStatus = rows.length ? 'status' in rows[0] : !(await supabase.from('officers').select('status').limit(1)).error;
+      return { officers: rows, ready: true, sendStatus };
+    },
+  });
+  return { officers: q.data?.officers ?? [], ready: q.data?.ready ?? false, sendStatus: q.data?.sendStatus ?? false, loading: q.isLoading };
+}
+
+/** Sends to officers in the last 60 days (enough to judge 30 days back and show the last one). */
+export function useOfficerSends() {
+  const q = useQuery({
+    queryKey: ['officer_sends'],
+    queryFn: async (): Promise<OfficerSend[]> => {
+      const from = new Date(Date.now() - 60 * 86_400_000).toISOString();
+      const { data, error } = await supabase.from('officer_sends').select('*').gte('sent_at', from).order('sent_at', { ascending: false });
+      if (error) { if (missingTable(error)) return []; throw error; }
+      return (data ?? []) as OfficerSend[];
+    },
+  });
+  return q.data ?? [];
+}
+
+/** Add an officer or mailbox to the list, or change one. Every change is noted. */
+export function useSaveOfficer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ before, patch }: { before: OfficerRecord | null; patch: Partial<OfficerRecord> }) => {
+      if (before) {
+        const { error } = await supabase.from('officers').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', before.id);
+        if (error) throw isMissingColumn(error) ? new Error(COUNCILS_UPDATE) : error;
+        const changed = Object.keys(patch).filter((k) => (before as unknown as Record<string, unknown>)[k] !== (patch as Record<string, unknown>)[k]);
+        if (changed.length) await officerActivity(before, `${who(before)}: changed ${changed.map((k) => k.replace(/_/g, ' ')).join(', ')}`);
+        return;
+      }
+      let res = await supabase.from('officers').insert(patch).select('id').single();
+      // HELM may have left the id without a default: make one
+      if (res.error && /null value in column "id"/i.test(res.error.message ?? '')) res = await supabase.from('officers').insert({ ...patch, id: crypto.randomUUID() }).select('id').single();
+      if (res.error) throw isMissingColumn(res.error) ? new Error(COUNCILS_UPDATE) : res.error;
+      await officerActivity({ id: (res.data as { id: string }).id }, `Added ${who({ name: patch.name ?? null, email: patch.email ?? patch.send_to_mailbox ?? null })} to the officer list${patch.council ? ` (${patch.council})` : ''}`, 'created');
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['officers'] }); qc.invalidateQueries({ queryKey: ['activities'] }); },
+  });
+}
+
+/** One click: opted out, left, on leave (until a day), bounced, or back to active. */
+export function useSetOfficerStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ officer, status, leaveUntil, note }: { officer: OfficerRecord; status: OfficerStatus; leaveUntil?: string | null; note?: string | null }) => {
+      const now = new Date().toISOString();
+      const patch: Partial<OfficerRecord> = { status, status_date: todayIso() };
+      if (status === 'opted_out') { patch.opted_out_at = now; if (note !== undefined) patch.opt_out_note = note; }
+      if (status === 'on_leave') patch.leave_until = leaveUntil ?? null;
+      if (status === 'active') patch.leave_until = null;
+      if (status === 'bounced') { patch.bounce_count = (officer.bounce_count ?? 0) + 1; patch.last_bounce_at = now; }
+      const { error } = await supabase.from('officers').update({ ...patch, updated_at: now }).eq('id', officer.id);
+      if (error) throw isMissingColumn(error) ? new Error(COUNCILS_UPDATE) : error;
+      const words = status === 'on_leave' && leaveUntil ? `on leave until ${shortDate(leaveUntil)}` : status === 'active' ? 'active again' : STATUS_WORDS[status].toLowerCase();
+      await officerActivity(officer, `Marked ${who(officer)} as ${words}${note ? `: ${note}` : ''}`);
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['officers'] }); qc.invalidateQueries({ queryKey: ['activities'] }); },
+  });
+}
+
+/** Record a send to officers (only ever to addresses that came through mailingList): the log, and each one's last sent. */
+export function useLogOfficerSends() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ to, kind, note }: { to: Array<{ officer: OfficerRecord; address: string }>; kind: SendKind; note?: string | null }) => {
+      if (!to.length) return;
+      const { error } = await supabase.from('officer_sends').insert(to.map(({ officer, address }) => ({ officer_id: String(officer.id), kind, address, note: note ?? null })));
+      if (error) throw missingTable(error) ? new Error(COUNCILS_UPDATE) : error;
+      await supabase.from('officers').update({ last_sent_at: new Date().toISOString() }).in('id', to.map(({ officer }) => officer.id));
+      await officerActivity(to.length === 1 ? to[0].officer : null,
+        `${kind === 'alert' ? 'Property alert' : kind === 'digest' ? 'Monthly digest' : 'Bulk email'} recorded to ${to.length === 1 ? who(to[0].officer) : `${to.length} officers`}${note ? `: ${note}` : ''}`, 'sent');
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['officer_sends'] }); qc.invalidateQueries({ queryKey: ['officers'] }); qc.invalidateQueries({ queryKey: ['activities'] }); },
+  });
+}
+
+/** Each council's procurement or landlord scheme. `ready` is false until 0020. */
+export function useCouncilSchemes() {
+  const q = useQuery({
+    queryKey: ['council_schemes'],
+    queryFn: async (): Promise<{ schemes: CouncilScheme[]; ready: boolean }> => {
+      const { data, error } = await supabase.from('council_schemes').select('*').order('council');
+      if (error) { if (missingTable(error)) return { schemes: [], ready: false }; throw error; }
+      return { schemes: ((data ?? []) as CouncilScheme[]).map((r) => ({ ...r, max_incentive: r.max_incentive == null ? null : Number(r.max_incentive) })), ready: true };
+    },
+  });
+  return { schemes: q.data?.schemes ?? [], ready: q.data?.ready ?? false };
+}
+
+/** Add or change a council scheme; every change is noted. */
+export function useSaveScheme() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ before, patch }: { before: CouncilScheme | null; patch: Partial<CouncilScheme> }) => {
+      const res = before
+        ? await supabase.from('council_schemes').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', before.id).select('id').single()
+        : await supabase.from('council_schemes').insert(patch).select('id').single();
+      if (res.error) throw missingTable(res.error) ? new Error(COUNCILS_UPDATE) : res.error;
+      const id = (res.data as { id: string }).id;
+      const council = patch.council ?? before?.council ?? 'a council';
+      const body = !before ? `Added the ${patch.scheme_name ?? 'scheme'} for ${council}`
+        : patch.registered === true && !before.registered ? `Registered with ${council}${patch.scheme_name ?? before.scheme_name ? ` (${patch.scheme_name ?? before.scheme_name})` : ''}`
+        : patch.last_contact && Object.keys(patch).length === 1 ? `Contacted ${council} about its scheme`
+        : `${council} scheme: changed ${Object.keys(patch).map((k) => k.replace(/_/g, ' ')).join(', ')}`;
+      await supabase.from('activities').insert({ entity_type: 'council_scheme', entity_id: id, kind: before ? 'updated' : 'created', body });
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['council_schemes'] }); qc.invalidateQueries({ queryKey: ['activities'] }); },
   });
 }
 

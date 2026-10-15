@@ -14,7 +14,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 const dir = new URL('../supabase/migrations/', import.meta.url).pathname;
 let pgcrypto = {};
 try { pgcrypto = { pgcrypto: (await import('@electric-sql/pglite/contrib/pgcrypto')).pgcrypto }; } catch {}
-export async function freshDb({ twice = false } = {}) {
+export async function freshDb({ twice = false, upTo = null } = {}) {
   const db = new PGlite({ extensions: { pg_trgm, ...pgcrypto } });
   await db.exec(`
     create schema if not exists auth;
@@ -27,7 +27,7 @@ export async function freshDb({ twice = false } = {}) {
     create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text);
     alter table storage.objects enable row level security;
   `);
-  const files = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();
+  const files = readdirSync(dir).filter((f) => f.endsWith('.sql') && (!upTo || f.slice(0, 4) <= upTo)).sort();
   for (const f of files) {
     for (let i = 0; i < (twice ? 2 : 1); i++) {
       try { await db.exec(readFileSync(dir + f, 'utf8')); }
@@ -140,21 +140,47 @@ for (const sql of [
 ]) { try { await db.exec(sql); } catch { refused++; } }
 check('a made-up type, suitability, EPC rating or bill is refused', refused === 4, String(refused));
 
+// 0020: officers (HELM's table, made here when missing) gain send status; sends log; council schemes
+const oid = (await one(`insert into officers (name, council, email) values ('Test Officer', 'Harrow', 'test.officer@harrow.example') returning id`))[0].id;
+check('a new officer gets an id made for it', typeof oid === 'string' && oid.length > 10, String(oid));
+const off = (await one(`select route_type, status, bounce_count from officers where id = '${oid}'`))[0];
+check('officers start active, as housing officers, with no bounces', off.route_type === 'housing_officer' && off.status === 'active' && off.bounce_count === 0, JSON.stringify(off));
+let offBad = 0;
+for (const sql of [`update officers set status = 'retired' where id = '${oid}'`, `update officers set route_type = 'pigeon' where id = '${oid}'`,
+  `insert into officer_sends (officer_id, kind) values ('${oid}', 'spam')`, `insert into council_schemes (council, max_incentive) values ('Harrow', -1)`]) {
+  try { await db.exec(sql); } catch { offBad++; }
+}
+check('an unknown status, route, send kind or a negative incentive is refused', offBad === 4, String(offBad));
+await db.exec(`insert into officer_sends (officer_id, kind) values ('${oid}', 'bulk'); insert into council_schemes (council, scheme_name, registered) values ('Islington', 'Rental alert', false);`);
+const rls20 = await one(`select relname, relrowsecurity from pg_class where relname in ('officers', 'officer_sends', 'council_schemes') order by relname`);
+check('row level security is on for officers, sends and schemes', rls20.length === 3 && rls20.every((r) => r.relrowsecurity));
+// on a database that already had HELM's officers (with rows and a text id with no default), the backup is taken and the id gets a default
+const helm = await freshDb({ upTo: '0019' });
+await helm.exec(`create table officers (id text primary key, name text, council text, email text, temp text, score int, created_at timestamptz default now(), updated_at timestamptz default now());
+  insert into officers (id, name, council, email, temp, score) values ('o-1', 'Old Officer', 'Brent', 'old@brent.example', 'hot', 80);`);
+for (let i = 0; i < 2; i++) await helm.exec(readFileSync(dir + '0020_council_contacts.sql', 'utf8'));
+const bk = await helm.query(`select id, temp, score from keel_backup.officers_before_0020`);
+check('HELM officers are backed up as they were, once', bk.rows.length === 1 && bk.rows[0].temp === 'hot', JSON.stringify(bk.rows));
+const kept = (await helm.query(`select id, name, temp, status, route_type from officers`)).rows[0];
+check('HELM columns and rows are kept; new ones start active', kept.id === 'o-1' && kept.temp === 'hot' && kept.status === 'active' && kept.route_type === 'housing_officer', JSON.stringify(kept));
+const newId = (await helm.query(`insert into officers (name) values ('New One') returning id`)).rows[0].id;
+check('a text id with no default gets one, so Keel can add officers', typeof newId === 'string' && newId.length > 10, String(newId));
+
 // The read-only check of a live database against these files
 const liveCheck = readFileSync(new URL('../supabase/checks/live-vs-repo.sql', import.meta.url).pathname, 'utf8');
 const status = async (d) => Object.fromEntries((await d.query(liveCheck)).rows.map((r) => [r.item, [r.status, r.detail]]));
 const full = await status(db);
 const numbered = Object.keys(full).filter((k) => /^\d{4}$/.test(k));
 check('live check: every migration reads as done on a database that has had them all (data-only ones cannot be told)',
-  numbered.length === 19 && numbered.every((k) => full[k][0] === 'done' || (['0003', '0016'].includes(k) && full[k][0].startsWith('cannot tell'))), JSON.stringify(full));
+  numbered.length === 20 && numbered.every((k) => full[k][0] === 'done' || (['0003', '0016'].includes(k) && full[k][0].startsWith('cannot tell'))), JSON.stringify(full));
 const behind = await freshDb();
 await behind.exec(`alter table properties drop column lha_area; drop table postcode_brma;
-  create table officers (id uuid primary key, name text, temp text, score int, last_contact_at timestamptz);`);
+  create table eod_reports (id uuid primary key, report_date date, data jsonb);`);
 const live = await status(behind);
 check('live check: a missing column reads as not run', live['0008']?.[0] === 'NOT RUN' && live['0008'][1] === 'properties.lha_area', JSON.stringify(live['0008']));
 check('live check: half of a migration reads as part run, naming what is missing', live['0018']?.[0] === 'PART RUN' && live['0018'][1] === 'postcode_brma', JSON.stringify(live['0018']));
-check('live check: a table no migration made is listed with its columns, and RLS off is said', live['not from the repo: officers']?.[0] === 'base table, RLS OFF'
-  && live['not from the repo: officers'][1] === 'id, name, temp, score, last_contact_at', JSON.stringify(live['not from the repo: officers']));
+check('live check: a table no migration made is listed with its columns, and RLS off is said', live['not from the repo: eod_reports']?.[0] === 'base table, RLS OFF'
+  && live['not from the repo: eod_reports'][1] === 'id, report_date, data', JSON.stringify(live['not from the repo: eod_reports']));
 
 console.log(failed ? `\n${failed} failed` : '\nAll passed');
 process.exit(failed ? 1 : 0);

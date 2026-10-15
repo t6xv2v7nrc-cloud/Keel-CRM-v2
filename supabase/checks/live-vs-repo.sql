@@ -32,7 +32,8 @@ with expect(migration, kind, name) as (values
   ('0016', 'data', 'client dates from the Bin'),
   ('0017', 'column', 'applicants.iced_at'),
   ('0018', 'table', 'lha_rates'), ('0018', 'table', 'postcode_brma'),
-  ('0019', 'column', 'properties.accommodation_type'), ('0019', 'column', 'properties.gas_expiry'), ('0019', 'column', 'properties.photo_count')
+  ('0019', 'column', 'properties.accommodation_type'), ('0019', 'column', 'properties.gas_expiry'), ('0019', 'column', 'properties.photo_count'),
+  ('0020', 'column', 'officers.status'), ('0020', 'column', 'officers.send_to_mailbox'), ('0020', 'table', 'officer_sends'), ('0020', 'table', 'council_schemes')
 ), found as (
   select e.migration, e.kind, e.name, case e.kind
     when 'table' then exists (select 1 from information_schema.tables t
@@ -45,7 +46,8 @@ with expect(migration, kind, name) as (values
   from expect e
 ), known(name) as (values
   ('applicants'), ('properties'), ('contacts'), ('placements'), ('inbox_items'), ('activities'), ('calls'), ('settings'),
-  ('profiles'), ('deals'), ('providers'), ('requests'), ('receivables'), ('lha_rates'), ('postcode_brma')
+  ('profiles'), ('deals'), ('providers'), ('requests'), ('receivables'), ('lha_rates'), ('postcode_brma'),
+  ('officers'), ('officer_sends'), ('council_schemes')
 )
 select migration as item,
   case when bool_and(kind = 'data') then 'cannot tell (only tidies data)'
