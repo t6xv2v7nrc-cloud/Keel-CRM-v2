@@ -18,8 +18,9 @@ import { SettingsPage } from './features/settings/SettingsPage';
 import { CommandSearch, openSearch } from './features/search/CommandSearch';
 import { RequestSheetHost } from './features/requests/RequestSheet';
 import { ViewingChangeHost } from './features/progress/ViewingChange';
-import { useEnsureProfile, usePeople, useSettings } from './lib/hooks';
+import { useEnsureProfile, useLhaDatabase, usePeople, useSettings } from './lib/hooks';
 import { setActiveSettings } from './lib/settings';
+import { setLhaFromDatabase, setPostcodeBrma } from './lib/lha';
 import { ThemeToggle } from './components/ThemeToggle';
 
 const queryClient = new QueryClient({
@@ -66,6 +67,12 @@ function Shell() {
   // Team rules plus this person's own settings, before any page works them out
   const { settings, isLoading: settingsLoading } = useSettings();
   setActiveSettings(settings);
+  // LHA rates loaded from gov.uk (0018) and postcode corrections, in place of the built-in ones once read
+  const lha = useLhaDatabase();
+  setLhaFromDatabase(lha.table);
+  setPostcodeBrma(lha.postcodes);
+  // pages work LHA out as they draw, so they start afresh when a different set of rates comes in
+  const ratesKey = lha.table ? `${lha.table.source?.effectiveFrom}:${Object.keys(lha.table.rates).length}` : 'fallback';
   useEnsureProfile();
   const { myName } = usePeople();
 
@@ -138,7 +145,7 @@ function Shell() {
         </div>
       </header>
 
-      <main className="flex-1">
+      <main className="flex-1" key={ratesKey}>
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/bin" element={<BinPage />} />

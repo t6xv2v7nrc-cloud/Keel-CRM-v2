@@ -19,6 +19,8 @@ import { changedFields, changeWords } from './propertyEdit';
 import type { EditableProperty } from './propertyEdit';
 import type { Channel } from './contacts';
 import type { ReceivableDraft } from './money';
+import { tableFromRows } from './lha';
+import type { LhaRateRow, LhaTable } from './lha';
 import type { ApplicantStage } from '../types/extraction';
 
 // ── Applicants ──────────────────────────────────────────────────────
@@ -507,6 +509,88 @@ export function useSettings() {
     },
   });
   return { settings: q.data?.settings ?? DEFAULT_SETTINGS, ready: q.data?.ready ?? true, isLoading: q.isLoading };
+}
+
+// ── LHA rates and postcode areas kept in the database (0018) ─────────
+
+export interface PostcodeBrmaRow { postcode_prefix: string; brma: string; manual_override: boolean; note: string | null; updated_at: string }
+export const LHA_UPDATE = 'LHA rates with their source need a one-off database update: run 0018_lha_rates.sql in the Supabase SQL Editor.';
+
+/** The LHA rates in force today (lha_rates: the latest start date on or before today) and the postcode corrections
+ *  (postcode_brma). `ready` is false until 0018 is run, and the built-in rates are used meanwhile. `later` is the
+ *  start date of rates already loaded for a later day. */
+export function useLhaDatabase() {
+  const q = useQuery({
+    queryKey: ['lha'],
+    staleTime: 30 * 60_000,
+    queryFn: async (): Promise<{ ready: boolean; table: LhaTable | null; postcodes: PostcodeBrmaRow[]; later: string | null }> => {
+      const today = todayIso();
+      const latest = await supabase.from('lha_rates').select('effective_from').lte('effective_from', today).order('effective_from', { ascending: false }).limit(1);
+      if (latest.error) {
+        if (missingTable(latest.error)) return { ready: false, table: null, postcodes: [], later: null };
+        throw latest.error;
+      }
+      const from = (latest.data as Array<{ effective_from: string }> | null)?.[0]?.effective_from ?? null;
+      let table: LhaTable | null = null;
+      if (from) {
+        // one start date is about 760 rows (152 areas, 5 sizes): inside one page of results
+        const rows = await supabase.from('lha_rates').select('brma, bedrooms, monthly_uc, source_url, effective_from').eq('effective_from', from).order('brma');
+        if (rows.error) throw rows.error;
+        table = tableFromRows((rows.data ?? []) as LhaRateRow[]);
+      }
+      const next = await supabase.from('lha_rates').select('effective_from').gt('effective_from', today).order('effective_from', { ascending: true }).limit(1);
+      const pc = await supabase.from('postcode_brma').select('postcode_prefix, brma, manual_override, note, updated_at').order('postcode_prefix');
+      return {
+        ready: true, table,
+        postcodes: pc.error ? [] : ((pc.data ?? []) as PostcodeBrmaRow[]),
+        later: next.error ? null : (next.data as Array<{ effective_from: string }> | null)?.[0]?.effective_from ?? null,
+      };
+    },
+  });
+  return { ready: q.data?.ready ?? false, loading: q.isLoading, table: q.data?.table ?? null, postcodes: q.data?.postcodes ?? [], later: q.data?.later ?? null };
+}
+
+/** Load a gov.uk rates file: one row per area and size, with where it came from and the day it applies from. Owner only. */
+export function useLoadLhaRates() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ rows, areas }: { rows: LhaRateRow[]; areas: number }) => {
+      if (!rows.length) throw new Error('Nothing to load.');
+      let firstId: string | null = null;
+      for (let i = 0; i < rows.length; i += 500) {
+        const { data, error } = await supabase.from('lha_rates')
+          .upsert(rows.slice(i, i + 500), { onConflict: 'brma,bedrooms,effective_from' }).select('id');
+        if (error) throw missingTable(error) ? new Error(LHA_UPDATE) : error;
+        firstId ??= (data as Array<{ id: string }> | null)?.[0]?.id ?? null;
+      }
+      const { source_url, effective_from } = rows[0];
+      if (firstId) {
+        await supabase.from('activities').insert({ entity_type: 'lha_rates', entity_id: firstId, kind: 'updated',
+          body: `LHA rates loaded: ${areas} areas, applying from ${shortDate(effective_from)}, from ${source_url}` });
+      }
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['lha'] }); qc.invalidateQueries({ queryKey: ['activities'] }); },
+  });
+}
+
+/** Set which LHA area a postcode district or sector is in, checked by hand (null brma removes the correction). Owner only. */
+export function useSetPostcodeBrma() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ prefix, brma, note }: { prefix: string; brma: string | null; note?: string | null }) => {
+      const key = prefix.toUpperCase().replace(/\s+/g, ' ').trim();
+      const res = brma
+        ? await supabase.from('postcode_brma').upsert({ postcode_prefix: key, brma, manual_override: true, note: note ?? null, updated_at: new Date().toISOString() })
+        : await supabase.from('postcode_brma').delete().eq('postcode_prefix', key);
+      if (res.error) throw missingTable(res.error) ? new Error(LHA_UPDATE) : res.error;
+      const uid = await currentUserId();
+      if (uid) {
+        await supabase.from('activities').insert({ entity_type: 'lha_area', entity_id: uid, kind: 'updated',
+          body: brma ? `LHA area for ${key} set to ${brma}` : `LHA area correction for ${key} removed` });
+      }
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['lha'] }); qc.invalidateQueries({ queryKey: ['activities'] }); },
+  });
 }
 
 /** Save either my own settings or the team's. */

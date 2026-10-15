@@ -1,6 +1,10 @@
 // Checks for the LHA calculations. Run with: npx tsx scripts/test-lha.ts
 import { existsSync, readFileSync } from 'node:fs';
 import { brmaGroups, lhaAreaFor, lhaCheck, lhaSizeOf, lhaWords, lookupPostcode, parseDistrict, parseLhaCsv, rateFor, searchPlaces } from '../src/lib/lha';
+import {
+  canonicalBrma, lhaSourceWords, lhaTable, lhaVerified, lhaYearOf, parseGovLhaCsv, rentShown, rowsForDatabase, sectorOf, setLhaFromDatabase,
+  setPostcodeBrma, tableFromRows, weeklyToMonthly,
+} from '../src/lib/lha';
 import { LHA_RATES } from '../src/data/lha-rates';
 import { matchesForProperty } from '../src/lib/propertyMatch';
 import { DEFAULT_SETTINGS, setActiveSettings } from '../src/lib/settings';
@@ -96,6 +100,63 @@ check('a £1,400 studio is £250 over their LHA', !!pricey?.cautions.some((c) =>
 const family = make({ full_name: 'Family', on_uc: true, household_type: 'family', children: 2, council: 'Barnet', notes: 'North Finchley' });
 const fam = matchesForProperty({ ...prop, property_type: '2-Bed Flat', bedrooms: 2, rent_pcm: 1450, rent_text: '£1,450 pcm' }, [family])[0];
 check('family of 2 children judged on the 2 bed rate (£1,400)', !!fam?.cautions.some((c) => /£50 over their LHA \(2 bed/.test(c)), fam ? [...fam.reasons, ...fam.cautions].join('; ') : 'not matched');
+
+// ── Rates kept with their source (0018) ──
+// The figures below are made up for the checks (100, 200...), so they can never be taken for real rates.
+setActiveSettings(DEFAULT_SETTINGS);
+check('built-in rates say they are not checked', lhaTable().source?.kind === 'built_in' && !lhaVerified() && /not checked against gov\.uk/.test(lhaSourceWords()), lhaSourceWords());
+const names12 = ['Inner North London', 'Outer West London', 'Outer South London', 'North West London', 'Central London', 'Inner East London',
+  'Outer North London', 'Outer East London', 'Inner West London', 'Outer South East London', 'Inner South East London', 'Outer North East London'];
+const wide = (heading: string, one: number) => [heading, 'Area,Shared,1 bed,2 bed,3 bed,4 bed', ...names12.map((n) => `${n},${one - 50},${one},${one + 100},${one + 200},${one + 300}`)].join('\n');
+const monthly = parseGovLhaCsv(wide('LHA rates per calendar month', 1000));
+check('a file headed monthly is read as monthly', monthly.unit === 'monthly' && monthly.unitFrom === 'heading' && monthly.rates['Outer West London'][1] === 1000 && Object.keys(monthly.rates).length === 12);
+const weekly = parseGovLhaCsv(wide('LHA rates 2026 to 2027, per week', 300));
+check('weekly figures become monthly: × 52 ÷ 12 to the penny', weekly.unit === 'weekly' && weekly.unitFrom === 'heading' && weekly.rates['Outer West London'][1] === 1300 && weekly.rates['Outer West London'][0] === weeklyToMonthly(250) && weeklyToMonthly(250) === 1083.33, JSON.stringify(weekly.rates['Outer West London']));
+check('a heading with years in it is still a heading', Object.keys(weekly.rates).length === 12);
+check('no word on it: small figures are weekly', parseGovLhaCsv(wide('Rates', 300)).unitFrom === 'size' && parseGovLhaCsv(wide('Rates', 300)).unit === 'weekly');
+check('no word on it: large figures are monthly', parseGovLhaCsv(wide('Rates', 1300)).unit === 'monthly');
+check('the unit can be chosen over the headings', parseGovLhaCsv(wide('per week', 300), 'monthly').unit === 'monthly' && parseGovLhaCsv(wide('per week', 300), 'monthly').unitFrom === 'chosen'
+  && parseGovLhaCsv(wide('per week', 300), 'monthly').rates['Central London'][1] === 300);
+const long = ['BRMA,Category,Weekly rate', ...names12.flatMap((n) => ['CAT A', 'CAT B', 'CAT C', 'CAT D', 'CAT E'].map((c, i) => `${n},${c},${100 + i * 50}`))].join('\n');
+const lf = parseGovLhaCsv(long);
+check('one row per area and size (CAT A to E) is read too', lf.unit === 'weekly' && lf.rates['Inner North London'].length === 5 && lf.rates['Inner North London'][1] === weeklyToMonthly(150), JSON.stringify(lf.rates['Inner North London']));
+const coded = ['Code,BRMA,A,B,C,D,E', ...names12.map((n, i) => `${i + 1},${n.toUpperCase()} BRMA,"£1,050.00","£1,100.00",1200,1300,1400`), '99,Atlantis,1,2,3,4,5', '98,Lyonesse,1,2,3,4'].join('\n');
+const cf = parseGovLhaCsv(coded, 'monthly');
+check('a code column, capitals, "BRMA" and £ signs are all fine', cf.rates['Inner North London']?.[1] === 1100 && cf.rates['Inner North London'][0] === 1050, JSON.stringify(Object.keys(cf.rates).slice(0, 3)));
+check('names Keel does not know are pointed out', JSON.stringify(cf.newNames) === '["Atlantis"]', JSON.stringify(cf.newNames));
+check('an area missing a size is left out and named', JSON.stringify(cf.incomplete) === '["Lyonesse"]' && !cf.rates['Lyonesse'], JSON.stringify(cf.incomplete));
+check('names match whatever their case or suffix', canonicalBrma('OUTER WEST LONDON BRMA') === 'Outer West London' && canonicalBrma('Somewhere New') === 'Somewhere New');
+let thrown = '';
+try { parseGovLhaCsv('a,b\n1,2'); } catch (e) { thrown = (e as Error).message; }
+check('a file with no rates in it is refused', /Could not find the rates/.test(thrown), thrown);
+
+const rows = rowsForDatabase(monthly, 'https://www.gov.uk/test-page', '2026-04-01');
+check('one database row per area and size, each with its source and start date', rows.length === 60 && rows.every((r) => r.source_url === 'https://www.gov.uk/test-page' && r.effective_from === '2026-04-01')
+  && rows.filter((r) => r.brma === 'Outer West London').map((r) => r.bedrooms).join() === '0,1,2,3,4');
+check('the year a start date falls in', lhaYearOf('2026-04-01') === '2026 to 2027' && lhaYearOf('2027-01-15') === '2026 to 2027' && lhaYearOf('2027-04-01') === '2027 to 2028');
+const t = tableFromRows(rows)!;
+setLhaFromDatabase(t);
+check('rates from the database are used, and say where they came from', lhaVerified() && rateFor('Outer West London', 1) === 1000 && lhaSourceWords() === 'gov.uk, from 1 Apr 2026' && lhaTable().year === '2026 to 2027', lhaSourceWords());
+check('an area the database does not have has no rate (no falling back to unchecked figures)', rateFor('Ashford', 1) === null);
+setLhaFromDatabase(null);
+check('without them, back to the built-in rates', !lhaVerified() && rateFor('Outer North London', 1) === LHA_RATES['Outer North London'][1]);
+
+// Postcode corrections from the database: a sector beats its district, a district beats the estimate
+check('postcode sector', sectorOf('NW10 4AB') === 'NW10 4' && sectorOf('nw104ab') === 'NW10 4' && sectorOf('NW10') === null);
+setPostcodeBrma([{ postcode_prefix: 'NW10 4', brma: 'Inner West London' }, { postcode_prefix: 'n12', brma: 'Inner North London' }]);
+const s4 = lhaAreaFor(P({ postcode: 'NW10 4AB' }));
+check('a sector correction applies to that sector', s4?.brma === 'Inner West London' && s4.how === 'team' && s4.basis === 'NW10 4', JSON.stringify(s4));
+check('the rest of the district keeps its estimate', lhaAreaFor(P({ postcode: 'NW10 6AB' }))?.how === 'estimated');
+check('a district correction applies to the district', lhaAreaFor(P({ postcode: 'N12 0DA' }))?.brma === 'Inner North London');
+check('the postcode finder uses them too', lookupPostcode('NW10 4AB')?.area?.brma === 'Inner West London');
+setPostcodeBrma([]);
+
+// Rents show as money, never as "1-Bed LHA"
+check('a rent in pounds', rentShown(P({ rent_pcm: 1250, rent_text: '£1,250 pcm' })) === '£1,250 pcm');
+const lhaRent = rentShown(P({ postcode: 'N12 0DA', property_type: 'Studio', rent_text: '1-Bed LHA' }));
+check('"1-Bed LHA" shows the pounds it means there', lhaRent === `£${LHA_RATES['Outer North London'][1].toLocaleString('en-GB')} pcm (LHA rate)` && !/1-Bed LHA/i.test(lhaRent ?? ''), String(lhaRent));
+check('with no area, it says so rather than show the label', rentShown(P({ property_type: 'Studio', rent_text: '1-Bed LHA' })) === 'LHA rate, area not known');
+check('other wording is kept', rentShown(P({ rent_text: '£220 pw' })) === '£220 pw');
 
 console.log(failed ? `\n${failed} failed` : '\nAll passed');
 process.exit(failed ? 1 : 0);

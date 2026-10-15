@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Icon, useToast } from '../../components/ui';
-import { usePeople, useSaveSettings, useSetLhaArea, useSettings } from '../../lib/hooks';
+import { useLhaDatabase, usePeople, useSaveSettings, useSetLhaArea, useSetPostcodeBrma, useSettings } from '../../lib/hooks';
 import { activeSettings } from '../../lib/settings';
 import {
-  areaSource, brmaGroups, districtFor, LHA_DIRECT_URL, lhaCheck, lhaTable, lhaWords, lookupPostcode, searchPlaces, sizeWords,
+  areaSource, brmaGroups, districtFor, LHA_DIRECT_URL, lhaCheck, lhaSourceWords, lhaTable, lhaVerified, lhaWords, lookupPostcode, searchPlaces, sizeWords,
 } from '../../lib/lha';
 import type { LhaCheck, PostcodeLookup, PropertyForLha } from '../../lib/lha';
 import type { Property } from '../../lib/types';
@@ -25,7 +25,7 @@ export function LhaChip({ property }: { property: PropertyForLha }) {
   return (
     <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded px-1.5 py-0.5 text-[12px] ${overLeeway ? 'font-semibold' : 'font-medium'}`}
       style={{ background: t.bg, color: t.fg }}
-      title={`${sizeWords(c.size)} LHA in ${c.area.brma}: ${pounds(c.rate)} pcm${c.area.how === 'estimated' ? ' (area estimated)' : ''}`}>
+      title={`${sizeWords(c.size)} LHA in ${c.area.brma}: ${pounds(c.rate)} pcm${c.area.how === 'estimated' ? ' (area estimated)' : ''}. Rates: ${lhaSourceWords()}`}>
       {lhaWords(c)}
     </span>
   );
@@ -53,7 +53,7 @@ export function LhaLine({ property }: { property: Property }) {
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[var(--ink-muted)]">
         <span className="rounded px-1.5 py-0.5 font-semibold" style={{ background: t.bg, color: t.fg }}>{lhaWords(c)}</span>
-        <span>{sizeWords(c.size)} rate <span className="font-mono text-[var(--ink)]">{pounds(c.rate)}</span></span>
+        <span>{sizeWords(c.size)} rate <span className="font-mono text-[var(--ink)]">{pounds(c.rate)}</span>{!lhaVerified() && <span title={lhaSourceWords()}> (rate not checked)</span>}</span>
         <span>·</span>
         <span title={source} className={c.area.how === 'estimated' ? 'cursor-help underline decoration-dotted underline-offset-2' : undefined}>{c.area.brma}</span>
         {!editing && <button type="button" onClick={() => setEditing(true)} className="text-[var(--ink-muted)] underline-offset-2 hover:text-[var(--link)] hover:underline">Change</button>}
@@ -68,13 +68,23 @@ function AreaEditor({ property, district, current, onClose }: { property: Proper
   const [everywhere, setEverywhere] = useState(false);
   const setLha = useSetLhaArea();
   const save = useSaveSettings();
+  const setPostcode = useSetPostcodeBrma();
+  const lhaDb = useLhaDatabase();
   const { settings } = useSettings();
   const people = usePeople();
   const { toast } = useToast();
-  const busy = setLha.isPending || save.isPending;
+  const busy = setLha.isPending || save.isPending || setPostcode.isPending;
 
   const apply = () => {
     if (!area) return;
+    if (everywhere && district && lhaDb.ready) {
+      // once 0018 is in, a district correction is kept in the database, checked by hand
+      setPostcode.mutate({ prefix: district, brma: area, note: `Checked for ${property.address_line}` }, {
+        onSuccess: () => { toast(`Every ${district} property now uses ${area}`, 'success'); onClose(); },
+        onError: (e) => toast((e as Error).message, 'danger'),
+      });
+      return;
+    }
     if (everywhere && district) {
       save.mutate({ scope: 'team', value: { ...settings, lhaAreaOverrides: { ...settings.lhaAreaOverrides, [district]: area } } }, {
         onSuccess: () => { toast(`Every ${district} property now uses ${area}`, 'success'); onClose(); },
@@ -96,7 +106,7 @@ function AreaEditor({ property, district, current, onClose }: { property: Proper
     <div className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-[13px]">
       <BrmaSelect value={area} onChange={setArea} placeholder="Choose the LHA area…"
         className="h-8 max-w-[240px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-1.5 text-[13px] text-[var(--ink)]" />
-      {district && people.canEditTeam && (
+      {district && (lhaDb.ready ? people.isOwner : people.canEditTeam) && (
         <label className="inline-flex items-center gap-1.5 text-[var(--ink)]">
           <input type="checkbox" checked={everywhere} onChange={(e) => setEverywhere(e.target.checked)} className="accent-[var(--accent)]" />
           Use for every {district} property
@@ -109,7 +119,7 @@ function AreaEditor({ property, district, current, onClose }: { property: Proper
       <a href={LHA_DIRECT_URL} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 text-[var(--link)] hover:underline">
         Check on LHA Direct <Icon name="arrowRight" size={12} className="-rotate-45" />
       </a>
-      <span className="w-full text-[12px] text-[var(--ink-muted)]">Rates: {lhaTable().year}.</span>
+      <span className="w-full text-[12px] text-[var(--ink-muted)]">Rates: {lhaTable().year}, {lhaSourceWords()}.</span>
     </div>
   );
 }
@@ -192,17 +202,17 @@ export function LhaLookup() {
       )}
 
       {shown && (
-        <div className="grid grid-cols-5 gap-2 text-center">
+        <div className="grid grid-cols-3 gap-2 text-center sm:grid-cols-5">
           {['Shared room', '1 bed', '2 bed', '3 bed', '4 bed'].map((label, i) => (
             <div key={label} className="rounded-md bg-[var(--surface)] px-2 py-2">
               <div className="text-[12px] text-[var(--ink-muted)]">{label}</div>
-              <div className="font-mono text-[15px] font-semibold text-[var(--ink)]">{rates[i] != null ? pounds(rates[i]) : '·'}</div>
+              <div className="font-mono text-[15px] font-semibold text-[var(--ink)]">{rates[i] != null && Number.isFinite(rates[i]) ? pounds(rates[i]) : '·'}</div>
             </div>
           ))}
         </div>
       )}
       <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] text-[var(--ink-muted)]">
-        <span>{shown ? `${shown}, monthly, ${lhaTable().year}.` : ''} Studios and en-suite rooms use the 1 bed rate; other rooms the shared rate.</span>
+        <span>{shown ? `${shown}, monthly, ${lhaTable().year} (${lhaSourceWords()}).` : ''} Studios and en-suite rooms use the 1 bed rate; other rooms the shared rate.</span>
         <a href={LHA_DIRECT_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[var(--link)] hover:underline">
           Check an exact address on LHA Direct <Icon name="arrowRight" size={12} className="-rotate-45" />
         </a>

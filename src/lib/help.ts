@@ -195,7 +195,9 @@ export const HELP = {
   lha: {
     title: 'LHA check',
     body: [
-      'Compares the rent with the Local Housing Allowance for the property\'s size in its area (Broad Rental Market Area), using the rates loaded in Team settings.',
+      'Compares the rent with the Local Housing Allowance for the property\'s size in its area (Broad Rental Market Area), using the rates in Team settings.',
+      'The owner loads the rates from the gov.uk CSV, with the page it came from and the day they apply from; weekly figures become the monthly Universal Credit amount (× 52 ÷ 12). Until then Keel uses built-in rates that are not checked against gov.uk, and says so next to every rate.',
+      'A rent written as "1-Bed LHA" is shown as the pounds it means for that property\'s area, never as the label.',
       'Studios and en-suite rooms count as 1 bed. Other rooms use the shared rate. LHA stops at 4 bed. A rent written as "1-Bed LHA" counts as exactly that rate.',
       'The area is estimated from the postcode, which is usually right but not always. Check an address on the VOA\'s LHA Direct and use Change area if it differs; the owner can apply it to every property in that postcode district.',
       'When matching, clients on UC or housing benefit with no budget are judged on their own LHA: 1 bed for singles and couples, and by bedrooms needed for families.',

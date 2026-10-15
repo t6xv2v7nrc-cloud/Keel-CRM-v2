@@ -7,7 +7,7 @@ import { clientAreas, isLocated, locate, placeKey, pointOf } from '../../lib/geo
 import { scoreMatch } from '../../lib/propertyMatch';
 import type { Strength } from '../../lib/propertyMatch';
 import type { Applicant, Property } from '../../lib/types';
-import { money } from '../../lib/format';
+import { rentShown } from '../../lib/lha';
 
 const RANK: Record<Strength, number> = { strong: 0, good: 1, possible: 2 };
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
@@ -109,7 +109,7 @@ export default function PropertyMap({ properties, focus = null, bestStrength, se
       const cls = `keel-pin keel-pin-${best ?? 'none'}${key === selected ? ' is-selected' : ''}`;
       const icon = L.divIcon({ className: '', html: `<span class="${cls}">${ps.length > 1 ? ps.length : ''}</span>`, iconSize: [24, 24], iconAnchor: [12, 12] });
       const lines = ps.slice(0, 4).map((p) =>
-        `<div><strong>${esc(p.address_line)}</strong><br>${esc([p.property_type, p.rent_pcm ? `${money(p.rent_pcm)} pcm` : p.rent_text].filter(Boolean).join(' · '))}</div>`);
+        `<div><strong>${esc(p.address_line)}</strong><br>${esc([p.property_type, rentShown(p)].filter(Boolean).join(' · '))}</div>`);
       if (ps.length > 4) lines.push(`<div>and ${ps.length - 4} more</div>`);
       L.marker(pt, { icon, title: ps.map((p) => p.address_line).join('; '), zIndexOffset: best ? 300 - RANK[best] * 100 : 0, riseOnHover: true })
         .bindTooltip(lines.join('<hr style="border:0;border-top:1px solid var(--line);margin:4px 0">'), { direction: 'top', offset: [0, -12] })

@@ -98,5 +98,45 @@ check('"updated" times are left as they were', iso(dated[R].updated_at) === '202
 const trig = await one(`select tgenabled from pg_trigger where tgname = 'applicants_updated_at'`);
 check('the "updated" clock is switched back on afterwards', trig[0]?.tgenabled === 'O', JSON.stringify(trig));
 
+// 0018: LHA rates and postcode areas; team corrections for a postcode district are copied in, boroughs are not
+await db.exec(`
+  insert into settings (key, value) values ('app', '{"lhaAreaOverrides": {"NW11": "Inner North London", "NW10 4": "Inner West London", "Haringey": "Outer North London"}}')
+    on conflict (key) do update set value = excluded.value;
+`);
+await db.exec(readFileSync(dir + '0018_lha_rates.sql', 'utf8'));
+await db.exec(readFileSync(dir + '0018_lha_rates.sql', 'utf8'));
+const pb = await one(`select postcode_prefix, brma, manual_override from postcode_brma order by postcode_prefix`);
+check('postcode corrections copied from Team settings, checked by hand; borough ones stay in settings',
+  JSON.stringify(pb.map((r) => [r.postcode_prefix, r.brma, r.manual_override])) === JSON.stringify([['NW10 4', 'Inner West London', true], ['NW11', 'Inner North London', true]]), JSON.stringify(pb));
+await db.exec(`insert into lha_rates (brma, bedrooms, monthly_uc, source_url, effective_from) values ('Outer West London', 1, 1100, 'https://www.gov.uk/x', '2026-04-01')`);
+let dupe = false;
+try { await db.exec(`insert into lha_rates (brma, bedrooms, monthly_uc, source_url, effective_from) values ('Outer West London', 1, 1200, 'https://www.gov.uk/x', '2026-04-01')`); } catch { dupe = true; }
+check('one rate per area, size and start date', dupe);
+let bad = 0;
+for (const sql of [
+  `insert into lha_rates (brma, bedrooms, monthly_uc, source_url, effective_from) values ('X', 5, 100, 'u', '2026-04-01')`,
+  `insert into lha_rates (brma, bedrooms, monthly_uc, source_url, effective_from) values ('X', 1, 0, 'u', '2026-04-01')`,
+  `insert into lha_rates (brma, bedrooms, monthly_uc, effective_from) values ('X', 1, 100, '2026-04-01')`,
+]) { try { await db.exec(sql); } catch { bad++; } }
+check('a size over 4 bed, a zero rate or a rate with no source is refused', bad === 3, String(bad));
+const rls = await one(`select relname, relrowsecurity from pg_class where relname in ('lha_rates', 'postcode_brma') order by relname`);
+check('row level security is on for both new tables', rls.length === 2 && rls.every((r) => r.relrowsecurity));
+
+// The read-only check of a live database against these files
+const liveCheck = readFileSync(new URL('../supabase/checks/live-vs-repo.sql', import.meta.url).pathname, 'utf8');
+const status = async (d) => Object.fromEntries((await d.query(liveCheck)).rows.map((r) => [r.item, [r.status, r.detail]]));
+const full = await status(db);
+const numbered = Object.keys(full).filter((k) => /^\d{4}$/.test(k));
+check('live check: every migration reads as done on a database that has had them all (data-only ones cannot be told)',
+  numbered.length === 18 && numbered.every((k) => full[k][0] === 'done' || (['0003', '0016'].includes(k) && full[k][0].startsWith('cannot tell'))), JSON.stringify(full));
+const behind = await freshDb();
+await behind.exec(`alter table properties drop column lha_area; drop table postcode_brma;
+  create table officers (id uuid primary key, name text, temp text, score int, last_contact_at timestamptz);`);
+const live = await status(behind);
+check('live check: a missing column reads as not run', live['0008']?.[0] === 'NOT RUN' && live['0008'][1] === 'properties.lha_area', JSON.stringify(live['0008']));
+check('live check: half of a migration reads as part run, naming what is missing', live['0018']?.[0] === 'PART RUN' && live['0018'][1] === 'postcode_brma', JSON.stringify(live['0018']));
+check('live check: a table no migration made is listed with its columns, and RLS off is said', live['not from the repo: officers']?.[0] === 'base table, RLS OFF'
+  && live['not from the repo: officers'][1] === 'id, name, temp, score, last_contact_at', JSON.stringify(live['not from the repo: officers']));
+
 console.log(failed ? `\n${failed} failed` : '\nAll passed');
 process.exit(failed ? 1 : 0);

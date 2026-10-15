@@ -14,7 +14,7 @@ import { bestFew, brief, matchesForProperty } from '../../lib/propertyMatch';
 import type { Match, Strength } from '../../lib/propertyMatch';
 import { BOROUGHS } from '../../lib/london';
 import { activeSettings } from '../../lib/settings';
-import { lhaCheck } from '../../lib/lha';
+import { lhaCheck, rentShown } from '../../lib/lha';
 import { LhaChip, LhaLine } from './Lha';
 import { SentTag, WhatsAppLink } from './WhatsApp';
 import { MapView } from '../map/MapView';
@@ -23,7 +23,7 @@ import { RequestButton } from '../requests/RequestSheet';
 import { providerFor } from '../../lib/requests';
 import { effectiveTier, isFresh, isUrgent } from '../../lib/search';
 import { tierLabel } from '../../lib/tiering';
-import { money, shortDate } from '../../lib/format';
+import { shortDate } from '../../lib/format';
 import { bedsOfType, TYPE_OPTIONS } from '../../lib/propertyEdit';
 import { EditProperty } from './EditProperty';
 
@@ -632,7 +632,7 @@ function PropertyCard({ p, matches, deals, names, sent, openRequests, isNew, sel
     .join(' · ');
   const facts = [
     p.property_type,
-    p.rent_text ?? (p.rent_pcm ? `${money(p.rent_pcm)} pcm` : null),
+    rentShown(p),
     p.area && !/^london$/i.test(p.area) ? p.area : null,
     p.borough && p.borough.toLowerCase() !== p.area?.toLowerCase() ? p.borough : null,
     p.bills ? `Bills: ${p.bills}` : null, p.furnished,

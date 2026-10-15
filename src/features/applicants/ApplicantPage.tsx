@@ -22,6 +22,7 @@ import { IceBand, IcePanel } from './IceClient';
 import { CHANNEL_ICON } from './channelIcon';
 import { CHANNEL_LABEL, readNote } from '../../lib/contacts';
 import { LhaChip } from '../properties/Lha';
+import { rentShown } from '../../lib/lha';
 import { SentTag, WhatsAppLink } from '../properties/WhatsApp';
 import { LazyMap, MapKey } from '../map/MapView';
 import { NextStepRow, ProgressCard, StuckChip } from '../progress/Progress';
@@ -330,7 +331,7 @@ function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
                       <SentTag sent={sent.get(sentKey(applicant.id, p.address_line))} />
                     </div>
                     <div className="text-[13px] text-[var(--ink-muted)] sm:truncate">
-                      {[p.property_type, p.rent_text ?? (p.rent_pcm ? `${money(p.rent_pcm)} pcm` : null), p.area && !/^london$/i.test(p.area) ? p.area : p.borough]
+                      {[p.property_type, rentShown(p), p.area && !/^london$/i.test(p.area) ? p.area : p.borough]
                         .filter(Boolean).join(' · ')}
                       {m.cautions[0] && <span className="text-[var(--note-fg)]"> · {brief(m.cautions[0])}</span>}
                     </div>
