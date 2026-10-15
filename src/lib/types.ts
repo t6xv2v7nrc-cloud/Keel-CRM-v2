@@ -71,9 +71,29 @@ export interface Property {
   source_tag: string | null;
   lha_area?: string | null; // 0008: LHA area (BRMA) chosen by hand
   provider_id?: string | null; // 0010: who supplied it
+  // 0019: what it is, who it suits and its safety papers (undefined until 0019 is run)
+  accommodation_type?: AccommodationType | null;
+  bills_included?: string[] | null;
+  floor?: number | null;
+  lift?: boolean | null;
+  suitable_for?: string[] | null;
+  gas_expiry?: string | null;
+  no_gas?: boolean | null;
+  eicr_expiry?: string | null;
+  epc_rating?: string | null;
+  epc_sap?: number | null;
+  licence_needed?: boolean | null;
+  licence_no?: string | null;
+  licence_expiry?: string | null;
+  alarms_checked?: string | null;
+  photo_count?: number | null;
+  prs_landlord_id?: string | null;
+  prs_property_id?: string | null;
   created_at: string;
   updated_at: string;
 }
+
+export type AccommodationType = 'self_contained' | 'shared_kitchen' | 'hmo_room';
 
 export interface Activity {
   id: string;

@@ -31,7 +31,8 @@ with expect(migration, kind, name) as (values
   ('0015', 'column', 'deals.checklist'),
   ('0016', 'data', 'client dates from the Bin'),
   ('0017', 'column', 'applicants.iced_at'),
-  ('0018', 'table', 'lha_rates'), ('0018', 'table', 'postcode_brma')
+  ('0018', 'table', 'lha_rates'), ('0018', 'table', 'postcode_brma'),
+  ('0019', 'column', 'properties.accommodation_type'), ('0019', 'column', 'properties.gas_expiry'), ('0019', 'column', 'properties.photo_count')
 ), found as (
   select e.migration, e.kind, e.name, case e.kind
     when 'table' then exists (select 1 from information_schema.tables t

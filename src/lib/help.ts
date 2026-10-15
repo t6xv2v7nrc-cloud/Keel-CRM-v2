@@ -192,6 +192,16 @@ export const HELP = {
       'Lists are saved to the account, so you both see them on every device. Mark a property as let when it goes, or purge old lists under Saved lists.',
     ],
   },
+  propertyChecks: {
+    title: 'Ready to send?',
+    body: [
+      'Each property shows its BRMA, the monthly LHA rate for its size, and the gap: the rent minus that rate. Shared-kitchen units and HMO rooms also show the gap to the shared rate (SAR).',
+      'Red: the rent is above LHA. Officers cannot place a client into a shortfall, so it is not sent.',
+      'Amber: a shared-kitchen unit nobody is marked as suited to, or a property outside Greater London (not offered to London councils by default). Amber is a warning, not a stop.',
+      'Grey, not ready to send: a safety paper is missing or out of date, or there are fewer than 3 photos. The papers are the gas safety certificate (unless there is no gas), the electrical report (EICR), an EPC of E or better, a licence for HMO rooms or where one is needed, and smoke and CO alarms checked within the last year.',
+      'Fill these in with Edit on the property card, under Letting details and safety papers. Who it suits: UC 35 plus, SAR-exempt, under 35 standard, couples, families. Every change goes on the property\'s history.',
+    ],
+  },
   lha: {
     title: 'LHA check',
     body: [

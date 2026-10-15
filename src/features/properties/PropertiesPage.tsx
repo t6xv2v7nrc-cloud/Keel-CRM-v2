@@ -26,6 +26,7 @@ import { tierLabel } from '../../lib/tiering';
 import { shortDate } from '../../lib/format';
 import { bedsOfType, TYPE_OPTIONS } from '../../lib/propertyEdit';
 import { EditProperty } from './EditProperty';
+import { PropertyChecks } from './Checks';
 
 const normAddr = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -653,6 +654,7 @@ function PropertyCard({ p, matches, deals, names, sent, openRequests, isNew, sel
           </div>
           <div className="mt-0.5 text-[14px] text-[var(--ink-muted)]">{facts.join(' · ') || 'No details'}</div>
           <div className="mt-1.5"><LhaLine property={p} /></div>
+          <PropertyChecks property={p} />
           <InPlay deals={deals} names={names} />
           <ProviderPicker property={p} />
         </div>

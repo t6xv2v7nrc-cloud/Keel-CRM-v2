@@ -2,13 +2,26 @@
 
 import type { Property } from './types';
 import { money, shortDate } from './format';
+import { ACCOMMODATION_LABEL, BILLS_LABEL, SUITS_LABEL } from './propertyChecks';
+
+/** Letting details and safety papers (0019): only sent once the columns exist. */
+export const CHECK_FIELDS = [
+  'accommodation_type', 'bills_included', 'floor', 'lift', 'suitable_for', 'gas_expiry', 'no_gas', 'eicr_expiry', 'epc_rating', 'epc_sap',
+  'licence_needed', 'licence_no', 'licence_expiry', 'alarms_checked', 'photo_count', 'prs_landlord_id', 'prs_property_id',
+] as const;
+type CheckField = typeof CHECK_FIELDS[number];
 
 export type EditableProperty = Pick<Property,
-  'address_line' | 'postcode' | 'area' | 'borough' | 'property_type' | 'bedrooms' | 'rent_pcm' | 'rent_text' | 'bills' | 'furnished' | 'available_from' | 'notes'>;
+  'address_line' | 'postcode' | 'area' | 'borough' | 'property_type' | 'bedrooms' | 'rent_pcm' | 'rent_text' | 'bills' | 'furnished' | 'available_from' | 'notes'>
+  & Partial<Pick<Property, CheckField>>;
 
 export const EDITABLE: ReadonlyArray<keyof EditableProperty> = [
   'address_line', 'postcode', 'area', 'borough', 'property_type', 'bedrooms', 'rent_pcm', 'rent_text', 'bills', 'furnished', 'available_from', 'notes',
+  ...CHECK_FIELDS,
 ];
+
+/** Whether a saved property has the 0019 columns (a property only on this device can always hold them). */
+export const hasCheckFields = (p: Partial<Property>, local = false) => local || 'gas_expiry' in p;
 
 /** The usual property types, for picking from a list. */
 export const TYPE_OPTIONS = ['Room', 'En-suite Room', 'HMO Room', 'Studio', 'En-suite Studio', 'Self-Contained Studio', '1-Bed Flat', '2-Bed Flat', '3-Bed Flat', '2-Bed House', '3-Bed House', '4-Bed House'];
@@ -37,22 +50,40 @@ export const rentWords = (p: Pick<Property, 'rent_text' | 'rent_pcm'>) => p.rent
 const LABEL: Record<keyof EditableProperty, string> = {
   address_line: 'Address', postcode: 'Postcode', area: 'Area', borough: 'Borough', property_type: 'Type', bedrooms: 'Bedrooms',
   rent_pcm: 'Rent', rent_text: 'Rent', bills: 'Bills', furnished: 'Furnished', available_from: 'Available from', notes: 'Notes',
+  accommodation_type: 'Kind', bills_included: 'Bills included', floor: 'Floor', lift: 'Lift', suitable_for: 'Suits',
+  gas_expiry: 'Gas certificate', no_gas: 'No gas', eicr_expiry: 'EICR', epc_rating: 'EPC', epc_sap: 'SAP score',
+  licence_needed: 'Licence needed', licence_no: 'Licence number', licence_expiry: 'Licence', alarms_checked: 'Alarms checked',
+  photo_count: 'Photos', prs_landlord_id: 'PRS landlord ID', prs_property_id: 'PRS property ID',
 };
+const DATES = new Set<keyof EditableProperty>(['available_from', 'gas_expiry', 'eicr_expiry', 'licence_expiry', 'alarms_checked']);
+const label = (map: Record<string, string>, v: string) => map[v] ?? v;
 
 const shown = (k: keyof EditableProperty, v: unknown): string => {
+  if (Array.isArray(v)) {
+    if (v.length === 0) return 'none';
+    const map: Record<string, string> = k === 'suitable_for' ? SUITS_LABEL : k === 'bills_included' ? BILLS_LABEL : {};
+    return v.map((x) => label(map, String(x))).join(', ');
+  }
   if (v == null || v === '') return 'not set';
+  if (typeof v === 'boolean') return v ? 'yes' : 'no';
   if (k === 'rent_pcm') return `${money(Number(v))} pcm`;
-  if (k === 'available_from') return shortDate(String(v));
+  if (DATES.has(k)) return shortDate(String(v));
+  if (k === 'accommodation_type') return label(ACCOMMODATION_LABEL, String(v));
   if (k === 'notes') return String(v).length > 40 ? `${String(v).slice(0, 40)}…` : String(v);
   return String(v);
 };
 
-/** Only the fields that really changed, ready to save. */
+const same = (a: unknown, b: unknown) => (Array.isArray(a) || Array.isArray(b)
+  ? JSON.stringify([...((a as unknown[]) ?? [])].sort()) === JSON.stringify([...((b as unknown[]) ?? [])].sort())
+  : a === b);
+
+/** Only the fields that really changed, ready to save. A field left out of `after` is not touched. */
 export function changedFields(before: EditableProperty, after: EditableProperty): Partial<EditableProperty> {
   const out: Partial<EditableProperty> = {};
   for (const k of EDITABLE) {
+    if (!(k in after)) continue;
     const a = before[k] ?? null, b = after[k] ?? null;
-    if (a !== b) (out as Record<string, unknown>)[k] = b;
+    if (!same(a, b)) (out as Record<string, unknown>)[k] = b;
   }
   return out;
 }

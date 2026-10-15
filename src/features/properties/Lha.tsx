@@ -12,7 +12,8 @@ const pounds = (n: number) => `£${n.toLocaleString('en-GB', { minimumFractionDi
 
 function tone(c: LhaCheck): { bg: string; fg: string } {
   if (c.status === 'under' || c.status === 'at') return { bg: 'var(--accent-soft)', fg: 'var(--accent-ink)' };
-  if (c.status === 'over') return { bg: 'var(--note-bg)', fg: 'var(--note-fg)' };
+  // over LHA is a stop: officers cannot place a client into a shortfall
+  if (c.status === 'over') return { bg: 'var(--danger-soft)', fg: 'var(--danger)' };
   return { bg: 'var(--chip-bg)', fg: 'var(--chip-fg)' };
 }
 

@@ -12,6 +12,9 @@ export const BOROUGHS = [
   'Hertsmere', 'Epsom & Ewell', 'Elmbridge', 'Spelthorne', 'Tandridge', 'Thurrock', 'Slough', 'Norwich', 'Reading',
 ] as const;
 
+/** The 32 London boroughs and the City: Greater London. The rest of BOROUGHS is just outside it. */
+export const LONDON_BOROUGHS: ReadonlySet<string> = new Set(BOROUGHS.slice(0, BOROUGHS.indexOf('Westminster') + 1));
+
 // Names that are also everyday words ("I am reading..."): only recognised when a
 // field holds exactly that name, never when found inside free text.
 const EVERYDAY_WORD_BOROUGHS = new Set<string>(['Reading']);

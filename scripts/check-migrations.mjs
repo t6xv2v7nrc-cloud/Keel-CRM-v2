@@ -122,13 +122,31 @@ check('a size over 4 bed, a zero rate or a rate with no source is refused', bad 
 const rls = await one(`select relname, relrowsecurity from pg_class where relname in ('lha_rates', 'postcode_brma') order by relname`);
 check('row level security is on for both new tables', rls.length === 2 && rls.every((r) => r.relrowsecurity));
 
+// 0019: property checks; a backup copy is taken first, outside the schema the app reads
+const back = await one(`select count(*)::int as n from keel_backup.properties_before_0019`);
+check('properties are backed up into keel_backup before 0019 changes them', back.length === 1 && typeof back[0].n === 'number');
+const inPublic = await one(`select count(*)::int as n from information_schema.tables where table_schema = 'public' and table_name like '%before_0019%'`);
+check('the backup is not in the public schema the API serves', inPublic[0].n === 0);
+await db.exec(`insert into properties (id, address_line, accommodation_type, suitable_for, bills_included, epc_rating) values
+  ('77777777-7777-7777-7777-777777777777', '9 Test Row', 'shared_kitchen', array['uc_35_plus', 'sar_exempt'], array['water', 'internet'], 'C')`);
+const cp = await one(`select accommodation_type, suitable_for, no_gas, photo_count from properties where id = '77777777-7777-7777-7777-777777777777'`);
+check('the new property fields save', cp[0].accommodation_type === 'shared_kitchen' && cp[0].suitable_for.join() === 'uc_35_plus,sar_exempt' && cp[0].no_gas === false && cp[0].photo_count === null, JSON.stringify(cp[0]));
+let refused = 0;
+for (const sql of [
+  `update properties set accommodation_type = 'castle' where id = '77777777-7777-7777-7777-777777777777'`,
+  `update properties set suitable_for = array['students'] where id = '77777777-7777-7777-7777-777777777777'`,
+  `update properties set epc_rating = 'H' where id = '77777777-7777-7777-7777-777777777777'`,
+  `update properties set bills_included = array['pool'] where id = '77777777-7777-7777-7777-777777777777'`,
+]) { try { await db.exec(sql); } catch { refused++; } }
+check('a made-up type, suitability, EPC rating or bill is refused', refused === 4, String(refused));
+
 // The read-only check of a live database against these files
 const liveCheck = readFileSync(new URL('../supabase/checks/live-vs-repo.sql', import.meta.url).pathname, 'utf8');
 const status = async (d) => Object.fromEntries((await d.query(liveCheck)).rows.map((r) => [r.item, [r.status, r.detail]]));
 const full = await status(db);
 const numbered = Object.keys(full).filter((k) => /^\d{4}$/.test(k));
 check('live check: every migration reads as done on a database that has had them all (data-only ones cannot be told)',
-  numbered.length === 18 && numbered.every((k) => full[k][0] === 'done' || (['0003', '0016'].includes(k) && full[k][0].startsWith('cannot tell'))), JSON.stringify(full));
+  numbered.length === 19 && numbered.every((k) => full[k][0] === 'done' || (['0003', '0016'].includes(k) && full[k][0].startsWith('cannot tell'))), JSON.stringify(full));
 const behind = await freshDb();
 await behind.exec(`alter table properties drop column lha_area; drop table postcode_brma;
   create table officers (id uuid primary key, name text, temp text, score int, last_contact_at timestamptz);`);

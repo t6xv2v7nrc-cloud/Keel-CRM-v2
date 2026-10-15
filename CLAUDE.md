@@ -18,6 +18,9 @@ src/
               whatsapp.ts (wa.me links and message wording for sending properties),
               propertyEdit.ts (editing a saved property: typed rent, bedrooms from the type, what changed in words;
                                the Edit button on each property card, features/properties/EditProperty.tsx),
+              propertyChecks.ts (0019: kind of place, who it suits, safety papers; LHA gap and shared-rate gap worked out,
+                               never typed; flags red over LHA, amber suits not set or outside Greater London, grey not
+                               ready (papers or under 3 photos); `sendBlockers` = red and grey; card in features/properties/Checks.tsx),
               geo.ts (placing postcodes via postcodes.io, cached per device; a client's areas as districts),
               progress.ts (deals: each property a client is going for; stage follows deals, next steps, stuck, gone cold,
                            the move-in checklist on accepted and moved-in deals (`deals.checklist`, items in Settings)),
@@ -128,11 +131,12 @@ supabase/checks/live-vs-repo.sql  (read-only: which migrations the live database
 ## Update brief (October 2026): ground rules and decisions
 
 Ridwan's brief "make Keel stop bad matches and bad emails before they happen", worked step by step in this order: diff live
-vs repo, LHA table (Step 1, done: 0018), property fields, officers send status plus `council_schemes`, placements and
+vs repo (done: live has had 0001 to 0017), LHA table (Step 1, done: 0018), property fields (Step 2, done: 0019), officers send status plus `council_schemes`, placements and
 incentives, viewings, matching, a "sendable" view, KPI dashboard. After each step: run it, test it, say what changed in 3 lines.
-- The live database is behind the repo (live `properties` has no `lha_area`). Do not ask Ridwan to run pending migrations
-  until he says; `supabase/checks/live-vs-repo.sql` lists what is pending. Live has an `officers` table (108 rows: temp,
-  score, last_contact_at) that no migration here made and no code here uses: find out what made it before extending it.
+- Do not ask Ridwan to run pending migrations until he says; `supabase/checks/live-vs-repo.sql` lists what is pending.
+  Live also has tables from HELM (the old name and version of Keel CRM): `leads`, `officers` (108 rows: temp, score,
+  last_contact_at, prefers_sms...), `activity_log`, `notifications`, `eod_reports`, all RLS on, unused by this app.
+  Officer send status (Step 3) goes on `officers`.
 - One migration per step, with a rollback note at the top. Back up any existing table a migration changes into a separate
   `keel_backup` schema first (never into `public`, which the API serves). Never delete or rename columns; add new ones.
   Keep RLS; new tables get RLS on, signed-in only. Nothing is ever exposed publicly.
@@ -178,7 +182,8 @@ Never commit `.env.local`. Never expose the service role key or Anthropic key to
   then 0013 (finances: fees from the rent, first-rent dates, invoice numbers), then 0014 (merge duplicate clients),
   then 0015 (move-in checklist), then 0016 (dates clients confirmed from the Bin from when the Bin received them; the
   app already does this for new ones, and the review card's "First got in touch" date can change it), then 0017 (on ice),
-  then 0018 (LHA rates and postcode areas with their source).
+  then 0018 (LHA rates and postcode areas with their source), then 0019 (property kind, suits, safety papers; backs up
+  properties into keel_backup first).
 - Check every migration runs, twice, on a scratch Postgres before committing one:
   `npm i --no-save @electric-sql/pglite && node scripts/check-migrations.mjs` (it also tests the merge and invoice numbers).
 
