@@ -33,7 +33,8 @@ with expect(migration, kind, name) as (values
   ('0017', 'column', 'applicants.iced_at'),
   ('0018', 'table', 'lha_rates'), ('0018', 'table', 'postcode_brma'),
   ('0019', 'column', 'properties.accommodation_type'), ('0019', 'column', 'properties.gas_expiry'), ('0019', 'column', 'properties.photo_count'),
-  ('0020', 'column', 'officers.status'), ('0020', 'column', 'officers.send_to_mailbox'), ('0020', 'table', 'officer_sends'), ('0020', 'table', 'council_schemes')
+  ('0020', 'column', 'officers.status'), ('0020', 'column', 'officers.send_to_mailbox'), ('0020', 'table', 'officer_sends'), ('0020', 'table', 'council_schemes'),
+  ('0021', 'column', 'placements.deal_id'), ('0021', 'column', 'placements.split_agreed_in_writing'), ('0021', 'column', 'placements.renters_rights_sheet_on')
 ), found as (
   select e.migration, e.kind, e.name, case e.kind
     when 'table' then exists (select 1 from information_schema.tables t

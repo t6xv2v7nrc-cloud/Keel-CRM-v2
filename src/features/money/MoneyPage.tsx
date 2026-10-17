@@ -2,22 +2,24 @@ import { Fragment, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button, Card, CardHeader, Empty, Help, Icon, PageHeader } from '../../components/ui';
-import { useApplicants, useDeals, useProperties, useProviders, useReceivables } from '../../lib/hooks';
+import { useApplicants, useDeals, usePlacements, useProperties, useProviders, useReceivables } from '../../lib/hooks';
+import { placementsFrom } from '../../lib/placements';
+import { PlacementPanel } from './Placement';
 import { money, moneyFee, moneyShort } from '../../lib/format';
 import { awaitingSignUp, byMonth, financesCsv, fromHousingOfficer, ghostTotal, incentiveFor, isOpen, lettingFeeFor, owed, periodDay, periods, placementOf, POTENTIAL_STEPS, potentials, potentialTotals, totals } from '../../lib/money';
 import { saveFile } from '../../lib/files';
 import type { GhostTotal, MonthTotal, ReceivableDraft } from '../../lib/money';
 import { councilOf, isActive } from '../../lib/search';
-import type { Receivable, ReceivableKind } from '../../lib/types';
+import type { Provider, Receivable, ReceivableKind } from '../../lib/types';
 import { FinancesNeedsUpdate, MoneyNeedsUpdate, MoneyRow, ReceivableForm } from './Money';
 import { PotentialList } from './Potential';
 import { MoneyCalendar } from './Calendar';
 
 const select = 'min-h-[40px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]';
 
-type View = 'owed' | 'potential' | 'calendar' | 'paid';
+type View = 'owed' | 'potential' | 'placements' | 'calendar' | 'paid';
 const VIEWS: Array<{ key: View; label: string }> = [
-  { key: 'owed', label: 'Owed' }, { key: 'potential', label: 'Potential' }, { key: 'calendar', label: 'Calendar' }, { key: 'paid', label: 'Paid' },
+  { key: 'owed', label: 'Owed' }, { key: 'potential', label: 'Potential' }, { key: 'placements', label: 'Placements' }, { key: 'calendar', label: 'Calendar' }, { key: 'paid', label: 'Paid' },
 ];
 
 /** Finances: what is owed (soonest due first, overdue flagged), what could come in, when it all falls due, and what has been paid. */
@@ -47,6 +49,8 @@ export function MoneyPage() {
   const months = useMemo(() => byMonth(receivables), [receivables]);
   const payers = [...new Set(receivables.map((r) => r.payer))].sort();
   const done = receivables.filter((r) => !isOpen(r));
+  const { placements, full: placementsFull } = usePlacements();
+  const placed = useMemo(() => placementsFrom(deals, placements, receivables, providers), [deals, placements, receivables, providers]);
   const list = useMemo(() => {
     const base = view === 'paid'
       ? receivables.filter((r) => !isOpen(r)).sort((a, b) => (b.paid_on ?? b.updated_at).localeCompare(a.paid_on ?? a.updated_at))
@@ -125,7 +129,7 @@ export function MoneyPage() {
 
           <div role="tablist" aria-label="Finances" className="flex w-full flex-wrap rounded-lg border border-[var(--line)] bg-[var(--paper-2)] p-1 sm:w-fit">
             {VIEWS.map((v) => {
-              const count = v.key === 'owed' ? t.owedCount : v.key === 'potential' ? pt.count : v.key === 'paid' ? done.length : null;
+              const count = v.key === 'owed' ? t.owedCount : v.key === 'potential' ? pt.count : v.key === 'placements' ? placed.length : v.key === 'paid' ? done.length : null;
               return (
                 <button key={v.key} role="tab" type="button" aria-selected={view === v.key} onClick={() => setView(v.key)}
                   className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-2 text-[14px] font-medium sm:flex-none sm:px-4 ${
@@ -138,6 +142,8 @@ export function MoneyPage() {
           </div>
 
           {view === 'potential' && <PotentialList pots={pots} byId={byId} totals={pt} />}
+          {view === 'placements' && <PlacementsList views={placed} full={placementsFull} providers={providers} nameOf={(id) => byId.get(id)?.full_name ?? 'Client'}
+            councilOf={(id) => { const c = byId.get(id); return c ? councilOf(c) : null; }} />}
           {view === 'calendar' && <MoneyCalendar receivables={receivables} byId={byId} providers={providers} />}
 
           {(view === 'owed' || view === 'paid') && (
@@ -297,6 +303,27 @@ function MonthBars({ months, height = 110 }: { months: MonthTotal[]; height?: nu
         <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[var(--ink-faint)] opacity-50" />Still owed</span>
         {empty && <span>Nothing paid or due in these months yet.</span>}
       </div>
+    </div>
+  );
+}
+
+/** Every placement, newest move-in first: who invoices, the split in writing, Keel's share; the flagged ones are counted. */
+function PlacementsList({ views, full, providers, nameOf, councilOf }: { views: ReturnType<typeof placementsFrom>; full: boolean; providers: Provider[]; nameOf: (id: string) => string; councilOf: (id: string) => string | null }) {
+  const [onlyFlagged, setOnlyFlagged] = useState(false);
+  const red = views.filter((v) => v.flags.some((f) => f.tone === 'red'));
+  const shown = onlyFlagged ? views.filter((v) => v.flags.some((f) => f.tone !== 'grey')) : views;
+  if (!views.length) return <Card><Empty icon="check" title="No placements yet">When a client is marked as moved in on their Progress, their placement shows here.</Empty></Card>;
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-3 text-[14px]">
+        <span className="text-[var(--ink-muted)]">{views.length} {views.length === 1 ? 'placement' : 'placements'}</span>
+        {red.length > 0 && <span className="font-semibold" style={{ color: 'var(--danger)' }}>{red.length} with an incentive and no split in writing</span>}
+        <label className="ml-auto flex items-center gap-2 text-[var(--ink)]">
+          <input type="checkbox" checked={onlyFlagged} onChange={(e) => setOnlyFlagged(e.target.checked)} className="h-4 w-4 accent-[var(--accent)]" />
+          Only those needing something
+        </label>
+      </div>
+      {shown.map((v) => <PlacementPanel key={v.deal.id} view={v} full={full} providers={providers} clientName={nameOf(v.deal.applicant_id)} council={councilOf(v.deal.applicant_id)} />)}
     </div>
   );
 }

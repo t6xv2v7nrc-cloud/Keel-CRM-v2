@@ -21,6 +21,8 @@ import type { Channel } from './contacts';
 import type { ReceivableDraft } from './money';
 import { tableFromRows } from './lha';
 import { STATUS_WORDS } from './councils';
+import { FEE_TYPE_WORDS, INVOICER_WORDS, ROUTE_WORDS } from './placements';
+import type { Placement } from './placements';
 import type { CouncilScheme, OfficerRecord, OfficerSend, OfficerStatus, SendKind } from './councils';
 import type { LhaRateRow, LhaTable } from './lha';
 import type { ApplicantStage } from '../types/extraction';
@@ -730,6 +732,56 @@ export function useSaveScheme() {
   });
 }
 
+// ── Placements: a client's moved-in deal, who invoices and the split (0021) ──
+
+export const PLACEMENTS_UPDATE = 'Who invoices and the split need a one-off database update: run 0021_placements.sql in the Supabase SQL Editor.';
+
+/** Every placement record. `full` is false until 0021 adds the deal, partner, invoicer and split columns. */
+export function usePlacements() {
+  const q = useQuery({
+    queryKey: ['placements'],
+    queryFn: async (): Promise<{ placements: Placement[]; full: boolean }> => {
+      const { data, error } = await supabase.from('placements').select('*');
+      if (error) { if (missingTable(error)) return { placements: [], full: false }; throw error; }
+      const rows = ((data ?? []) as Placement[]).map((p) => ({ ...p, rent_pcm: p.rent_pcm == null ? null : Number(p.rent_pcm), keel_share_pct: p.keel_share_pct == null ? null : Number(p.keel_share_pct) }));
+      const full = rows.length ? 'deal_id' in rows[0] : !(await supabase.from('placements').select('deal_id').limit(1)).error;
+      return { placements: rows, full };
+    },
+  });
+  return { placements: q.data?.placements ?? [], full: q.data?.full ?? false };
+}
+
+const placementWords = (k: string, v: unknown): string => {
+  if (k === 'route') return `route ${v ? ROUTE_WORDS[v as keyof typeof ROUTE_WORDS].toLowerCase() : 'not set'}`;
+  if (k === 'fee_type') return `paid by ${v ? FEE_TYPE_WORDS[v as keyof typeof FEE_TYPE_WORDS].toLowerCase() : 'not set'}`;
+  if (k === 'invoiced_by') return `${v ? INVOICER_WORDS[v as keyof typeof INVOICER_WORDS] : 'Nobody yet'} invoices the council`;
+  if (k === 'split_agreed_in_writing') return v ? 'split agreed in writing' : 'split not agreed in writing';
+  if (k === 'split_document_url') return v ? 'agreement linked' : 'agreement link removed';
+  if (k === 'keel_share_pct') return v == null ? "Keel's share cleared" : `Keel's share ${v}%`;
+  if (k === 'renters_rights_sheet_on') return v ? `Renters' Rights information sheet given ${shortDate(String(v))}` : "Renters' Rights sheet date cleared";
+  if (k === 'provider_id') return v ? 'partner set' : 'partner cleared';
+  if (k === 'council') return `council ${v ?? 'not set'}`;
+  return k.replace(/_/g, ' ');
+};
+
+/** Record or change a placement's details; the first save makes its record. Noted on the client's timeline. */
+export function useSavePlacement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ deal, before, patch }: { deal: Deal; before: Placement | null; patch: Partial<Placement> }) => {
+      const res = before
+        ? await supabase.from('placements').update(patch).eq('id', before.id)
+        : await supabase.from('placements').insert({ applicant_id: deal.applicant_id, property_id: deal.property_id, deal_id: deal.id, move_in_date: deal.move_in_on, ...patch });
+      if (res.error) throw isMissingColumn(res.error) ? new Error(PLACEMENTS_UPDATE) : res.error;
+      // a first save names only what was filled in; later ones name what changed
+      const words = Object.entries(patch).filter(([k, v]) => (before ? (before as unknown as Record<string, unknown>)[k] !== v : v != null && v !== false && v !== ''))
+        .map(([k, v]) => placementWords(k, v));
+      if (words.length) await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: deal.applicant_id, kind: 'money', body: `Placement at ${shortAddress(deal.address)}: ${words.join('; ')}` });
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['placements'] }); qc.invalidateQueries({ queryKey: ['activities'] }); },
+  });
+}
+
 /** Save either my own settings or the team's. */
 export function useSaveSettings() {
   const qc = useQueryClient();
@@ -1084,6 +1136,18 @@ export function useMoveDeal() {
             if (!saved.error) {
               await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: applicant.id, kind: 'money', body: `Signed up: ${describe({ ...r, ...next })}` });
             }
+          }
+        }
+        // the placement: who invoices and the split are filled in on the client's Finances card (best effort before 0021)
+        const placed = await supabase.from('placements').select('id').eq('deal_id', deal.id).limit(1);
+        if (!placed.error && (placed.data ?? []).length === 0) {
+          const officer = Boolean(applicant.officer_name?.trim() || applicant.officer_email?.trim() || applicant.officer_phone?.trim());
+          const made = await supabase.from('placements').insert({
+            applicant_id: applicant.id, property_id: deal.property_id, deal_id: deal.id, council: applicant.council || applicant.referring_borough || null,
+            move_in_date: onDay, rent_pcm: property?.rent_pcm ?? null, provider_id: provider?.id ?? null, route: officer ? 'officer' : null,
+          });
+          if (!made.error) {
+            await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: applicant.id, kind: 'money', body: `Placement recorded at ${shortAddress(deal.address)}: who invoices and the split still to fill in` });
           }
         }
         const had = await supabase.from('receivables').select('id').eq('deal_id', deal.id).eq('kind', 'letting_fee').limit(1);

@@ -36,6 +36,11 @@ src/
                         (£, % of a month's rent, weeks of rent; a week is pcm × 12 ÷ 52), due dates from sign up or from the
                         first month's rent, overdue, potential fees from deals, by month, calendar and .ics file;
                         the app says "Finances", files and the activity kind keep the name "money"),
+              placements.ts (0021: a placement is a client's moved-in deal; its record (made at move-in) holds route,
+                           partner (provider_id), fee type, Keel's share %, who invoices the council, split agreed in writing
+                           and the link, Renters' Rights sheet date; amounts, invoice and paid dates are read from receivables;
+                           flags: red incentive with no written split; panel on the client's Finances card and the
+                           Finances page's Placements tab, features/money/Placement.tsx),
               invoice.ts (invoice wording, numbering, VAT split, WhatsApp and email text; client first name only to providers),
               officers.ts (housing officers gathered from clients' details, joined on email, phone, name; copy formats),
               councils.ts (0020: the officer list (HELM's `officers` table) with send status, sends log, council schemes;
@@ -145,7 +150,7 @@ supabase/checks/live-vs-repo.sql  (read-only: which migrations the live database
 
 Ridwan's brief "make Keel stop bad matches and bad emails before they happen", worked step by step in this order: diff live
 vs repo (done: live has had 0001 to 0017), LHA table (Step 1, done: 0018), property fields (Step 2, done: 0019), officers send status (Step 3, done: 0020) plus `council_schemes`, placements and
-incentives, viewings, matching, a "sendable" view, KPI dashboard. After each step: run it, test it, say what changed in 3 lines.
+incentives (Step 4, done: 0021), viewings, matching, a "sendable" view, KPI dashboard. After each step: run it, test it, say what changed in 3 lines.
 - Do not ask Ridwan to run pending migrations until he says; `supabase/checks/live-vs-repo.sql` lists what is pending.
   Live also has tables from HELM (the old name and version of Keel CRM): `leads`, `officers` (108 rows: temp, score,
   last_contact_at, prefers_sms...), `activity_log`, `notifications`, `eod_reports`, all RLS on, unused by this app.
@@ -197,7 +202,8 @@ Never commit `.env.local`. Never expose the service role key or Anthropic key to
   then 0015 (move-in checklist), then 0016 (dates clients confirmed from the Bin from when the Bin received them; the
   app already does this for new ones, and the review card's "First got in touch" date can change it), then 0017 (on ice),
   then 0018 (LHA rates and postcode areas with their source), then 0019 (property kind, suits, safety papers; backs up
-  properties into keel_backup first), then 0020 (officer send status, officer_sends, council_schemes; backs up officers).
+  properties into keel_backup first), then 0020 (officer send status, officer_sends, council_schemes; backs up officers),
+  then 0021 (placements on moved-in deals: who invoices, split in writing; backs up placements, makes one per moved-in deal).
 - Check every migration runs, twice, on a scratch Postgres before committing one:
   `npm i --no-save @electric-sql/pglite && node scripts/check-migrations.mjs` (it also tests the merge and invoice numbers).
 

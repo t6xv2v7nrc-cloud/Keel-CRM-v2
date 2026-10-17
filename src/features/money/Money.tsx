@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { Button, Card, CardHeader, Icon, UpdateNote, useToast } from '../../components/ui';
 import { useFold } from '../../lib/collapse';
 import {
-  useDeals, useDeleteReceivable, usePeople, useProperties, useProviders, useReceivables, useSaveReceivable,
+  useDeals, useDeleteReceivable, usePeople, usePlacements, useProperties, useProviders, useReceivables, useSaveReceivable,
 } from '../../lib/hooks';
 import { todayIso } from '../../lib/calls';
 import { money, moneyExact, moneyFee, shortDate } from '../../lib/format';
@@ -18,6 +18,8 @@ import type { ReceivableDraft } from '../../lib/money';
 import { DEAL_LABEL, shortAddress } from '../../lib/progress';
 import { councilOf } from '../../lib/search';
 import { waLink } from '../../lib/whatsapp';
+import { placementsFrom } from '../../lib/placements';
+import { PlacementPanel } from './Placement';
 import type { Applicant, DueFrom, FeeBasis, Provider, Receivable, ReceivableStatus } from '../../lib/types';
 
 const input = 'h-10 w-full rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-3 text-[15px] text-[var(--ink)] outline-none focus:border-[var(--accent)]';
@@ -373,6 +375,8 @@ export function MoneyCard({ applicant }: { applicant: Applicant }) {
     [deals, receivables, properties, providers, applicant.id]);
   const { placed, base, provider, rentPcm } = placementOf(applicant.id, deals, properties, providers);
   const fold = useFold('client.finances');
+  const { placements, full: placementsFull } = usePlacements();
+  const views = placementsFrom(deals.filter((d) => d.applicant_id === applicant.id), placements, receivables, providers);
   if (!ready || (mine.length === 0 && !placed && !potential)) return null;
   const officer = fromHousingOfficer(applicant);
   const addIncentive = () => setAdding(incentiveFor({ ...base, council: councilOf(applicant), fromOfficer: officer }));
@@ -385,6 +389,7 @@ export function MoneyCard({ applicant }: { applicant: Applicant }) {
     t.owedCount ? `${money(t.owed)} owed${t.overdueCount ? ` · ${t.overdueCount} overdue` : ''}` : null,
     t.signingCount ? `${t.signing ? money(t.signing) : `${t.signingCount} ${t.signingCount === 1 ? 'item' : 'items'}`} once they sign up` : null,
     !open.length && mine.length ? 'All paid' : null,
+    views.some((v) => v.flags.some((f) => f.tone === 'red')) ? 'Incentive split not in writing' : null,
     // folded away, the potential fee still shows
     !fold.open && potential ? `Potential ${potential.amount != null ? moneyFee(potential.amount) : 'fee not known'}` : null,
   ].filter(Boolean).join(' · ') || undefined;
@@ -397,6 +402,7 @@ export function MoneyCard({ applicant }: { applicant: Applicant }) {
       </CardHeader>
       {fold.open && <div className="flex flex-col gap-2 px-5 py-3">
         {adding && <ReceivableForm initial={adding} council={councilOf(applicant)} onDone={() => setAdding(null)} />}
+        {views.map((v) => <PlacementPanel key={v.deal.id} view={v} full={placementsFull} providers={providers} council={councilOf(applicant)} />)}
         {potential && (
           <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-[var(--surface-2)] px-3 py-2 text-[14px] text-[var(--ink)]">
             <Icon name="trend" size={15} className="text-[var(--accent)]" />

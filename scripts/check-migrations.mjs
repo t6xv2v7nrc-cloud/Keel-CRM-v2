@@ -166,13 +166,39 @@ check('HELM columns and rows are kept; new ones start active', kept.id === 'o-1'
 const newId = (await helm.query(`insert into officers (name) values ('New One') returning id`)).rows[0].id;
 check('a text id with no default gets one, so Keel can add officers', typeof newId === 'string' && newId.length > 10, String(newId));
 
+// 0021: placements hang off moved-in deals; made for every moved-in deal once, noted on the timeline
+const fresh21 = await freshDb({ upTo: '0020' });
+await fresh21.exec(`
+  insert into providers (id, name, tag) values ('88888888-8888-8888-8888-888888888888', 'Test Partner', 'TSTP');
+  insert into applicants (id, full_name, stage, council, officer_email) values ('99999999-9999-9999-9999-999999999999', 'Placed Person', 'placed', 'Harrow', 'o@harrow.example');
+  insert into applicants (id, full_name, stage) values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Still Looking', 'viewing');
+  insert into properties (id, address_line, rent_pcm, provider_id) values ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '1 Moved Road', 1100, '88888888-8888-8888-8888-888888888888');
+  insert into deals (id, applicant_id, property_id, address, status, move_in_on) values
+    ('cccccccc-cccc-cccc-cccc-cccccccccccc', '99999999-9999-9999-9999-999999999999', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '1 Moved Road', 'moved_in', '2026-10-01'),
+    ('dddddddd-dddd-dddd-dddd-dddddddddddd', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', null, '2 Viewing Road', 'viewing', null);
+`);
+for (let i = 0; i < 2; i++) await fresh21.exec(readFileSync(dir + '0021_placements.sql', 'utf8'));
+const pl = (await fresh21.query(`select deal_id, council, move_in_date, rent_pcm, provider_id, route, split_agreed_in_writing from placements`)).rows;
+check('one placement per moved-in deal, made once, with council, move-in, rent, partner and route',
+  pl.length === 1 && pl[0].council === 'Harrow' && Number(pl[0].rent_pcm) === 1100 && pl[0].provider_id === '88888888-8888-8888-8888-888888888888' && pl[0].route === 'officer' && pl[0].split_agreed_in_writing === false, JSON.stringify(pl));
+const plAct = (await fresh21.query(`select count(*)::int as n from activities where body like 'Placement recorded%'`)).rows[0].n;
+check('each placement made is noted on the timeline, once', plAct === 1, String(plAct));
+let plBad = 0;
+for (const sql of [`update placements set route = 'walk_in'`, `update placements set fee_type = 'tips'`, `update placements set invoiced_by = 'council'`, `update placements set keel_share_pct = 120`,
+  `insert into placements (applicant_id, deal_id) values ('99999999-9999-9999-9999-999999999999', 'cccccccc-cccc-cccc-cccc-cccccccccccc')`]) {
+  try { await fresh21.exec(sql); } catch { plBad++; }
+}
+check('an unknown route, fee type or invoicer, a share over 100%, or a second placement for one deal is refused', plBad === 5, String(plBad));
+const plBackup = (await fresh21.query(`select count(*)::int as n from keel_backup.placements_before_0021`)).rows[0].n;
+check('placements are backed up first', plBackup === 0);
+
 // The read-only check of a live database against these files
 const liveCheck = readFileSync(new URL('../supabase/checks/live-vs-repo.sql', import.meta.url).pathname, 'utf8');
 const status = async (d) => Object.fromEntries((await d.query(liveCheck)).rows.map((r) => [r.item, [r.status, r.detail]]));
 const full = await status(db);
 const numbered = Object.keys(full).filter((k) => /^\d{4}$/.test(k));
 check('live check: every migration reads as done on a database that has had them all (data-only ones cannot be told)',
-  numbered.length === 20 && numbered.every((k) => full[k][0] === 'done' || (['0003', '0016'].includes(k) && full[k][0].startsWith('cannot tell'))), JSON.stringify(full));
+  numbered.length === 21 && numbered.every((k) => full[k][0] === 'done' || (['0003', '0016'].includes(k) && full[k][0].startsWith('cannot tell'))), JSON.stringify(full));
 const behind = await freshDb();
 await behind.exec(`alter table properties drop column lha_area; drop table postcode_brma;
   create table eod_reports (id uuid primary key, report_date date, data jsonb);`);
