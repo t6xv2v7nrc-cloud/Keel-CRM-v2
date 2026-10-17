@@ -9,8 +9,15 @@ src/
   lib/        supabase.ts, matching.ts, format.ts (phone/E.164, money, dates),
               settings.ts (team rules + my settings, tier logic types), tiering.ts (tier engine),
               calls.ts, propertyMatch.ts, readNotes.ts (form answers from free text; `readHouseholdText` reads who is moving
-                           in as a whole: any child, "my 13-year-old daughter", "single mum", makes a family; also used for
-                           pasted enquiries), contacts.ts (notes on a client and last contact: activities kind "contact"
+                           in as a whole: any child, "my 13-year-old daughter", "single mum", makes a family; writing as one
+                           person and asking only for a studio or 1 bed, nobody else mentioned, reads as single; `readAgeText`
+                           reads "I'm 28"; also used for pasted enquiries),
+              clientProfile.ts (the Profile card, first on a client's page: household, age and age band (date of birth,
+                           else read), the rate they are paid (families by bedrooms; couples, 35 plus and SAR-exempt the 1 bed
+                           rate; other under-35s the shared rate), exemptions to check, benefits, wants ("Area: london" is
+                           London), council and incentive, where to place them (LHA areas of available matches within the
+                           LHA they are paid there; London clients stay in London), what to ask next; one-tap fill-in of the
+                           notes reader's sure answers (never overwrites an answer)), contacts.ts (notes on a client and last contact: activities kind "contact"
                            ("WhatsApp: ...") or "note"; calls and WhatsApp sends count as contact; no migration),
               lha.ts (LHA area, size rules and rent-vs-LHA check; rates from the database (lha_rates, 0018, loaded from the
                       gov.uk CSV with source and start date), else the built-in src/data/lha-rates.ts, marked not checked;

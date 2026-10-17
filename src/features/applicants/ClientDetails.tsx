@@ -10,6 +10,7 @@ import { effectiveTier } from '../../lib/search';
 import { STAGE_ORDER } from '../../lib/progress';
 import { selfContainedFrom, withSelfContained } from '../../lib/propertyMatch';
 import { useFold } from '../../lib/collapse';
+import { shortDate } from '../../lib/format';
 import { confidenceWord, readNotes } from '../../lib/readNotes';
 import type { Evidence, Flag, Suggestion } from '../../lib/readNotes';
 import type { Applicant } from '../../lib/types';
@@ -136,6 +137,11 @@ export function ClientDetails({ applicant }: { applicant: Applicant }) {
           }} />
           <Box label="Phone" value={a.phone ?? ''} mono placeholder="07..." onSave={text('Phone', 'phone')} />
           <Box label="Email" value={a.email ?? ''} placeholder="name@example.com" onSave={text('Email', 'email')} />
+          <Box label="Date of birth" type="date" value={a.date_of_birth ?? ''} onSave={(v) => {
+            const value = v || null;
+            if ((a.date_of_birth ?? null) === value) return;
+            save({ date_of_birth: value }, value ? `Date of birth set to ${shortDate(value)}` : 'Date of birth cleared');
+          }} />
         </Section>
 
         <Section icon="users" title="Household and budget">
@@ -373,7 +379,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 
 /** A text or number box that saves when you leave it or press Enter. */
 function Box({ label, value, onSave, placeholder, mono = false, type = 'text', prefix, wide = false }: {
-  label: string; value: string; onSave: (v: string) => void; placeholder?: string; mono?: boolean; type?: 'text' | 'number'; prefix?: string; wide?: boolean;
+  label: string; value: string; onSave: (v: string) => void; placeholder?: string; mono?: boolean; type?: 'text' | 'number' | 'date'; prefix?: string; wide?: boolean;
 }) {
   const [v, setV] = useState(value);
   const [was, setWas] = useState(value);

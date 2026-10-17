@@ -2,6 +2,7 @@
 // from phone to computer). Cards added to Keel later appear in their standard place for everyone.
 
 export const CLIENT_CARDS = [
+  { key: 'profile', label: 'Profile' },
   { key: 'notes', label: 'Notes and contact' },
   { key: 'progress', label: 'Progress' },
   { key: 'finances', label: 'Finances' },

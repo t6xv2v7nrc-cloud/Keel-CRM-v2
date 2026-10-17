@@ -16,6 +16,7 @@ import { dayWord, todayIso } from '../../lib/calls';
 import type { Activity, Applicant } from '../../lib/types';
 import { CallsNeedUpdate } from '../calls/CallsPage';
 import { ClientDetails } from './ClientDetails';
+import { ProfileCard } from './ProfileCard';
 import { NotesCard } from './NotesCard';
 import { ShareClient } from './ShareClient';
 import { IceBand, IcePanel } from './IceClient';
@@ -77,6 +78,7 @@ export function ApplicantPage() {
   };
 
   const card: Record<ClientCard, ReactNode> = {
+    profile: <ProfileCard applicant={applicant} />,
     notes: <NotesCard applicant={applicant} activities={activities} calls={mine} />,
     progress: <ProgressCard applicant={applicant} />,
     finances: <MoneyCard applicant={applicant} />,

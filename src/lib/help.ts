@@ -192,6 +192,16 @@ export const HELP = {
       'Lists are saved to the account, so you both see them on every device. Mark a property as let when it goes, or purge old lists under Saved lists.',
     ],
   },
+  profile: {
+    title: 'Profile',
+    body: [
+      'Everything Keel knows or can work out about a client, put together to say where they can be placed. Each answer says where it came from: recorded on the form, read from their message, or worked out.',
+      'Who is moving in comes from the form, or from what they wrote: someone writing as one person who only asks for a studio or a 1 bed reads as a single adult. Their age comes from their date of birth, or an age they gave.',
+      'The rate they are paid: families by the bedrooms their children need; couples, people 35 or over, and under-35s exempt from the shared rate, the 1 bed rate; other under-35s, the shared accommodation rate. Possible exemptions (PIP, leaving care, a hostel stay, MAPPA, domestic abuse) are pointed out to check, never assumed.',
+      'Where to place them: the LHA areas of the available properties that match them, counting those whose rent is within the LHA they would be paid there. Focus boroughs are starred. Ask next lists the answers that would change where they can go.',
+      'Fill them in applies only the answers Keel is sure of from their notes, and never changes an answer already given. Every change goes on their timeline.',
+    ],
+  },
   councils: {
     title: 'Councils',
     body: [

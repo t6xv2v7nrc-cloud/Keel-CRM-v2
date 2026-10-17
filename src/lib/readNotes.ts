@@ -210,6 +210,37 @@ export function readHouseholdText(text: string): HouseholdReading | null {
   // "Single, sofa surfing..." at the start of a sentence (not "single bed", "single mum"...)
   const bare = /(?:^|[.\n]\s*)(single)\b(?![- ](?:bed|room|parent|mum|mother|dad|father|glazing))/i.exec(text);
   if (bare) return { type: 'single', confidence: 0.65, at: bare.index + bare[0].length - bare[1].length, length: bare[1].length };
+  // Nobody else is mentioned and all they ask for is a studio or a 1 bed: most likely one adult on their own, more so when
+  // they write as one person ("I am interested in a 1 bedroom or studio flat"). "We", "us" or anything bigger rules it out.
+  const small = /\b(?:studio|bedsit|(?:1|one)\s*[- ]?\s*bed(?:room)?s?)\b/i.exec(text);
+  const bigger = /\b(?:[2-9]|two|three|four|five)\s*[- ]?\s*bed(?:room)?s?\b|\b(?:1|one)\s*(?:-|–|to|or)\s*(?:2|two)\s*[- ]?\s*bed/i.test(text);
+  const plural = /\b(?:we|we'?re|we'?ve|us|our|ours|ourselves)\b/i.test(text);
+  if (small && !bigger && !plural && !sharer && !partner) {
+    const me = /\b(?:i|i'?m|i'?ve|i'?d|me|my|myself)\b/i.test(text);
+    return { type: 'single', confidence: me ? 0.7 : 0.55, adults: 1, at: small.index, length: small[0].length,
+      note: me ? 'Writes as one person and asks for a studio or 1 bed' : 'Asks for a studio or 1 bed, nobody else mentioned' };
+  }
+  return null;
+}
+
+export interface AgeReading {
+  /** their age in years, when they give it */
+  age: number | null;
+  /** under or over 35, when that is all they say */
+  band: 'under_35' | '35_plus' | null;
+  at: number;
+  length: number;
+}
+
+/** The client's own age, from what they wrote ("I'm 28", "I am a 40 year old", "aged 33", "I'm over 35"); null if they do not say. */
+export function readAgeText(text: string): AgeReading | null {
+  const own = /\b(?:i'?m|i am|aged|age:?)\s+(?:a\s+)?(\d{2})\b(?:\s*[- ]?(?:years?|yrs?)(?:[- ]?old)?)?(?!\s*(?:%|k\b|pounds|minutes?|mins?|hours?|days?|weeks?|months?|miles?|bed|£))/i.exec(text);
+  if (own && !negated(text, own.index)) {
+    const age = Number(own[1]);
+    if (age >= 16 && age <= 99) return { age, band: age < 35 ? 'under_35' : '35_plus', at: own.index, length: own[0].length };
+  }
+  const band = /\b(?:i'?m|i am|aged)\s+(under|over|below|above)\s+35\b/i.exec(text);
+  if (band) return { age: null, band: /under|below/i.test(band[1]) ? 'under_35' : '35_plus', at: band.index, length: band[0].length };
   return null;
 }
 
