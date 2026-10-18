@@ -54,7 +54,7 @@ export interface OfficerRecord {
   updated_at?: string | null;
 }
 
-export interface OfficerSend { id: string; officer_id: string; kind: SendKind; address: string | null; note: string | null; sent_at: string; sent_by: string | null }
+export interface OfficerSend { id: string; officer_id: string; kind: SendKind; address: string | null; note: string | null; sent_at: string; sent_by: string | null; property_ids?: string[]; subject?: string | null }
 
 export interface CouncilScheme {
   id: string;

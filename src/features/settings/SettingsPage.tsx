@@ -12,6 +12,7 @@ import type { AppSettings, InvoiceSettings, Target, Targets } from '../../lib/se
 import { URGENCY_LABEL } from '../../lib/tiering';
 import { TierLogicEditor } from './TierLogicEditor';
 import { LhaSettings } from './LhaSettings';
+import { BusinessDetailsCard } from './BusinessDetails';
 import { FocusBoroughs } from './FocusBoroughs';
 import { WhatsAppSettings } from './WhatsAppSettings';
 import { ProvidersTab } from './ProvidersTab';
@@ -273,6 +274,7 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
 
       <MoneySettings draft={draft} set={set} />
       <InvoiceSettingsCard draft={draft} set={set} />
+      <BusinessDetailsCard draft={draft} set={set} />
 
       <Card>
         <CardHeader icon="flag" title="Client progress" help="progress" />

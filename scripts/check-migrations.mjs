@@ -227,13 +227,29 @@ check('an unknown age band or benefit cap is refused', mBad === 2, String(mBad))
 const m23b = (await fresh23.query(`select count(*)::int as n from keel_backup.applicants_before_0023`)).rows[0].n;
 check('applicants are backed up first', m23b === 1, String(m23b));
 
+// 0024: the Mailer: photo links on properties (3 at most), the properties and subject of each officer send
+const fresh24 = await freshDb({ upTo: '0023' });
+await fresh24.exec(`insert into properties (id, address_line) values ('cdcdcdcd-cdcd-cdcd-cdcd-cdcdcdcdcdcd', '1 Photo Road');
+  insert into officers (id, name, email) values ('efefefef-efef-efef-efef-efefefefefef', 'Mail Person', 'mp@example.test');
+  insert into officer_sends (officer_id, kind, address) values ('efefefef-efef-efef-efef-efefefefefef', 'bulk', 'mp@example.test');`);
+for (let i = 0; i < 2; i++) await fresh24.exec(readFileSync(dir + '0024_mailer.sql', 'utf8'));
+const p24 = (await fresh24.query(`select photo_urls from properties`)).rows[0];
+const s24 = (await fresh24.query(`select property_ids, subject from officer_sends`)).rows[0];
+check('properties gain photo links, sends their properties and subject (empty to start)', Array.isArray(p24.photo_urls) && p24.photo_urls.length === 0 && Array.isArray(s24.property_ids) && s24.subject === null, JSON.stringify({ p24, s24 }));
+await fresh24.exec(`update properties set photo_urls = array['https://a', 'https://b', 'https://c']`);
+let pBad = 0;
+try { await fresh24.exec(`update properties set photo_urls = array['1', '2', '3', '4']`); } catch { pBad++; }
+check('a fourth photo link is refused', pBad === 1);
+const b24 = (await fresh24.query(`select (select count(*)::int from keel_backup.properties_before_0024) as p, (select count(*)::int from keel_backup.officer_sends_before_0024) as s`)).rows[0];
+check('properties and officer sends are backed up first', b24.p === 1 && b24.s === 1, JSON.stringify(b24));
+
 // The read-only check of a live database against these files
 const liveCheck = readFileSync(new URL('../supabase/checks/live-vs-repo.sql', import.meta.url).pathname, 'utf8');
 const status = async (d) => Object.fromEntries((await d.query(liveCheck)).rows.map((r) => [r.item, [r.status, r.detail]]));
 const full = await status(db);
 const numbered = Object.keys(full).filter((k) => /^\d{4}$/.test(k));
 check('live check: every migration reads as done on a database that has had them all (data-only ones cannot be told)',
-  numbered.length === 23 && numbered.every((k) => full[k][0] === 'done' || (['0003', '0016'].includes(k) && full[k][0].startsWith('cannot tell'))), JSON.stringify(full));
+  numbered.length === 24 && numbered.every((k) => full[k][0] === 'done' || (['0003', '0016'].includes(k) && full[k][0].startsWith('cannot tell'))), JSON.stringify(full));
 const behind = await freshDb();
 await behind.exec(`alter table properties drop column lha_area; drop table postcode_brma;
   create table eod_reports (id uuid primary key, report_date date, data jsonb);`);

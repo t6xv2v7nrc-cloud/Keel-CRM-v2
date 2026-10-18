@@ -32,7 +32,7 @@ export const MIN_PHOTOS = 3;
 
 type ForChecks = Pick<Property, 'address_line' | 'postcode' | 'borough' | 'property_type' | 'bedrooms' | 'rent_pcm' | 'rent_text' | 'notes'>
   & Partial<Pick<Property, 'lha_area' | 'accommodation_type' | 'suitable_for' | 'gas_expiry' | 'no_gas' | 'eicr_expiry' | 'epc_rating'
-    | 'licence_needed' | 'licence_no' | 'licence_expiry' | 'alarms_checked' | 'photo_count'>>;
+    | 'licence_needed' | 'licence_no' | 'licence_expiry' | 'alarms_checked' | 'photo_count' | 'photo_urls'>>;
 
 /** What kind of place: as set, or read from its type and notes (then `estimated`). */
 export function accommodationOf(p: Pick<Property, 'property_type' | 'notes'> & Partial<Pick<Property, 'accommodation_type'>>):
@@ -123,7 +123,8 @@ export function checksFor(p: ForChecks, today = todayIso()): Checks {
   const suits = (p.suitable_for ?? []).filter((s): s is Suits => (SUITS as readonly string[]).includes(s));
   const london = inGreaterLondon(p);
   const papers = papersFor(p, today);
-  const photos = p.photo_count ?? 0;
+  // photos ready to send: as counted, or the links saved for alerts (0024), whichever is more
+  const photos = Math.max(p.photo_count ?? 0, (p.photo_urls ?? []).filter(Boolean).length);
 
   const flags: Flag[] = [];
   if (gap !== null && gap > 0.005) flags.push({ tone: 'red', key: 'over_lha', words: `${money(gap)} over LHA`, detail: `The rent is above the ${lha!.size === 'shared' ? 'shared' : `${lha!.size} bed`} LHA rate of ${money(lha!.rate)} in ${lha!.area.brma}.` });

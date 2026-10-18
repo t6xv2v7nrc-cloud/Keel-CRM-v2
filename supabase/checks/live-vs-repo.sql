@@ -36,7 +36,8 @@ with expect(migration, kind, name) as (values
   ('0020', 'column', 'officers.status'), ('0020', 'column', 'officers.send_to_mailbox'), ('0020', 'table', 'officer_sends'), ('0020', 'table', 'council_schemes'),
   ('0021', 'column', 'placements.deal_id'), ('0021', 'column', 'placements.split_agreed_in_writing'), ('0021', 'column', 'placements.renters_rights_sheet_on'),
   ('0022', 'column', 'deals.viewing_outcome'), ('0022', 'column', 'deals.outcome_sent_to_officer_at'), ('0022', 'column', 'applicants.officer_replied_at'),
-  ('0023', 'column', 'applicants.postcode_area'), ('0023', 'column', 'applicants.age_band'), ('0023', 'column', 'applicants.benefit_cap')
+  ('0023', 'column', 'applicants.postcode_area'), ('0023', 'column', 'applicants.age_band'), ('0023', 'column', 'applicants.benefit_cap'),
+  ('0024', 'column', 'properties.photo_urls'), ('0024', 'column', 'officer_sends.property_ids'), ('0024', 'column', 'officer_sends.subject')
 ), found as (
   select e.migration, e.kind, e.name, case e.kind
     when 'table' then exists (select 1 from information_schema.tables t

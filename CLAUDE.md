@@ -62,6 +62,17 @@ src/
                            THE HARD RULE `mailingList`: every export, mailer list and bulk action of officer addresses goes
                            through it: no left, on leave, opted out, bounced, or housing officer not opted in or nominated;
                            a shared mailbox (send_to_mailbox) replaces personal emails; list health; focus boroughs),
+              mailer.ts (Step 7, 0024: the Mailer at /mailer, features/mailer/MailerPage.tsx: `sendables` (available, no
+                         `sendBlockers`, LHA area and rent known), nothing sent until `mailerReady` (gov.uk rates loaded);
+                         alerts: one property, to officers of nominated clients it fits (`alertRecipients`); monthly digest:
+                         one borough, `digestPicks` 5 to 8, `digestRecipients` flags a bulk send in the last 30 days;
+                         recipients only via `mailingList`; out-of-London never to London officers unless included;
+                         plain text, subject "[Borough] | type | £rent pcm | LHA £rate | available date", LHA line,
+                         `complianceLine`, up to 3 `photo_urls`, credentials and a STOP line; never client names or
+                         incentives; every send recorded (`useRecordMailerSend`: officer_sends with subject and
+                         property_ids, last_sent_at, property and officer history); `oldMailerBackup` for the separate
+                         Keel Mailer's Restore box), business.ts (Team settings `business`: redress, CMP, LLAS, ICO, fees,
+                         unsubscribe email; blank ones left out; `signature` also signs the officer outcome email),
               clipboard.ts (copy with a fallback for older phones), files.ts (save a file, share sheet on phones),
               duplicates.ts (clients entered twice: same phone, email or name; a contact on more than 3 clients is shared,
                              not a duplicate; merging is the `merge_applicants` database function, 0014),
@@ -170,7 +181,7 @@ supabase/checks/live-vs-repo.sql  (read-only: which migrations the live database
 
 Ridwan's brief "make Keel stop bad matches and bad emails before they happen", worked step by step in this order: diff live
 vs repo (done: live has had 0001 to 0017), LHA table (Step 1, done: 0018), property fields (Step 2, done: 0019), officers send status (Step 3, done: 0020) plus `council_schemes`, placements and
-incentives (Step 4, done: 0021), viewings (Step 5, done: 0022), matching (Step 6, done: 0023), a "sendable" view, KPI dashboard. After each step: run it, test it, say what changed in 3 lines.
+incentives (Step 4, done: 0021), viewings (Step 5, done: 0022), matching (Step 6, done: 0023), the Mailer with its "sendable" view (Step 7, done: 0024), KPI dashboard. After each step: run it, test it, say what changed in 3 lines.
 - Do not ask Ridwan to run pending migrations until he says; `supabase/checks/live-vs-repo.sql` lists what is pending.
   Live also has tables from HELM (the old name and version of Keel CRM): `leads`, `officers` (108 rows: temp, score,
   last_contact_at, prefers_sms...), `activity_log`, `notifications`, `eod_reports`, all RLS on, unused by this app.
@@ -180,7 +191,8 @@ incentives (Step 4, done: 0021), viewings (Step 5, done: 0022), matching (Step 6
   `keel_backup` schema first (never into `public`, which the API serves). Never delete or rename columns; add new ones.
   Keep RLS; new tables get RLS on, signed-in only. Nothing is ever exposed publicly.
 - Never type in or invent LHA figures: they come from the gov.uk CSV (or one Ridwan supplies), with source and start date.
-- keellettings.com and the Keel Mailer (a separate browser tool) are not in this repo: do not touch them.
+- keellettings.com and the Keel Mailer (a separate browser tool) are not in this repo: do not touch them. Officer emails
+  are now sent from Keel's own Mailer page; the old tool only gets a clean list to paste into its Restore box.
 - Decided for matching (Step 6): the LHA rule wins for everyone (over-LHA hidden unless the warning switch is on), the
   £1,100 UC-only cap stays. Out-of-London stock is never offered to London officers by default (amber when sent).
 - Money is in council incentives (£1,500 to £8,000), not fees: show expected Keel income per match, incentive-bearing first.
@@ -231,7 +243,8 @@ Never commit `.env.local`. Never expose the service role key or Anthropic key to
   then 0021 (placements on moved-in deals: who invoices, split in writing; backs up placements, makes one per moved-in deal),
   then 0022 (viewing outcome, reason lost, outcome sent to the officer on deals; nominated_at and officer_replied_at on
   applicants; backs up deals and applicants, fills nothing in), then 0023 (postcode_area, age_band, benefit_cap on
-  applicants for matching; backs up applicants).
+  applicants for matching; backs up applicants), then 0024 (photo_urls on properties, property_ids and subject on
+  officer_sends, for the Mailer; backs up both).
 - Check every migration runs, twice, on a scratch Postgres before committing one:
   `npm i --no-save @electric-sql/pglite && node scripts/check-migrations.mjs` (it also tests the merge and invoice numbers).
 

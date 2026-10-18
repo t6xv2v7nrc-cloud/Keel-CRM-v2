@@ -13,12 +13,15 @@ type CheckField = typeof CHECK_FIELDS[number];
 
 export type EditableProperty = Pick<Property,
   'address_line' | 'postcode' | 'area' | 'borough' | 'property_type' | 'bedrooms' | 'rent_pcm' | 'rent_text' | 'bills' | 'furnished' | 'available_from' | 'notes'>
-  & Partial<Pick<Property, CheckField>>;
+  & Partial<Pick<Property, CheckField | 'photo_urls'>>;
 
 export const EDITABLE: ReadonlyArray<keyof EditableProperty> = [
   'address_line', 'postcode', 'area', 'borough', 'property_type', 'bedrooms', 'rent_pcm', 'rent_text', 'bills', 'furnished', 'available_from', 'notes',
-  ...CHECK_FIELDS,
+  ...CHECK_FIELDS, 'photo_urls',
 ];
+
+/** Whether a saved property has the 0024 photo links (a property only on this device can always hold them). */
+export const hasPhotoLinks = (p: Partial<Property>, local = false) => local || 'photo_urls' in p;
 
 /** Whether a saved property has the 0019 columns (a property only on this device can always hold them). */
 export const hasCheckFields = (p: Partial<Property>, local = false) => local || 'gas_expiry' in p;
@@ -53,7 +56,7 @@ const LABEL: Record<keyof EditableProperty, string> = {
   accommodation_type: 'Kind', bills_included: 'Bills included', floor: 'Floor', lift: 'Lift', suitable_for: 'Suits',
   gas_expiry: 'Gas certificate', no_gas: 'No gas', eicr_expiry: 'EICR', epc_rating: 'EPC', epc_sap: 'SAP score',
   licence_needed: 'Licence needed', licence_no: 'Licence number', licence_expiry: 'Licence', alarms_checked: 'Alarms checked',
-  photo_count: 'Photos', prs_landlord_id: 'PRS landlord ID', prs_property_id: 'PRS property ID',
+  photo_count: 'Photos', prs_landlord_id: 'PRS landlord ID', prs_property_id: 'PRS property ID', photo_urls: 'Photo links',
 };
 const DATES = new Set<keyof EditableProperty>(['available_from', 'gas_expiry', 'eicr_expiry', 'licence_expiry', 'alarms_checked']);
 const label = (map: Record<string, string>, v: string) => map[v] ?? v;
@@ -61,6 +64,7 @@ const label = (map: Record<string, string>, v: string) => map[v] ?? v;
 const shown = (k: keyof EditableProperty, v: unknown): string => {
   if (Array.isArray(v)) {
     if (v.length === 0) return 'none';
+    if (k === 'photo_urls') return `${v.length} ${v.length === 1 ? 'link' : 'links'}`;
     const map: Record<string, string> = k === 'suitable_for' ? SUITS_LABEL : k === 'bills_included' ? BILLS_LABEL : {};
     return v.map((x) => label(map, String(x))).join(', ');
   }

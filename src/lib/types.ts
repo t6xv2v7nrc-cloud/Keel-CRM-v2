@@ -92,6 +92,7 @@ export interface Property {
   licence_expiry?: string | null;
   alarms_checked?: string | null;
   photo_count?: number | null;
+  photo_urls?: string[];          // 0024: up to 3 photo links, put in alerts
   prs_landlord_id?: string | null;
   prs_property_id?: string | null;
   created_at: string;

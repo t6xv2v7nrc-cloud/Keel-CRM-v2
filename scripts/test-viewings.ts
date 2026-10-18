@@ -117,7 +117,7 @@ check('no email saved: nothing to send to', caseworkAddress(client({ officer_ema
 
 const mail = outcomeEmail(fresh, { ...deal({ status: 'interested' }), viewing_outcome: 'no_show' }, 'Ridwan');
 check('the email greets the officer and names the client', mail.subject === 'Amira Hassan: viewing at Flat 2, 10 Station Road' && mail.body.startsWith('Hi Jo,'));
-check('a no-show asks the officer to check in', /did not make it to the viewing/.test(mail.body) && /Ridwan\nKeel Lettings$/.test(mail.body));
+check('a no-show asks the officer to check in, signed with the business', /did not make it to the viewing/.test(mail.body) && /Ridwan\nKeel Lettings Ltd$/.test(mail.body), mail.body.slice(-60));
 check('a lost one gives the reason in words', /\(too small\)/.test(outcomeEmail(fresh, deal({ status: 'fell_through', viewing_outcome: 'declined', reason_lost: 'too_small' })).body));
 check('no em dashes in the email', !/—/.test(Object.values(mail).join(' ')));
 check('mailto link keeps the address readable and encodes the rest', mailtoLink('jo@harrow.gov.uk', { subject: 'A B', body: 'x\ny' }) === 'mailto:jo@harrow.gov.uk?subject=A%20B&body=x%0Ay');

@@ -5,7 +5,7 @@ import { Button, Card, Empty, Icon, PageHeader, UpdateNote, useToast } from '../
 import { copyText } from '../../lib/clipboard';
 import { shortDate } from '../../lib/format';
 import { todayIso } from '../../lib/calls';
-import { officersFrom } from '../../lib/officers';
+import { nominationsFrom } from '../../lib/mailer';
 import {
   addressBox, boroughOf, bulkSendsIn30, byFocus, focusRank, hasSendStatus, listHealth, mailingList, nominatedAt, optedIn, needsOptIn,
   ROUTE_WORDS, sendAddress, statusOf, STATUS_WORDS, whyNotSendable,
@@ -63,15 +63,7 @@ function OfficersView() {
   const today = todayIso();
 
   // officers named on clients have nominated a client: when their newest client arrived
-  const fromClients = useMemo(() => {
-    const byEmail = new Map<string, string>(), byPhone = new Map<string, string>();
-    for (const o of officersFrom(applicants)) {
-      if (o.email) byEmail.set(o.email.toLowerCase(), o.latest);
-      const d = (o.phone ?? '').replace(/\D/g, '').replace(/^44/, '0');
-      if (d.length >= 10) byPhone.set(d, o.latest);
-    }
-    return (o: OfficerRecord) => byEmail.get(o.email?.toLowerCase().trim() ?? '') ?? byPhone.get((o.phone ?? '').replace(/\D/g, '').replace(/^44/, '0')) ?? null;
-  }, [applicants]);
+  const fromClients = useMemo(() => nominationsFrom(applicants), [applicants]);
 
   const sorted = useMemo(() => byFocus(officers), [officers]);
   const h = useMemo(() => listHealth(officers, sends, { nominatedFromClients: fromClients }), [officers, sends, fromClients]);

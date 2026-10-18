@@ -14,6 +14,7 @@ import { PropertiesPage } from './features/properties/PropertiesPage';
 import { CallsPage } from './features/calls/CallsPage';
 import { MoneyPage } from './features/money/MoneyPage';
 import { CouncilsPage } from './features/councils/CouncilsPage';
+import { MailerPage } from './features/mailer/MailerPage';
 import { InvoicePage } from './features/money/InvoicePage';
 import { SettingsPage } from './features/settings/SettingsPage';
 import { CommandSearch, openSearch } from './features/search/CommandSearch';
@@ -39,6 +40,7 @@ const NAV: Array<{ to: string; label: string; icon: IconName }> = [
   { to: '/properties', label: 'Properties', icon: 'building' },
   { to: '/finances', label: 'Finances', icon: 'pound' },
   { to: '/councils', label: 'Councils', icon: 'users' },
+  { to: '/mailer', label: 'Mailer', icon: 'mail' },
 ];
 
 export default function App() {
@@ -158,6 +160,7 @@ function Shell() {
           <Route path="/calls" element={<CallsPage />} />
           <Route path="/finances" element={<MoneyPage />} />
           <Route path="/councils" element={<CouncilsPage />} />
+          <Route path="/mailer" element={<MailerPage />} />
           <Route path="/finances/invoice/:id" element={<InvoicePage />} />
           {/* The page's earlier addresses; old links and bookmarks still land */}
           <Route path="/receivables" element={<Navigate to="/finances" replace />} />

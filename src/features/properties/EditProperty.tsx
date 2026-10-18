@@ -6,7 +6,7 @@ import { isLocalProperty } from '../../lib/localProperties';
 import { ACCOMMODATION_LABEL, accommodationOf, BILLS, BILLS_LABEL, MIN_PHOTOS, SUITS, SUITS_LABEL } from '../../lib/propertyChecks';
 import { BOROUGHS } from '../../lib/london';
 import { normalisePostcode } from '../../lib/format';
-import { bedsOfType, hasCheckFields, rentFrom, rentWords, TYPE_OPTIONS } from '../../lib/propertyEdit';
+import { bedsOfType, hasCheckFields, hasPhotoLinks, rentFrom, rentWords, TYPE_OPTIONS } from '../../lib/propertyEdit';
 import type { EditableProperty } from '../../lib/propertyEdit';
 import type { AccommodationType, Property } from '../../lib/types';
 
@@ -47,6 +47,10 @@ export function EditProperty({ p, onDone }: { p: Property; onDone: () => void })
   const setCheck = <K extends keyof CheckForm>(k: K, v: CheckForm[K]) => setC((x) => ({ ...x, [k]: v }));
   const toggle = (k: 'bills_included' | 'suitable_for', v: string) => setC((x) => ({ ...x, [k]: x[k].includes(v) ? x[k].filter((y) => y !== v) : [...x[k], v] }));
   const guess = accommodationOf({ property_type: f.property_type || null, notes: f.notes || null });
+  // photo links for alerts: only once 0024 is run
+  const canLink = hasPhotoLinks(p, isLocalProperty(p.id));
+  const [links, setLinks] = useState<string[]>(() => [0, 1, 2].map((i) => p.photo_urls?.[i] ?? ''));
+  const linksOk = links.every((l) => !l.trim() || /^https?:\/\/\S+$/.test(l.trim()));
 
   const save = () => {
     const typeChanged = (f.property_type || null) !== (p.property_type ?? null);
@@ -71,6 +75,7 @@ export function EditProperty({ p, onDone }: { p: Property; onDone: () => void })
         licence_expiry: c.licence_expiry || null, alarms_checked: c.alarms_checked || null, photo_count: whole(c.photo_count),
         prs_landlord_id: c.prs_landlord_id.trim() || null, prs_property_id: c.prs_property_id.trim() || null,
       } : {}),
+      ...(canLink ? { photo_urls: links.map((l) => l.trim()).filter(Boolean) } : {}),
     };
     update.mutate({ p, next }, {
       onSuccess: (n) => { toast(n ? `Saved ${p.address_line.split(',')[0]}` : 'Nothing changed', 'success'); onDone(); },
@@ -138,6 +143,16 @@ export function EditProperty({ p, onDone }: { p: Property; onDone: () => void })
             <Labelled label="Photos ready to send" hint={`At least ${MIN_PHOTOS} before it can be sent`}>
               <input type="number" min={0} inputMode="numeric" value={c.photo_count} onChange={(e) => setCheck('photo_count', e.target.value)} className={box} aria-label="Photos ready to send" />
             </Labelled>
+            {canLink && (
+              <Labelled label="Photo links for alerts (up to 3)" wide hint={linksOk ? 'A shared album or photo link each, starting https://' : 'Each link must start https://'}>
+                <div className="flex flex-col gap-2">
+                  {links.map((l, i) => (
+                    <input key={i} type="url" value={l} placeholder="https://" aria-label={`Photo link ${i + 1}`} className={box}
+                      onChange={(e) => setLinks((x) => x.map((y, j) => (j === i ? e.target.value : y)))} />
+                  ))}
+                </div>
+              </Labelled>
+            )}
             <Group label="Suits" wide>
               {SUITS.map((s) => (
                 <button key={s} type="button" aria-pressed={c.suitable_for.includes(s)} className={chip(c.suitable_for.includes(s))} onClick={() => toggle('suitable_for', s)}>{SUITS_LABEL[s]}</button>
@@ -204,7 +219,7 @@ export function EditProperty({ p, onDone }: { p: Property; onDone: () => void })
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="primary" className="min-h-0 px-4 py-2 text-[14px]" disabled={update.isPending || !f.address_line.trim()} onClick={save}>
+        <Button variant="primary" className="min-h-0 px-4 py-2 text-[14px]" disabled={update.isPending || !f.address_line.trim() || !linksOk} onClick={save}>
           {update.isPending ? 'Saving…' : 'Save changes'}
         </Button>
         <Button className="min-h-0 px-4 py-2 text-[14px]" disabled={update.isPending} onClick={onDone}>Cancel</Button>

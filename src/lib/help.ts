@@ -143,6 +143,16 @@ export const HELP = {
       'Once a viewing\'s time has passed, Keel asks how it went: they viewed it, offer made, signed up, not going ahead (with why), or did not turn up (back to Interested, to rebook). Why a property was lost is kept in six groups (too far, too small, failed affordability or referencing, client dropped out, problem with the property, other) so the reasons can be counted.',
     ],
   },
+  mailer: {
+    title: 'Mailer',
+    body: [
+      'Property emails to housing officers, written by Keel so nothing goes out that should not. Copy them into your email, or open them in your email app; each send is recorded against every officer it went to.',
+      'Only properties that pass every check can go: within LHA, safety papers complete and in date, at least 3 photos, and an LHA area and rent Keel knows. Held back lists the rest and what each needs. Nothing goes until the gov.uk LHA rates are loaded (Team settings, LHA rates), so an email never quotes built-in figures.',
+      'Alerts: one property each, only to the officers of clients they referred that it fits. Monthly digest: one borough, 5 to 8 properties at most. Anyone who had a bulk email or digest in the last 30 days is flagged and left unticked.',
+      'Who can be emailed comes from the officer list on Councils: never anyone who left, is on leave, opted out, bounced or has not opted in or referred a client; a team mailbox replaces personal emails. London officers never get anything outside Greater London unless you include it, and then it is marked.',
+      'Every email has the subject [Borough] | type | rent | LHA | available date, the LHA rate for the area, the safety papers with their dates, up to 3 photo links, Keel\'s business details (Team settings, Business details) and a way to stop the emails. Clients are never named.',
+    ],
+  },
   responses: {
     title: 'Waiting on us',
     body: [

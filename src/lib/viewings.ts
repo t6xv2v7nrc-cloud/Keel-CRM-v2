@@ -17,6 +17,7 @@ import { isActive, isIced } from './search';
 import { isoDay } from './calls';
 import { clockTime, shortDate, shortDay } from './format';
 import { shortAddress } from './progress';
+import { signature } from './business';
 
 // ── Outcomes and reasons ───────────────────────────────────────────
 
@@ -332,7 +333,7 @@ export function outcomeEmail(
   const hi = firstOf(a.officer_name);
   return {
     subject: `${a.full_name}: viewing at ${where}`,
-    body: [`Hi ${hi || 'there'},`, '', line, '', 'Kind regards,', myName?.trim() || 'Keel Lettings', ...(myName?.trim() ? ['Keel Lettings'] : [])].join('\n'),
+    body: [`Hi ${hi || 'there'},`, '', line, '', 'Kind regards,', ...signature(myName)].join('\n'),
   };
 }
 

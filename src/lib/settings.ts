@@ -162,7 +162,26 @@ export interface AppSettings {
    *  outcome back the same day. Working hours are Monday to Friday, dayStart to dayEnd ("09:00"). Nominations and
    *  viewings older than watchDays are no longer chased. */
   responses: ResponseRules;
+  /** Keel's credentials for the Mailer's footer and email signatures. Blank ones are left out (placeholders until joined). */
+  business: BusinessDetails;
 }
+
+export interface BusinessDetails {
+  /** e.g. "The Property Ombudsman" and the membership number */
+  redressScheme: string;
+  redressNumber: string;
+  /** the scheme and number, or "Not required" */
+  clientMoneyProtection: string;
+  llasNumber: string;
+  icoNumber: string;
+  /** a link to the fee list, or a short line */
+  fees: string;
+  /** where "unsubscribe" emails go (blank: the email on invoices) */
+  unsubscribeEmail: string;
+}
+export const DEFAULT_BUSINESS: BusinessDetails = {
+  redressScheme: '', redressNumber: '', clientMoneyProtection: '', llasNumber: '', icoNumber: '', fees: '', unsubscribeEmail: '',
+};
 
 export interface ResponseRules { replyHours: number; dayStart: string; dayEnd: string; watchDays: number }
 
@@ -329,6 +348,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   focusBoroughs: ['Harrow', 'Hounslow', 'Hillingdon', 'Croydon', 'Haringey', 'Islington'],
   wishlistBoroughs: ['Sutton', 'Kingston upon Thames'],
   responses: { replyHours: 4, dayStart: '09:00', dayEnd: '17:30', watchDays: 14 },
+  business: DEFAULT_BUSINESS,
 };
 
 /** Settings each person sets for themselves; everything else is shared by the team. */

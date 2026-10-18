@@ -701,6 +701,36 @@ export function useLogOfficerSends() {
   });
 }
 
+/** A Mailer email went out (an alert or a digest): one row per officer it went to, with its subject and properties (0024),
+ *  their last-sent date, a line on each property's history and one on the officer's. Before 0024 the new columns are left out. */
+export function useRecordMailerSend() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ to, kind, subject, properties }: { to: Array<{ officer: OfficerRecord; address: string }>; kind: 'alert' | 'digest'; subject: string; properties: Property[] }) => {
+      if (!to.length) return;
+      const ids = properties.map((p) => p.id).filter((id) => !isLocalProperty(id));
+      const rows = to.map(({ officer, address }) => ({ officer_id: String(officer.id), kind, address, note: subject, subject, property_ids: ids }));
+      let res = await supabase.from('officer_sends').insert(rows);
+      if (res.error && isMissingColumn(res.error)) res = await supabase.from('officer_sends').insert(rows.map(({ subject: _s, property_ids: _p, ...r }) => r));
+      if (res.error) throw missingTable(res.error) ? new Error(COUNCILS_UPDATE) : res.error;
+      await supabase.from('officers').update({ last_sent_at: new Date().toISOString() }).in('id', to.map(({ officer }) => officer.id));
+      const n = new Set(to.map(({ address }) => address.toLowerCase())).size;
+      const whom = to.length === 1 ? who(to[0].officer) : `${to.length} officers (${n} ${n === 1 ? 'address' : 'addresses'})`;
+      if (ids.length) {
+        await supabase.from('activities').insert(ids.map((id) => ({
+          entity_type: 'property', entity_id: id, kind: 'sent', body: `${kind === 'alert' ? 'Alert' : 'In a digest'} to ${whom}: ${subject}`,
+        })));
+      }
+      await officerActivity(to.length === 1 ? to[0].officer : null, `${kind === 'alert' ? 'Property alert' : 'Monthly digest'} sent to ${whom}: ${subject}`, 'sent');
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['officer_sends'] });
+      qc.invalidateQueries({ queryKey: ['officers'] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
 /** Each council's procurement or landlord scheme. `ready` is false until 0020. */
 export function useCouncilSchemes() {
   const q = useQuery({
