@@ -1,9 +1,9 @@
 // The Mailer (Step 7 of the update brief): property alerts and borough digests to housing officers, written and
 // checked by Keel, so a bad property or a bad address cannot go out by accident.
 //
-//   What goes   only available properties that pass every check (within LHA, safety papers complete and in date,
-//               3 photos: `sendBlockers`), with a known LHA area and rent, and only once the LHA rates are the
-//               gov.uk ones: an email to a council never quotes built-in figures.
+//   What goes   every available property not held back (over LHA, or marked not ready by hand: `sendBlockers`; the
+//               suppliers see to the safety checks), with a known LHA area and rent, and only once the LHA rates are
+//               the gov.uk ones: an email to a council never quotes built-in figures.
 //   Alerts      one property each, only to the officers of nominated clients it fits (the matching rules).
 //   Digests     one borough a month, 5 to 8 sendable properties at most; anyone who had a bulk email or digest in
 //               the last 30 days is flagged and left unticked.

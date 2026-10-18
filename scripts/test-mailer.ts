@@ -35,12 +35,14 @@ const nowhere = prop({ postcode: null, borough: null, address_line: 'Flat 9, Som
 const wembley = prop({ postcode: 'HA9 6AA', borough: 'Brent', address_line: '5 High Street, Wembley HA9 6AA' });
 const watford = prop({ postcode: 'WD17 1AA', borough: null, area: 'Watford', address_line: '3 Market Street, Watford WD17 1AA', rent_pcm: (rateFor('South West Herts', 1) ?? 900) - 20 });
 const let_ = prop({ status: 'let' });
-const list = sendables([good, over, noPapers, nowhere, wembley, watford, let_], today);
+const held = prop({ not_ready_at: '2026-10-15T10:00:00Z', not_ready_note: 'Waiting for the EICR' });
+const list = sendables([good, over, noPapers, nowhere, wembley, watford, let_, held], today);
 const of = (p: Property) => list.find((s) => s.property.id === p.id)!;
 check('only available properties are considered', !list.some((s) => s.property.id === let_.id));
 check('within LHA with papers and photos: ready', of(good).blockers.length === 0, of(good).blockers.join('; '));
 check('over LHA: held back', of(over).blockers.some((b) => /over LHA/.test(b)));
-check('papers missing or too few photos: held back', of(noPapers).blockers.some((b) => /Not ready/.test(b)));
+check('papers or photos missing: ready all the same (the suppliers see to the checks)', of(noPapers).blockers.length === 0);
+check('marked not ready by hand: held back, with why', of(held).blockers.some((b) => /Marked not ready: Waiting for the EICR/.test(b)));
 check('no LHA area: held back, saying what to do', of(nowhere).blockers.some((b) => /LHA area not known/.test(b)));
 
 check('built-in LHA rates: the Mailer will not send', !mailerReady().ok && /gov\.uk/.test(mailerReady().why ?? ''));

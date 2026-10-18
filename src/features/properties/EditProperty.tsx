@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Button, Help, UpdateNote, useToast } from '../../components/ui';
 import { useUpdateProperty } from '../../lib/hooks';
 import { isLocalProperty } from '../../lib/localProperties';
-import { ACCOMMODATION_LABEL, accommodationOf, BILLS, BILLS_LABEL, MIN_PHOTOS, SUITS, SUITS_LABEL } from '../../lib/propertyChecks';
+import { ACCOMMODATION_LABEL, accommodationOf, BILLS, BILLS_LABEL, SUITS, SUITS_LABEL } from '../../lib/propertyChecks';
 import { BOROUGHS } from '../../lib/london';
 import { normalisePostcode } from '../../lib/format';
 import { bedsOfType, hasCheckFields, hasPhotoLinks, rentFrom, rentWords, TYPE_OPTIONS } from '../../lib/propertyEdit';
@@ -140,7 +140,7 @@ export function EditProperty({ p, onDone }: { p: Property; onDone: () => void })
                 {(Object.keys(ACCOMMODATION_LABEL) as AccommodationType[]).map((t) => <option key={t} value={t}>{ACCOMMODATION_LABEL[t]}</option>)}
               </select>
             </Labelled>
-            <Labelled label="Photos ready to send" hint={`At least ${MIN_PHOTOS} before it can be sent`}>
+            <Labelled label="Photos ready to send" hint="Optional: the supplier has the photos">
               <input type="number" min={0} inputMode="numeric" value={c.photo_count} onChange={(e) => setCheck('photo_count', e.target.value)} className={box} aria-label="Photos ready to send" />
             </Labelled>
             {canLink && (

@@ -445,6 +445,29 @@ export function useUpdateProperty() {
   });
 }
 
+const READY_UPDATE = 'Marking a property not ready needs a one-off database update: run supabase/migrations/0025_ready_by_default.sql in the Supabase SQL Editor.';
+
+/** Hold a property back from sending (marked not ready, with why), or mark it ready again. Ready is the standard. */
+export function useSetPropertyReady() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ p, ready, note }: { p: Property; ready: boolean; note?: string | null }) => {
+      const patch = ready ? { not_ready_at: null, not_ready_note: null } : { not_ready_at: new Date().toISOString(), not_ready_note: note?.trim() || null };
+      if (isLocalProperty(p.id)) { if (!localProperties.update([p.id], patch)) throw new Error('This browser would not save the change'); return; }
+      const { error } = await supabase.from('properties').update(patch).eq('id', p.id);
+      if (error) throw isMissingColumn(error) ? new Error(READY_UPDATE) : error;
+      await supabase.from('activities').insert({
+        entity_type: 'property', entity_id: p.id, kind: 'updated',
+        body: ready ? `${p.address_line}: marked ready to send` : `${p.address_line}: marked not ready${patch.not_ready_note ? `: ${patch.not_ready_note}` : ''}`,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['properties'] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
 /** Set (or clear) the LHA area of some properties by hand, and note it on each. */
 export function useSetLhaArea() {
   const qc = useQueryClient();

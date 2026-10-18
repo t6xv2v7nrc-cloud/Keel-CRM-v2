@@ -2,12 +2,14 @@
 // whether its safety papers are complete and in date, and the flags that follow (Step 2 of the update brief).
 //
 //   Red    the rent is above the LHA rate for its size in its BRMA (gap above 0)
-//   Amber  a shared-kitchen unit with nobody marked as suited to it; or outside Greater London
-//          (any outreach to a London council)
-//   Grey   not ready to send: the papers are missing or out of date, or fewer than 3 photos
+//   Amber  a shared-kitchen unit with nobody marked as suited to it; outside Greater London (any outreach to a
+//          London council); or safety papers recorded here that have run out or fall below the minimum
+//   Grey   marked Not ready by hand (0025), with the reason
 //
-// The LHA rate, the gaps and "papers complete" are always worked out here, never typed. Red and grey
-// are what stop a property going out (`sendBlockers`).
+// Ridwan's rule: the suppliers make sure their checks are done, so a property is ready to send by default. Missing
+// papers or photos never hold one back; recorded ones that have lapsed are a warning. The LHA rate, the gaps and
+// "papers complete" are always worked out here, never typed. Red and grey are what stop a property going out
+// (`sendBlockers`).
 
 import type { AccommodationType, Property } from './types';
 import { lhaCheck, rateFor } from './lha';
@@ -28,11 +30,10 @@ export const BILLS = ['water', 'gas', 'electricity', 'council_tax', 'internet', 
 export const BILLS_LABEL: Record<typeof BILLS[number], string> = {
   water: 'Water', gas: 'Gas', electricity: 'Electricity', council_tax: 'Council tax', internet: 'Internet', tv_licence: 'TV licence',
 };
-export const MIN_PHOTOS = 3;
 
 type ForChecks = Pick<Property, 'address_line' | 'postcode' | 'borough' | 'property_type' | 'bedrooms' | 'rent_pcm' | 'rent_text' | 'notes'>
   & Partial<Pick<Property, 'lha_area' | 'accommodation_type' | 'suitable_for' | 'gas_expiry' | 'no_gas' | 'eicr_expiry' | 'epc_rating'
-    | 'licence_needed' | 'licence_no' | 'licence_expiry' | 'alarms_checked' | 'photo_count' | 'photo_urls'>>;
+    | 'licence_needed' | 'licence_no' | 'licence_expiry' | 'alarms_checked' | 'photo_count' | 'photo_urls' | 'not_ready_at' | 'not_ready_note'>>;
 
 /** What kind of place: as set, or read from its type and notes (then `estimated`). */
 export function accommodationOf(p: Pick<Property, 'property_type' | 'notes'> & Partial<Pick<Property, 'accommodation_type'>>):
@@ -92,7 +93,7 @@ export function papersFor(p: ForChecks, today = todayIso()): Papers {
   return { known: true, complete: missing.length === 0 && failing.length === 0, missing, failing };
 }
 
-export interface Flag { tone: 'red' | 'amber' | 'grey'; key: 'over_lha' | 'suits_not_set' | 'outside_london' | 'not_ready'; words: string; detail?: string }
+export interface Flag { tone: 'red' | 'amber' | 'grey'; key: 'over_lha' | 'suits_not_set' | 'outside_london' | 'papers_lapsed' | 'not_ready'; words: string; detail?: string }
 
 export interface Checks {
   lha: LhaCheck | null;
@@ -128,20 +129,20 @@ export function checksFor(p: ForChecks, today = todayIso()): Checks {
 
   const flags: Flag[] = [];
   if (gap !== null && gap > 0.005) flags.push({ tone: 'red', key: 'over_lha', words: `${money(gap)} over LHA`, detail: `The rent is above the ${lha!.size === 'shared' ? 'shared' : `${lha!.size} bed`} LHA rate of ${money(lha!.rate)} in ${lha!.area.brma}.` });
-  if (accommodation?.type === 'shared_kitchen' && suits.length === 0) flags.push({ tone: 'amber', key: 'suits_not_set', words: 'Suits not set', detail: 'a shared-kitchen unit needs who it suits marked before it is sent' });
+  if (accommodation?.type === 'shared_kitchen' && suits.length === 0) flags.push({ tone: 'amber', key: 'suits_not_set', words: 'Suits not set', detail: 'mark who a shared-kitchen unit suits, so it goes to the right clients' });
   if (london === false) flags.push({ tone: 'amber', key: 'outside_london', words: 'Outside Greater London', detail: 'not offered to London councils by default' });
-  if (papers.known && (!papers.complete || photos < MIN_PHOTOS)) {
-    const why = [...papers.failing, ...papers.missing.map((m) => `no ${m}`), photos < MIN_PHOTOS ? `${photos} of ${MIN_PHOTOS} photos` : null].filter(Boolean) as string[];
-    flags.push({ tone: 'grey', key: 'not_ready', words: 'Not ready to send', detail: why.join(', ') });
+  // papers recorded here that have run out are worth a word with the supplier; missing ones are theirs to hold
+  if (papers.failing.length) flags.push({ tone: 'amber', key: 'papers_lapsed', words: 'Check the papers', detail: `${papers.failing.join(', ')}: ask the supplier` });
+  if (p.not_ready_at) {
+    flags.push({ tone: 'grey', key: 'not_ready', words: 'Marked not ready', detail: p.not_ready_note?.trim() || `since ${shortDate(p.not_ready_at)}` });
   }
   return { lha, gap, sarGap, sar, accommodation, suits, london, papers, photos, flags };
 }
 
-/** Why a property cannot be sent: over LHA, or not ready (papers or photos). Empty means it can go. */
-export function sendBlockers(c: Pick<Checks, 'flags' | 'papers'>): string[] {
-  const out = c.flags.filter((f) => f.tone === 'red' || f.tone === 'grey').map((f) => (f.detail ? `${f.words}: ${f.detail}` : f.words));
-  if (!c.papers.known) out.push('Safety papers not recorded yet');
-  return out;
+/** Why a property cannot be sent: over LHA, or marked not ready by hand. Empty means it can go: a property is
+ *  ready by default, as the suppliers see to its checks. */
+export function sendBlockers(c: Pick<Checks, 'flags'>): string[] {
+  return c.flags.filter((f) => f.tone === 'red' || f.tone === 'grey').map((f) => (f.detail ? `${f.words}: ${f.detail}` : f.words));
 }
 
 /** "BRMA Outer North London · 1 bed LHA £1,150 · £50 under · shared rate £595 (£55 over)" */

@@ -65,15 +65,17 @@ check('an HMO room needs a licence', papersFor(P({ accommodation_type: 'hmo_room
 check('a licence number needs its end date', papersFor(P({ licence_no: 'HMO/123' }), today).missing.join() === 'licence');
 check('no licence needed for a flat marked so', papersFor(P({ licence_needed: false }), today).complete);
 check('alarms checked over a year ago fail', papersFor(P({ alarms_checked: '2025-10-14' }), today).failing.some((x) => /alarms last checked/.test(x)) && papersFor(P({ alarms_checked: '2025-10-15' }), today).complete);
-const thin = checksFor(P({ photo_count: 2, eicr_expiry: null }), today);
-const grey = thin.flags.find((f) => f.tone === 'grey');
-check('missing papers or under 3 photos: grey "not ready", saying why', grey?.words === 'Not ready to send' && grey.detail === 'no electrical report (EICR), 2 of 3 photos', grey?.detail);
-check('not ready stops a send', sendBlockers(thin).length === 1);
-check('no photos recorded counts as none', checksFor(P({ photo_count: null }), today).flags.some((f) => f.key === 'not_ready'));
-// before 0019: nothing recorded, so no grey flag on every card, but it still cannot be sent
+// Ready by default (the suppliers see to the checks): missing papers or photos never hold a property back
+const thin = checksFor(P({ photo_count: 2, eicr_expiry: null, gas_expiry: null }), today);
+check('missing papers or few photos: still ready, no grey flag', !thin.flags.some((f) => f.tone === 'grey') && sendBlockers(thin).length === 0, JSON.stringify(thin.flags));
+const lapsed = checksFor(P({ gas_expiry: '2026-10-01' }), today);
+check('recorded papers that have run out: amber, not a stop', lapsed.flags.some((f) => f.key === 'papers_lapsed' && f.tone === 'amber' && /gas safety certificate ran out/.test(f.detail ?? '')) && sendBlockers(lapsed).length === 0);
+const held = checksFor(P({ not_ready_at: '2026-10-15T10:00:00Z', not_ready_note: 'Waiting for the EICR' }), today);
+check('marked not ready by hand: grey, with the reason, and it stops a send', held.flags.some((f) => f.key === 'not_ready' && f.tone === 'grey' && f.detail === 'Waiting for the EICR') && sendBlockers(held).length === 1);
+check('marked not ready with no reason says since when', checksFor(P({ not_ready_at: '2026-10-15T10:00:00Z' }), today).flags.find((f) => f.key === 'not_ready')?.detail === 'since 15 Oct 2026');
+// before 0019: nothing recorded, and it can still go
 const before = checksFor({ ...P({}), accommodation_type: undefined, gas_expiry: undefined, eicr_expiry: undefined, photo_count: undefined, suitable_for: undefined } as Property, today);
-check('before 0019: papers unknown, no grey flag', !before.papers.known && !before.flags.some((f) => f.tone === 'grey'));
-check('before 0019: still not sendable', sendBlockers(before).includes('Safety papers not recorded yet'));
+check('before 0019: papers unknown, no grey flag, still sendable', !before.papers.known && !before.flags.some((f) => f.tone === 'grey') && sendBlockers(before).length === 0);
 
 // Kind of place, from the type when not set
 check('a room is an HMO room', accommodationOf({ property_type: 'Room', notes: null })?.type === 'hmo_room');

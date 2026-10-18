@@ -93,6 +93,8 @@ export interface Property {
   alarms_checked?: string | null;
   photo_count?: number | null;
   photo_urls?: string[];          // 0024: up to 3 photo links, put in alerts
+  not_ready_at?: string | null;   // 0025: marked not ready by hand (empty: ready, as the suppliers see to the checks)
+  not_ready_note?: string | null;
   prs_landlord_id?: string | null;
   prs_property_id?: string | null;
   created_at: string;

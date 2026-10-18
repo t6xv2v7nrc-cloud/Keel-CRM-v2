@@ -25,9 +25,10 @@ src/
               whatsapp.ts (wa.me links and message wording for sending properties),
               propertyEdit.ts (editing a saved property: typed rent, bedrooms from the type, what changed in words;
                                the Edit button on each property card, features/properties/EditProperty.tsx),
-              propertyChecks.ts (0019: kind of place, who it suits, safety papers; LHA gap and shared-rate gap worked out,
-                               never typed; flags red over LHA, amber suits not set or outside Greater London, grey not
-                               ready (papers or under 3 photos); `sendBlockers` = red and grey; card in features/properties/Checks.tsx),
+              propertyChecks.ts (0019, 0025: kind of place, who it suits, safety papers; LHA gap and shared-rate gap worked
+                               out, never typed; flags red over LHA, amber suits not set, outside Greater London or recorded
+                               papers lapsed, grey marked not ready by hand (`not_ready_at`, `not_ready_note`); `sendBlockers`
+                               = red and grey; card and Mark not ready / Mark ready in features/properties/Checks.tsx),
               matchRules.ts (Step 6, 0023: the rules on top of propertyMatch's scores; every screen matches through it:
                            LHA at the rate the client is paid (`rateOf` in clientProfile.ts) in the property's BRMA, hidden
                            when over unless `showOverLha`; shared kitchen or HMO room never to couples or families;
@@ -137,6 +138,9 @@ supabase/checks/live-vs-repo.sql  (read-only: which migrations the live database
   officer's client by default. What the rules hide is counted under each list, with Show over LHA and Show outside
   London switches (personal settings set the default). Needed for matching (Profile): postcode area, age band, who is
   moving in, UC, benefit cap, PIP or LCWRA (`matchingGaps`).
+- Properties are ready to send by default: the suppliers see to their safety checks. Missing papers or photos never hold
+  one back (recorded ones that have lapsed show amber); only over LHA or Ridwan's Mark not ready (0025, with a reason,
+  logged) does. Do not make papers or photos block again unless he says.
 - Short lists, not endless ones: each property shows only its best few clients (`bestFew`), one line each. No kanban.
 - Nothing scrolls sideways, on a phone especially.
 - Properties go to clients, and requests go to providers, as WhatsApp links (wa.me) the person sends by hand; every
@@ -249,7 +253,8 @@ Never commit `.env.local`. Never expose the service role key or Anthropic key to
   then 0022 (viewing outcome, reason lost, outcome sent to the officer on deals; nominated_at and officer_replied_at on
   applicants; backs up deals and applicants, fills nothing in), then 0023 (postcode_area, age_band, benefit_cap on
   applicants for matching; backs up applicants), then 0024 (photo_urls on properties, property_ids and subject on
-  officer_sends, for the Mailer; backs up both).
+  officer_sends, for the Mailer; backs up both), then 0025 (not_ready_at and not_ready_note on properties: ready by
+  default; backs up properties).
 - Check every migration runs, twice, on a scratch Postgres before committing one:
   `npm i --no-save @electric-sql/pglite && node scripts/check-migrations.mjs` (it also tests the merge and invoice numbers).
 

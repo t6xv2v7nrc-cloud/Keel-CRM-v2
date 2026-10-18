@@ -157,10 +157,10 @@ export const HELP = {
     title: 'Mailer',
     body: [
       'Property emails to housing officers, written by Keel so nothing goes out that should not. Copy them into your email, or open them in your email app; each send is recorded against every officer it went to.',
-      'Only properties that pass every check can go: within LHA, safety papers complete and in date, at least 3 photos, and an LHA area and rent Keel knows. Held back lists the rest and what each needs. Nothing goes until the gov.uk LHA rates are loaded (Team settings, LHA rates), so an email never quotes built-in figures.',
+      'Every property is ready to send unless it is over LHA or you marked it not ready (the suppliers see to the safety checks); Keel also needs to know its LHA area and rent. Held back lists the rest and what each needs. Nothing goes until the gov.uk LHA rates are loaded (Team settings, LHA rates), so an email never quotes built-in figures.',
       'Alerts: one property each, only to the officers of clients they referred that it fits. Monthly digest: one borough, 5 to 8 properties at most. Anyone who had a bulk email or digest in the last 30 days is flagged and left unticked.',
       'Who can be emailed comes from the officer list on Councils: never anyone who left, is on leave, opted out, bounced or has not opted in or referred a client; a team mailbox replaces personal emails. London officers never get anything outside Greater London unless you include it, and then it is marked.',
-      'Every email has the subject [Borough] | type | rent | LHA | available date, the LHA rate for the area, the safety papers with their dates, up to 3 photo links, Keel\'s business details (Team settings, Business details) and a way to stop the emails. Clients are never named.',
+      'Every email has the subject [Borough] | type | rent | LHA | available date, the LHA rate for the area, any safety papers recorded with their dates, up to 3 photo links, Keel\'s business details (Team settings, Business details) and a way to stop the emails. Clients are never named.',
     ],
   },
   responses: {
@@ -251,9 +251,10 @@ export const HELP = {
     body: [
       'Each property shows its BRMA, the monthly LHA rate for its size, and the gap: the rent minus that rate. Shared-kitchen units and HMO rooms also show the gap to the shared rate (SAR).',
       'Red: the rent is above LHA. Officers cannot place a client into a shortfall, so it is not sent.',
-      'Amber: a shared-kitchen unit nobody is marked as suited to, or a property outside Greater London (not offered to London councils by default). Amber is a warning, not a stop.',
-      'Grey, not ready to send: a safety paper is missing or out of date, or there are fewer than 3 photos. The papers are the gas safety certificate (unless there is no gas), the electrical report (EICR), an EPC of E or better, a licence for HMO rooms or where one is needed, and smoke and CO alarms checked within the last year.',
-      'Fill these in with Edit on the property card, under Letting details and safety papers. Who it suits: UC 35 plus, SAR-exempt, under 35 standard, couples, families. Every change goes on the property\'s history.',
+      'Every property is ready to send as standard: the suppliers make sure their safety checks are done. Mark not ready holds one back, with your reason, until you mark it ready again.',
+      'Amber: a shared-kitchen unit nobody is marked as suited to, a property outside Greater London (not offered to London councils by default), or safety papers you recorded that have run out or an EPC below E (worth a word with the supplier). Amber is a warning, not a stop.',
+      'Grey: marked not ready by hand. Red (over LHA) and grey are the only things that stop a property going out.',
+      'Papers and photos are optional: fill them in with Edit on the property card, under Letting details and safety papers, and the Mailer prints their dates. Who it suits: UC 35 plus, SAR-exempt, under 35 standard, couples, families. Every change goes on the property\'s history.',
     ],
   },
   lha: {

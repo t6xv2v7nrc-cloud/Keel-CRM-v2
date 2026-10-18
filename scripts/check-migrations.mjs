@@ -243,13 +243,23 @@ check('a fourth photo link is refused', pBad === 1);
 const b24 = (await fresh24.query(`select (select count(*)::int from keel_backup.properties_before_0024) as p, (select count(*)::int from keel_backup.officer_sends_before_0024) as s`)).rows[0];
 check('properties and officer sends are backed up first', b24.p === 1 && b24.s === 1, JSON.stringify(b24));
 
+// 0025: ready by default; a property is held back only when marked not ready by hand
+const fresh25 = await freshDb({ upTo: '0024' });
+await fresh25.exec(`insert into properties (id, address_line) values ('dededede-dede-dede-dede-dededededede', '1 Ready Road');`);
+for (let i = 0; i < 2; i++) await fresh25.exec(readFileSync(dir + '0025_ready_by_default.sql', 'utf8'));
+const p25 = (await fresh25.query(`select not_ready_at, not_ready_note from properties`)).rows[0];
+check('properties gain not ready (empty: ready)', p25 && p25.not_ready_at === null && p25.not_ready_note === null, JSON.stringify(p25));
+await fresh25.exec(`update properties set not_ready_at = now(), not_ready_note = 'Waiting for the EICR'`);
+const b25 = (await fresh25.query(`select count(*)::int as n from keel_backup.properties_before_0025`)).rows[0].n;
+check('properties are backed up first', b25 === 1, String(b25));
+
 // The read-only check of a live database against these files
 const liveCheck = readFileSync(new URL('../supabase/checks/live-vs-repo.sql', import.meta.url).pathname, 'utf8');
 const status = async (d) => Object.fromEntries((await d.query(liveCheck)).rows.map((r) => [r.item, [r.status, r.detail]]));
 const full = await status(db);
 const numbered = Object.keys(full).filter((k) => /^\d{4}$/.test(k));
 check('live check: every migration reads as done on a database that has had them all (data-only ones cannot be told)',
-  numbered.length === 24 && numbered.every((k) => full[k][0] === 'done' || (['0003', '0016'].includes(k) && full[k][0].startsWith('cannot tell'))), JSON.stringify(full));
+  numbered.length === 25 && numbered.every((k) => full[k][0] === 'done' || (['0003', '0016'].includes(k) && full[k][0].startsWith('cannot tell'))), JSON.stringify(full));
 const behind = await freshDb();
 await behind.exec(`alter table properties drop column lha_area; drop table postcode_brma;
   create table eod_reports (id uuid primary key, report_date date, data jsonb);`);
