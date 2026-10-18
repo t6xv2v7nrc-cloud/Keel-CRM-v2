@@ -27,7 +27,7 @@ import { brmaOfDistrict, brmasOfBorough, lhaCheck, lhaSizeOf, lhaTable, londonBr
 import type { LhaSize, LhaTable } from './lha';
 import { feeFrom, fromHousingOfficer, rentOf, usualFee } from './money';
 import { providerFor } from './requests';
-import { councilOf, effectiveTier } from './search';
+import { benefitCapOf, councilOf, effectiveTier, sharedRateExempt } from './search';
 import { areNeighbours, BOROUGHS, LONDON_BOROUGHS } from './london';
 import { activeSettings } from './settings';
 import { money } from './format';
@@ -129,7 +129,9 @@ export function rulesFor(p: RuleProperty, a: Applicant, opts: RuleOptions = {}):
     return hide('kind', `${kind.type === 'hmo_room' ? 'An HMO room' : 'A shared kitchen'} is not for a ${rt === 'couples' ? 'couple' : 'family'}`);
   }
   const suits = (p.suitable_for ?? []).filter(Boolean);
-  if (suits.length && rt && !suits.includes(rt)) return hide('suits', 'Marked as suiting other clients');
+  // a single on PIP whose age is not known is paid the 1 bed rate either way: 35 plus or exempt both suit them
+  const theirTags: string[] = rt === 'sar_exempt' && sharedRateExempt(a) && !facts.ageBand.value ? ['sar_exempt', 'uc_35_plus'] : rt ? [rt] : [];
+  if (suits.length && theirTags.length && !theirTags.some((x) => suits.includes(x))) return hide('suits', 'Marked as suiting other clients');
 
   // area
   const check = lhaCheck(p);
@@ -160,7 +162,7 @@ export function rulesFor(p: RuleProperty, a: Applicant, opts: RuleOptions = {}):
       warnings.push({ tone: 'amber', words: `Age not known: under 35 they get the shared rate${sar !== null ? ` (${money(sar)} here)` : ''}` });
     }
   }
-  if (a.benefit_cap === 'capped') warnings.push({ tone: 'amber', words: 'The benefit cap applies: check the rent is covered' });
+  if (benefitCapOf(a).status === 'capped') warnings.push({ tone: 'amber', words: 'The benefit cap applies: check the rent is covered' });
   return { hidden: null, why: null, warnings, lha };
 }
 

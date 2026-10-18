@@ -141,6 +141,9 @@ supabase/checks/live-vs-repo.sql  (read-only: which migrations the live database
 - Properties are ready to send by default: the suppliers see to their safety checks. Missing papers or photos never hold
   one back (recorded ones that have lapsed show amber); only over LHA or Ridwan's Mark not ready (0025, with a reason,
   logged) does. Do not make papers or photos block again unless he says.
+- PIP exempts a client from every cap and the shared rate, whatever else is recorded (`benefitCapOf`, `sharedRateExempt`
+  in search.ts, the one rule everywhere): no benefit cap, no UC-only limit, the 1 bed rate at any age (age not needed).
+  LCWRA lifts the benefit cap and the UC-only limit, not the shared rate. PIP clients are still held to LHA (Step 6).
 - Short lists, not endless ones: each property shows only its best few clients (`bestFew`), one line each. No kanban.
 - Nothing scrolls sideways, on a phone especially.
 - Properties go to clients, and requests go to providers, as WhatsApp links (wa.me) the person sends by hand; every

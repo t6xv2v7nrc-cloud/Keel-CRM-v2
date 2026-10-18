@@ -6,7 +6,7 @@ import type { IconName } from '../../components/ui';
 import { useMoveStage, usePeople, useProviders, useUpdateTriage } from '../../lib/hooks';
 import { activeSettings } from '../../lib/settings';
 import { computeTier, HOUSEHOLD_LABEL, tierLabel, tierNumbers, tierReason, tierStyle, URGENCY_LABEL, WORK_STATUS_LABEL } from '../../lib/tiering';
-import { effectiveTier } from '../../lib/search';
+import { benefitCapOf, effectiveTier } from '../../lib/search';
 import { STAGE_ORDER } from '../../lib/progress';
 import { selfContainedFrom, withSelfContained } from '../../lib/propertyMatch';
 import { useFold } from '../../lib/collapse';
@@ -186,8 +186,12 @@ export function ClientDetails({ applicant }: { applicant: Applicant }) {
           </Row>
           {'benefit_cap' in a && (
             <Row label="Benefit cap">
-              <Choice value={a.benefit_cap ?? ''} options={[['', 'Not known'], ...Object.entries(CAP_WORDS)]}
-                onChange={(v) => save({ benefit_cap: (v || null) as Applicant['benefit_cap'] }, `Benefit cap set to ${v ? CAP_WORDS[v].toLowerCase() : 'not known'}`)} />
+              {benefitCapOf(a).why ? (
+                <span className="text-[14px] text-[var(--ink)]">Exempt: {benefitCapOf(a).why}</span>
+              ) : (
+                <Choice value={a.benefit_cap ?? ''} options={[['', 'Not known'], ...Object.entries(CAP_WORDS)]}
+                  onChange={(v) => save({ benefit_cap: (v || null) as Applicant['benefit_cap'] }, `Benefit cap set to ${v ? CAP_WORDS[v].toLowerCase() : 'not known'}`)} />
+              )}
             </Row>
           )}
         </Section>

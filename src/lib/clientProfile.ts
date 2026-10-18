@@ -13,7 +13,7 @@
 // Read-only: nothing here changes the record. `sureAnswers` lists what can be filled in with one tap.
 
 import type { Applicant } from './types';
-import { benefitsOf, councilOf, householdOf } from './search';
+import { benefitCapOf, benefitsOf, councilOf, householdOf, sharedRateExempt } from './search';
 import type { HouseholdKey } from './search';
 import { readAgeText, readHouseholdText, readNotes } from './readNotes';
 import type { Suggestion } from './readNotes';
@@ -35,7 +35,7 @@ export type Source = 'recorded' | 'read' | 'worked out' | 'not known';
 export interface Known<T> { value: T | null; how: Source; why?: string }
 export type RateType = 'uc_35_plus' | 'sar_exempt' | 'under_35_standard' | 'couples' | 'families';
 export const RATE_TYPE_WORDS: Record<RateType, string> = {
-  uc_35_plus: '35 plus', sar_exempt: 'Under 35, exempt from the shared rate', under_35_standard: 'Under 35 standard',
+  uc_35_plus: '35 plus', sar_exempt: 'Exempt from the shared rate', under_35_standard: 'Under 35 standard',
   couples: 'Couple', families: 'Family',
 };
 
@@ -59,7 +59,7 @@ export interface ClientProfile {
   rateType: Known<RateType>;
   size: Known<LhaSize>;
   /** rentCap: the most they can be matched to on UC alone (Team settings), or null when the limit does not apply */
-  benefits: { uc: boolean | null; pip: boolean | null; lcwra: boolean | null; working: boolean | null; rentCap: number | null; cap: Applicant['benefit_cap'] | null };
+  benefits: { uc: boolean | null; pip: boolean | null; lcwra: boolean | null; working: boolean | null; rentCap: number | null; cap: Applicant['benefit_cap'] | null; capWhy: string | null };
   wants: { beds: string | null; areas: string[]; anywhere: boolean; selfContained: boolean; stepFree: boolean };
   council: { name: string | null; route: 'housing officer' | 'council' | 'self'; incentive: string | null; incentiveMax: number | null };
   places: Place[];
@@ -75,11 +75,11 @@ const yearsSince = (iso: string, today: string) => {
   return ty - y - (tm < m || (tm === m && td < d) ? 1 : 0);
 };
 
-/** Reasons a client under 35 may not be held to the shared rate. Each is a lead to check, never assumed. */
+/** Reasons a client under 35 may not be held to the shared rate. Each is a lead to check, never assumed. (PIP is not a
+ *  lead: it exempts them outright, `sharedRateExempt`.) */
 export function exemptionsFrom(a: Applicant): string[] {
   const text = [a.notes, a.requirements, a.housing_situation].filter(Boolean).join(' \n ');
   const out: string[] = [];
-  if (a.pip === true || /\bpip\b/i.test(a.benefit_type ?? '')) out.push('Gets PIP (the daily living part exempts them)');
   if (/\b(care leaver|leaving care|left care|in care until|foster care)\b/i.test(text)) out.push('Care leaver (exempt until 25)');
   if (/\bhostel\b/i.test(text)) out.push('Hostel stay (exempt from 25 if 3 months or more in a homeless hostel)');
   if (/\b(mappa|probation|released from prison|on licence)\b/i.test(text)) out.push('MAPPA or probation (exempt if managed under MAPPA)');
@@ -136,8 +136,12 @@ export function rateOf(a: Applicant, today = todayIso()): RateFacts {
     if (ageBand.value === '35_plus') {
       rateType = { value: 'uc_35_plus', how: ageBand.how };
       size = { value: 1, how: 'worked out', why: '35 or over: the 1 bed rate' };
+    } else if (sharedRateExempt(a)) {
+      // PIP: never the shared rate, so their age does not change what they are paid
+      rateType = { value: 'sar_exempt', how: a.pip === true ? 'recorded' : 'read', why: 'gets PIP' };
+      size = { value: 1, how: 'worked out', why: 'PIP: never held to the shared rate' };
     } else if (ageBand.value === 'under_35') {
-      const exempt = exemptions.length > 0 && (a.pip === true || exemptions.some((e) => /exempt until|exempt from 25|exempt if managed/.test(e)));
+      const exempt = exemptions.some((e) => /exempt until|exempt from 25|exempt if managed/.test(e));
       rateType = exempt ? { value: 'sar_exempt', how: 'worked out', why: exemptions[0] } : { value: 'under_35_standard', how: ageBand.how };
       size = exempt ? { value: 1, how: 'worked out', why: `under 35 but ${exemptions[0].toLowerCase()}` } : { value: 'shared', how: 'worked out', why: 'under 35: the shared accommodation rate' };
     } else {
@@ -162,9 +166,10 @@ export function matchingGaps(a: Applicant, today = todayIso()): string[] {
   const out: string[] = [];
   if (!a.postcode_area?.trim() && !needs.askNames.length && !needs.flexible && !/\blondon\b/i.test(text)) out.push('Postcode area');
   if (!r.household.value) out.push('Who is moving in');
-  if ((r.household.value === 'single' || r.household.value === 'other' || !r.household.value) && !r.ageBand.value) out.push('Age band');
+  // with PIP their age does not change the rate, so it is not needed for matching
+  if ((r.household.value === 'single' || r.household.value === 'other' || !r.household.value) && !r.ageBand.value && !sharedRateExempt(a)) out.push('Age band');
   if (a.on_uc == null && !benefitsOf(a).some((b) => b.key === 'uc')) out.push('UC');
-  if ('benefit_cap' in a && !a.benefit_cap && a.on_uc !== false) out.push('Benefit cap');
+  if ('benefit_cap' in a && !benefitCapOf(a).status && a.on_uc !== false) out.push('Benefit cap');
   if (a.pip == null && a.lcwra == null) out.push('PIP or LCWRA');
   return out;
 }
@@ -179,7 +184,7 @@ export function profileOf(a: Applicant, opts: { properties?: Array<PropertyLike 
   const h = household.value;
   const needs = clientNeeds(a);
   if (!household.value) toAsk.push({ what: 'Who is moving in', why: 'decides the size of home and the rate they are paid' });
-  if ((h === 'single' || h === 'other') && !ageBand.value) {
+  if ((h === 'single' || h === 'other') && !ageBand.value && !sharedRateExempt(a)) {
     toAsk.push({ what: 'Their date of birth', why: 'under 35 they are paid the shared rate unless exempt; 35 or over, the 1 bed rate' });
   }
 
@@ -188,11 +193,11 @@ export function profileOf(a: Applicant, opts: { properties?: Array<PropertyLike 
   const working = a.work_status ? a.work_status === 'full_time' || a.work_status === 'part_time' : null;
   const benefits = {
     uc: a.on_uc ?? (has('uc') ? true : null), pip: a.pip ?? (has('pip') ? true : null), lcwra: a.lcwra ?? (has('lcwra') ? true : null),
-    working, rentCap: needs.rentCap, cap: a.benefit_cap ?? null,
+    working, rentCap: needs.rentCap, cap: benefitCapOf(a).status, capWhy: benefitCapOf(a).why,
   };
   if (benefits.uc === null) toAsk.push({ what: 'Whether they are on Universal Credit', why: 'LHA only pays the rent for people on UC or housing benefit' });
-  if (benefits.uc && benefits.pip === null && benefits.lcwra === null) toAsk.push({ what: 'PIP or LCWRA', why: `either lifts the ${money(activeSettings().ucOnlyRentCap)} limit on UC alone${ageBand.value === 'under_35' ? ', and PIP can exempt them from the shared rate' : ''}` });
-  if (benefits.uc && !working && benefits.pip !== true && benefits.lcwra !== true && !a.benefit_cap) toAsk.push({ what: 'Whether the benefit cap applies to them', why: 'a capped household may not cover the full LHA' });
+  if (benefits.uc && benefits.pip === null && benefits.lcwra === null) toAsk.push({ what: 'PIP or LCWRA', why: `either lifts the ${money(activeSettings().ucOnlyRentCap)} limit on UC alone and the benefit cap; PIP also means never the shared rate` });
+  if (benefits.uc && !working && !benefits.cap) toAsk.push({ what: 'Whether the benefit cap applies to them', why: 'a capped household may not cover the full LHA' });
 
   // What they asked for
   const bedsWords = needs.beds ? (needs.beds.min === needs.beds.max ? (needs.beds.min === 0 ? 'a studio' : `a ${needs.beds.min} bed`) : needs.beds.min === 0 ? `a studio or ${needs.beds.max} bed` : `${needs.beds.min} to ${needs.beds.max} bed`) : null;

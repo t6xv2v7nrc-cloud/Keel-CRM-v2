@@ -5,6 +5,7 @@ import {
 } from '../src/lib/matchRules';
 import type { RuleProperty } from '../src/lib/matchRules';
 import { matchingGaps } from '../src/lib/clientProfile';
+import { benefitCapOf, sharedRateExempt } from '../src/lib/search';
 import { rateFor } from '../src/lib/lha';
 import { DEFAULT_SETTINGS, setActiveSettings } from '../src/lib/settings';
 import type { CouncilScheme } from '../src/lib/councils';
@@ -80,7 +81,21 @@ check('a client who came by themselves is not held to it', rulesFor(watford, cli
 
 // warnings
 check('age not known: amber, with the shared rate here', rulesFor(under, client({ notes: 'Harrow' }), { today }).warnings.some((w) => /Age not known/.test(w.words)));
-check('benefit cap applies: amber', rulesFor(under, { ...over40, benefit_cap: 'capped' }, { today }).warnings.some((w) => /benefit cap/.test(w.words)));
+check('benefit cap applies: amber', rulesFor(under, { ...over40, lcwra: false, benefit_cap: 'capped' }, { today }).warnings.some((w) => /benefit cap/.test(w.words)));
+
+// PIP: exempt from every cap and from the shared rate, whatever else is recorded (one rule everywhere)
+const pipNoAge = client({ notes: 'Harrow please', pip: true, benefit_cap: 'capped' });
+const pr = ruledMatch(under, pipNoAge, { today });
+check('PIP, age not known: paid the 1 bed rate, so a 1 bed within it is offered', !!pr.match && pr.match.lha?.theirs === true && pr.match.lha.size === 1, JSON.stringify(pr.hidden));
+check('PIP: no "age not known" warning, no benefit cap warning even if capped was recorded', !!pr.match && pr.match.warnings.length === 0, JSON.stringify(pr.match?.warnings));
+check('PIP: benefit cap exempt, shared rate exempt', benefitCapOf(pipNoAge).status === 'exempt' && benefitCapOf(pipNoAge).why === 'gets PIP' && sharedRateExempt(pipNoAge));
+check('PIP named only in their other benefits counts too', sharedRateExempt(client({ pip: null, benefit_type: 'UC, PIP' })));
+check('PIP: age band and benefit cap are not needed for matching', !matchingGaps({ ...pipNoAge, postcode_area: 'HA1', benefit_cap: null }, today).some((g) => g === 'Age band' || g === 'Benefit cap'),
+  matchingGaps({ ...pipNoAge, postcode_area: 'HA1', benefit_cap: null }, today).join());
+check('PIP under 35: never the shared rate', !!ruledMatch(under, client({ notes: "I'm 24, Harrow", pip: true }), { today }).match);
+check('PIP, age not known: a property for 35 plus suits them', rulesFor(property({ suitable_for: ['uc_35_plus'], rent_pcm: 900 }), pipNoAge, { today }).hidden === null);
+const lcwra24 = client({ notes: "I'm 24, Harrow", lcwra: true, benefit_cap: null });
+check('LCWRA lifts the benefit cap but not the shared rate', benefitCapOf(lcwra24).status === 'exempt' && ruledMatch(under, lcwra24, { today }).hidden === 'over_lha');
 
 // income
 const providers = [{ id: 'wm', name: 'Watermint', tag: 'WM', rules: { fee_amount: 250 } }] as unknown as Provider[];

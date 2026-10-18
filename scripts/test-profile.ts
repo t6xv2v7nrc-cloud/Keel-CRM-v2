@@ -55,6 +55,10 @@ const single28 = profileOf(make({ household_type: 'single', notes: "I'm 28", on_
 check('single, under 35: shared rate', single28.rateType.value === 'under_35_standard' && single28.size.value === 'shared');
 const pip28 = profileOf(make({ household_type: 'single', notes: "I'm 28", on_uc: true, pip: true }), { today });
 check('under 35 with PIP: exempt, 1 bed rate', pip28.rateType.value === 'sar_exempt' && pip28.size.value === 1);
+const pipAny = profileOf(make({ household_type: 'single', on_uc: true, pip: true }), { today });
+check('PIP, age not known: still the 1 bed rate, and their age is not asked for', pipAny.size.value === 1 && !pipAny.toAsk.some((q) => q.what === 'Their date of birth'), JSON.stringify(pipAny.toAsk.map((q) => q.what)));
+check('PIP: exempt from the benefit cap, and it is not asked', pipAny.benefits.cap === 'exempt' && !pipAny.toAsk.some((q) => /benefit cap/.test(q.what)));
+check('PIP is not a lead to check: it is certain', !exemptionsFrom(make({ pip: true })).some((e) => /PIP/.test(e)));
 const fled = profileOf(make({ household_type: 'single', notes: "I'm 26, fleeing domestic abuse", on_uc: true }), { today });
 check('domestic abuse is pointed out to check, not assumed', fled.exemptions.some((e) => /Domestic abuse/.test(e)) && fled.rateType.value === 'under_35_standard');
 check('care leaver and hostel stays are read', exemptionsFrom(make({ notes: 'care leaver, been in a hostel for 6 months' })).length === 2);

@@ -30,6 +30,24 @@ export const BENEFITS: ReadonlyArray<{ key: BenefitKey; label: string; words: st
 ];
 
 export const benefitsOf = (a: Applicant) => BENEFITS.filter((b) => b.has(a));
+export const hasBenefit = (a: Applicant, key: BenefitKey) => BENEFITS.some((b) => b.key === key && b.has(a));
+
+// ── Caps and the shared rate: one rule, used everywhere ─────────────
+// Ridwan's rule: a client on PIP is exempt from every cap and from the shared accommodation rate, whatever else is
+// recorded: no benefit cap, no UC-only limit (Team settings), and the 1 bed rate however old they are. LCWRA also
+// lifts the UC-only limit and the benefit cap (as the law has it), but not the shared rate.
+
+export type CapStatus = 'capped' | 'not_capped' | 'exempt';
+
+/** Whether the benefit cap applies: exempt with PIP or LCWRA (whatever is recorded), else as recorded, else not known. */
+export function benefitCapOf(a: Applicant): { status: CapStatus | null; why: string | null } {
+  if (hasBenefit(a, 'pip')) return { status: 'exempt', why: 'gets PIP' };
+  if (hasBenefit(a, 'lcwra')) return { status: 'exempt', why: 'gets LCWRA' };
+  return { status: a.benefit_cap ?? null, why: null };
+}
+
+/** Never held to the shared accommodation rate: PIP. */
+export const sharedRateExempt = (a: Applicant) => hasBenefit(a, 'pip');
 
 /** The tier in force: a tier set by hand (locked) wins; otherwise the current
  *  rules decide, so a change in Settings reaches every unlocked client. */

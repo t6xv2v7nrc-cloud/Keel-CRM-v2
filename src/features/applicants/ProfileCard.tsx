@@ -8,6 +8,7 @@ import type { Known, Source } from '../../lib/clientProfile';
 import { sizeWords } from '../../lib/lha';
 import { money } from '../../lib/format';
 import { HOUSEHOLD_LABEL } from '../../lib/tiering';
+import { sharedRateExempt } from '../../lib/search';
 import type { Applicant } from '../../lib/types';
 
 const SOURCE_WORDS: Record<Source, string> = { recorded: 'recorded', read: 'read from their message', 'worked out': 'worked out', 'not known': 'not known' };
@@ -74,7 +75,7 @@ export function ProfileCard({ applicant: a }: { applicant: Applicant }) {
             <Fact label="Benefits" known={{ value: 1, how: 'recorded' }} hideSource
               value={[p.benefits.uc ? 'UC' : p.benefits.uc === false ? 'Not on UC' : 'UC not known', p.benefits.pip ? 'PIP' : null, p.benefits.lcwra ? 'LCWRA' : null,
                 p.benefits.working ? 'working' : null, p.benefits.rentCap != null ? `on UC alone, so up to ${money(p.benefits.rentCap)}` : null,
-                p.benefits.cap === 'capped' ? 'benefit cap applies' : p.benefits.cap === 'exempt' ? 'exempt from the benefit cap' : p.benefits.cap === 'not_capped' ? 'not capped' : null].filter(Boolean).join(', ')} />
+                p.benefits.cap === 'capped' ? 'benefit cap applies' : p.benefits.cap === 'exempt' ? `exempt from the benefit cap${p.benefits.capWhy ? ` (${p.benefits.capWhy})` : ''}` : p.benefits.cap === 'not_capped' ? 'not capped' : null].filter(Boolean).join(', ')} />
             <Fact label="Wants" known={{ value: 1, how: 'read' }} hideSource
               value={[p.wants.beds, p.wants.areas.length ? p.wants.areas.slice(0, 4).join(', ') : p.wants.anywhere ? 'anywhere' : null,
                 p.wants.selfContained ? 'nothing shared' : null, p.wants.stepFree ? 'step-free' : null].filter(Boolean).join(' · ') || null} />
@@ -83,7 +84,7 @@ export function ProfileCard({ applicant: a }: { applicant: Applicant }) {
               extra={p.council.incentive ?? undefined} />
           </dl>
 
-          {p.exemptions.length > 0 && p.ageBand.value !== '35_plus' && (
+          {p.exemptions.length > 0 && p.ageBand.value !== '35_plus' && !sharedRateExempt(a) && (
             <p className="m-0 text-[13px]" style={{ color: 'var(--note-fg)' }}>
               May be exempt from the shared rate: {p.exemptions.join('; ')}. Check before relying on it.
             </p>
