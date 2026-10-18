@@ -31,16 +31,7 @@ export const DEAL_LABEL: Record<DealStatus, string> = {
 const stepIndex = (s: DealStatus) => DEAL_STEPS.findIndex((x) => x.key === s);
 export const isLive = (d: Pick<Deal, 'status'>) => d.status !== 'fell_through' && d.status !== 'moved_in';
 
-export const FELL_THROUGH_REASONS = [
-  'Landlord would not take UC or benefits',
-  'Client did not turn up',
-  'Client said no',
-  'Failed referencing or affordability',
-  'Council did not approve',
-  'Let to someone else',
-  'Client found somewhere else',
-  'Other',
-] as const;
+// Why a deal fell through: LOST_REASONS in viewings.ts, grouped by the reason that is counted.
 
 /** "Broadfield Close" from "Broadfield Close, London NW2 6NR"; "Flat 2, 10 Marchmont Street" keeps the street. */
 export function shortAddress(address: string): string {

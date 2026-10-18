@@ -192,13 +192,33 @@ check('an unknown route, fee type or invoicer, a share over 100%, or a second pl
 const plBackup = (await fresh21.query(`select count(*)::int as n from keel_backup.placements_before_0021`)).rows[0].n;
 check('placements are backed up first', plBackup === 0);
 
+// 0022: how each viewing went, why a deal was lost, replies to officers; deals and applicants backed up, nothing filled in
+const fresh22 = await freshDb({ upTo: '0021' });
+await fresh22.exec(`
+  insert into applicants (id, full_name, stage) values ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', 'Viewed Person', 'viewing');
+  insert into deals (id, applicant_id, address, status, viewing_at, fell_through_reason) values
+    ('ffffffff-ffff-ffff-ffff-ffffffffffff', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', '3 Seen Road', 'fell_through', '2026-10-01 14:00', 'Client said no');
+`);
+for (let i = 0; i < 2; i++) await fresh22.exec(readFileSync(dir + '0022_viewings.sql', 'utf8'));
+const vd = (await fresh22.query(`select viewing_outcome, reason_lost, outcome_at, outcome_sent_to_officer_at from deals`)).rows[0];
+check('deals gain outcome columns, and nothing is filled in for old ones', vd && vd.viewing_outcome === null && vd.reason_lost === null && vd.outcome_sent_to_officer_at === null, JSON.stringify(vd));
+await fresh22.exec(`update deals set viewing_outcome = 'no_show', reason_lost = 'too_far', outcome_sent_to_officer_at = now();
+  update applicants set nominated_at = now(), officer_replied_at = now();`);
+let vBad = 0;
+for (const sql of [`update deals set viewing_outcome = 'maybe'`, `update deals set reason_lost = 'weather'`]) {
+  try { await fresh22.exec(sql); } catch { vBad++; }
+}
+check('an unknown outcome or reason lost is refused', vBad === 2, String(vBad));
+const vBackup = (await fresh22.query(`select (select count(*)::int from keel_backup.deals_before_0022) as d, (select count(*)::int from keel_backup.applicants_before_0022) as a`)).rows[0];
+check('deals and applicants are backed up first, once', vBackup.d === 1 && vBackup.a === 1, JSON.stringify(vBackup));
+
 // The read-only check of a live database against these files
 const liveCheck = readFileSync(new URL('../supabase/checks/live-vs-repo.sql', import.meta.url).pathname, 'utf8');
 const status = async (d) => Object.fromEntries((await d.query(liveCheck)).rows.map((r) => [r.item, [r.status, r.detail]]));
 const full = await status(db);
 const numbered = Object.keys(full).filter((k) => /^\d{4}$/.test(k));
 check('live check: every migration reads as done on a database that has had them all (data-only ones cannot be told)',
-  numbered.length === 21 && numbered.every((k) => full[k][0] === 'done' || (['0003', '0016'].includes(k) && full[k][0].startsWith('cannot tell'))), JSON.stringify(full));
+  numbered.length === 22 && numbered.every((k) => full[k][0] === 'done' || (['0003', '0016'].includes(k) && full[k][0].startsWith('cannot tell'))), JSON.stringify(full));
 const behind = await freshDb();
 await behind.exec(`alter table properties drop column lha_area; drop table postcode_brma;
   create table eod_reports (id uuid primary key, report_date date, data jsonb);`);

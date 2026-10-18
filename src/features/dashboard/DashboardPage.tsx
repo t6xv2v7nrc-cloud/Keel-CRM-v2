@@ -16,6 +16,7 @@ import type { ApplicantStage } from '../../types/extraction';
 import type { Activity } from '../../lib/types';
 import { ThisWeek } from './ThisWeek';
 import { MorningSummary } from './MorningSummary';
+import { WaitingOnUs } from './WaitingOnUs';
 import { LongerTargets, WeeklyTargets } from './Targets';
 import { AwaitingProviders } from '../requests/AwaitingProviders';
 import { MoneyOwedSummary } from '../money/Money';
@@ -107,6 +108,8 @@ export function DashboardPage() {
       </header>
 
       <MorningSummary applicants={applicants} />
+
+      <WaitingOnUs applicants={applicants} />
 
       <WeeklyTargets />
       <LongerTargets />

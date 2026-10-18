@@ -287,6 +287,21 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
           <Row icon="clock" title="Leads go cold after" text="A lead or referral with no property in play, no next step booked and nothing moving for this long. Home offers to move them all to Lost in one tap (0 means never).">
             <NumberField label="Days" value={draft.coldAfterDays} min={0} onChange={(v) => set('coldAfterDays', v)} />
           </Row>
+          <Row icon="mail" title="First reply to a housing officer" text="When an officer sends a client, the first reply is due within this many working hours. The viewing's outcome is due back to them the same day. Both show on Home under Waiting on us.">
+            <NumberField label="Hours" value={draft.responses.replyHours} min={0} step={0.5} onChange={(v) => set('responses', { ...draft.responses, replyHours: v })} />
+          </Row>
+          <Row icon="clock" title="Working hours" text="Monday to Friday. Reply targets only count these hours, so a nomination at 5pm on Friday is due by Monday morning.">
+            <span className="flex flex-wrap items-center gap-2 text-[13px] text-[var(--ink-muted)]">
+              <input type="time" value={draft.responses.dayStart} aria-label="Working day starts" onChange={(e) => e.target.value && set('responses', { ...draft.responses, dayStart: e.target.value })}
+                className="h-10 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 font-mono text-[15px] text-[var(--ink)]" />
+              to
+              <input type="time" value={draft.responses.dayEnd} aria-label="Working day ends" onChange={(e) => e.target.value && set('responses', { ...draft.responses, dayEnd: e.target.value })}
+                className="h-10 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 font-mono text-[15px] text-[var(--ink)]" />
+            </span>
+          </Row>
+          <Row icon="calendar" title="Stop chasing after" text="Nominations and viewings older than this drop off Waiting on us.">
+            <NumberField label="Days" value={draft.responses.watchDays} min={1} onChange={(v) => set('responses', { ...draft.responses, watchDays: v })} />
+          </Row>
         </div>
       </Card>
 

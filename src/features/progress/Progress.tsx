@@ -8,14 +8,16 @@ import { addDays, dayLabel, dayWord, todayIso } from '../../lib/calls';
 import { timeAgo, shortDate } from '../../lib/format';
 import { matchesForApplicant } from '../../lib/propertyMatch';
 import {
-  checklistProgress, DEAL_LABEL, DEAL_STEPS, FELL_THROUGH_REASONS, isLive, isPlaced, needsChecklist, nextMove, shortAddress, stuckDays,
+  checklistProgress, DEAL_LABEL, DEAL_STEPS, isLive, isPlaced, needsChecklist, nextMove, shortAddress, stuckDays,
   viewingShort, viewingWords,
 } from '../../lib/progress';
+import { OUTCOMES, outcomeBack, outcomeStep } from '../../lib/viewings';
+import { LostReasonSelect, OfficerReply, OutcomeBackRow } from './Responses';
 import { reminderMessage, waLink, waNumber } from '../../lib/whatsapp';
 import { useFold } from '../../lib/collapse';
 import { openViewingChange } from './ViewingChange';
 import type { ApplicantStage } from '../../types/extraction';
-import type { Applicant, Deal, DealStatus, Property } from '../../lib/types';
+import type { Applicant, Deal, DealStatus, Property, ViewingOutcome } from '../../lib/types';
 
 export const STAGE_NAME: Record<ApplicantStage, string> = {
   lead: 'Lead', referred: 'Referred', viewing: 'Viewing', offer: 'Offer', placed: 'Placed',
@@ -55,6 +57,7 @@ function DealSteps({ status }: { status: DealStatus }) {
 /** "Viewing Thu 2 Oct, 2pm", "Offer made", "Moved in". */
 export function dealWords(d: Deal): string {
   if (d.status === 'viewing' && d.viewing_at) return `Viewing ${viewingShort(d.viewing_at)}`;
+  if (d.status === 'interested' && d.viewing_outcome === 'no_show') return 'Did not turn up: rebook';
   if (d.status === 'moved_in' && d.move_in_on) return `Moved in ${shortDate(d.move_in_on)}`;
   if (d.status === 'fell_through') return `Fell through${d.fell_through_reason ? `: ${d.fell_through_reason}` : ''}`;
   return DEAL_LABEL[d.status];
@@ -134,6 +137,8 @@ export function ProgressCard({ applicant }: { applicant: Applicant }) {
       {fold.open && <div className="flex flex-col gap-4 p-5">
         <StageStrip stage={applicant.stage} />
 
+        <OfficerReply applicant={applicant} />
+
         {!ready && (
           <UpdateNote title="Tracking each property needs a one-off database update." file="0009_progress.sql" />
         )}
@@ -158,6 +163,8 @@ export function ProgressCard({ applicant }: { applicant: Applicant }) {
             {live.map((d) => <DealRow key={d.id} applicant={applicant} deal={d} all={all} property={propertyOf(d)} />)}
           </ul>
         )}
+
+        {gone.filter((d) => outcomeBack(d, applicant)?.waiting).map((d) => <OutcomeBackRow key={d.id} applicant={applicant} deal={d} showAddress />)}
 
         {gone.length > 0 && (
           <div className="text-[13px]">
@@ -186,15 +193,19 @@ function DealRow({ applicant, deal, all, property }: { applicant: Applicant; dea
   const [mode, setMode] = useState<null | 'viewing' | 'moved_in' | 'fell_through'>(null);
   const [when, setWhen] = useState(deal.viewing_at ? toLocalInput(deal.viewing_at) : tomorrowAt11());
   const [moveIn, setMoveIn] = useState(todayIso());
-  const [reason, setReason] = useState<string>(FELL_THROUGH_REASONS[0]);
+  const [reason, setReason] = useState<string>('Client said no');
+  const [picked, setPicked] = useState<ViewingOutcome | null>(null);
   const next = nextMove(deal.status);
   const busy = move.isPending || remove.isPending;
+  // once the viewing's time has passed, ask how it went instead of offering the next step
+  const viewingPassed = deal.status === 'viewing' && !!deal.viewing_at && new Date(deal.viewing_at) <= new Date();
 
-  const go = (to: DealStatus, extra: { viewingAt?: string; moveInOn?: string; reason?: string } = {}) =>
+  const go = (to: DealStatus, extra: { viewingAt?: string; moveInOn?: string; reason?: string; outcome?: ViewingOutcome | null } = {}) =>
     move.mutate({ applicant, deal, to, allDeals: all, property, ...extra }, {
       onSuccess: (r) => {
         setMode(null);
-        toast([`${short(deal.address)}: ${DEAL_LABEL[to]}`, r.stage ? `${first(applicant.full_name)} is now at ${STAGE_NAME[r.stage]}` : null,
+        setPicked(null);
+        toast([`${short(deal.address)}: ${extra.outcome === 'no_show' ? 'did not turn up' : DEAL_LABEL[to]}`, r.stage ? `${first(applicant.full_name)} is now at ${STAGE_NAME[r.stage]}` : null,
           r.step ? `Next step: ${r.step}` : null, r.fee ? `${r.fee} added to Finances` : null].filter(Boolean).join(' · '), 'success');
       },
       onError: (e) => toast((e as Error).message, 'danger'),
@@ -205,10 +216,16 @@ function DealRow({ applicant, deal, all, property }: { applicant: Applicant; dea
     else if (next.to === 'moved_in') setMode('moved_in');
     else go(next.to);
   };
+  const onOutcome = (o: ViewingOutcome) => {
+    setPicked(o);
+    if (o === 'signed') setMode('moved_in');
+    else if (o === 'declined') setMode('fell_through');
+    else go(outcomeStep(o), { outcome: o });
+  };
   const onPick = (v: string) => {
     if (v === 'remove') {
       if (window.confirm(`Stop tracking ${deal.address} for ${first(applicant.full_name)}?`)) remove.mutate(deal, { onSuccess: () => toast('Stopped tracking it', 'success') });
-    } else if (v === 'fell_through') setMode('fell_through');
+    } else if (v === 'fell_through') { setPicked(null); setMode('fell_through'); }
     else if (v === 'viewing') setMode('viewing');
     else if (v === 'moved_in') setMode('moved_in');
     else if (v) go(v as DealStatus);
@@ -233,7 +250,7 @@ function DealRow({ applicant, deal, all, property }: { applicant: Applicant; dea
             <Icon name="calendar" size={14} /><span className="hidden sm:inline">Move or cancel</span>
           </button>
         )}
-        {next && deal.status !== 'moved_in' && (
+        {next && deal.status !== 'moved_in' && !viewingPassed && (
           <Button variant="primary" className="min-h-0 px-3 py-1.5 text-[13px]" onClick={onNext} disabled={busy}>{next.label}</Button>
         )}
         <select value="" onChange={(e) => onPick(e.target.value)} aria-label={`More for ${deal.address}`} disabled={busy}
@@ -247,6 +264,20 @@ function DealRow({ applicant, deal, all, property }: { applicant: Applicant; dea
         </select>
       </div>
       <DealSteps status={deal.status} />
+      {viewingPassed && mode === null && (
+        <div className="flex flex-col gap-2 rounded-md border border-[var(--accent)] bg-[var(--surface)] px-3 py-2.5 text-[13px]">
+          <span className="font-medium text-[var(--ink)]">How did the viewing go? <span className="font-normal text-[var(--ink-muted)]">It was {viewingShort(deal.viewing_at!).replace(/^(Today|Yesterday)/, (w) => w.toLowerCase())}.</span></span>
+          <div className="flex flex-wrap gap-1.5">
+            {OUTCOMES.map((o) => (
+              <Button key={o.key} variant={o.key === 'viewed' ? 'primary' : 'secondary'} className="min-h-0 px-3 py-1.5 text-[13px]" disabled={busy}
+                onClick={() => onOutcome(o.key)}>
+                {o.label}{o.key === 'declined' ? '…' : ''}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
+      <OutcomeBackRow applicant={applicant} deal={deal} />
       {needsChecklist(deal) && <MoveInChecklist deal={deal} />}
 
       {mode === 'viewing' && (
@@ -266,21 +297,19 @@ function DealRow({ applicant, deal, all, property }: { applicant: Applicant; dea
             <input type="date" value={moveIn} onChange={(e) => setMoveIn(e.target.value)}
               className="h-8 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[13px] text-[var(--ink)]" />
           </label>
-          <Button variant="primary" className="min-h-0 px-3 py-1.5 text-[13px]" disabled={!moveIn || busy} onClick={() => go('moved_in', { moveInOn: moveIn })}>
-            Confirm {first(applicant.full_name)} moved in
+          <Button variant="primary" className="min-h-0 px-3 py-1.5 text-[13px]" disabled={!moveIn || busy} onClick={() => go('moved_in', { moveInOn: moveIn, outcome: picked })}>
+            Confirm {first(applicant.full_name)} {picked === 'signed' ? 'signed up' : 'moved in'}
           </Button>
-          <button type="button" onClick={() => setMode(null)} className="text-[var(--ink-muted)] hover:text-[var(--ink)]">Cancel</button>
+          <button type="button" onClick={() => { setMode(null); setPicked(null); }} className="text-[var(--ink-muted)] hover:text-[var(--ink)]">Cancel</button>
           <span className="w-full text-[12px] text-[var(--ink-muted)]">The property is marked as let, and anyone else going for it is told it was let. The letting fee, and anything waiting for {first(applicant.full_name)} to sign up, falls due from that day.</span>
         </div>
       )}
       {mode === 'fell_through' && (
         <div className="flex flex-wrap items-center gap-2 text-[13px]">
-          <select value={reason} onChange={(e) => setReason(e.target.value)} aria-label="Why it fell through"
-            className="h-8 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-1.5 text-[13px] text-[var(--ink)]">
-            {FELL_THROUGH_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
-          <Button className="min-h-0 px-3 py-1.5 text-[13px]" disabled={busy} onClick={() => go('fell_through', { reason })}>Mark as fell through</Button>
-          <button type="button" onClick={() => setMode(null)} className="text-[var(--ink-muted)] hover:text-[var(--ink)]">Cancel</button>
+          <span className="text-[var(--ink-muted)]">{picked === 'declined' ? 'Why is it not going ahead?' : 'Why did it fall through?'}</span>
+          <LostReasonSelect value={reason} onChange={setReason} />
+          <Button className="min-h-0 px-3 py-1.5 text-[13px]" disabled={busy} onClick={() => go('fell_through', { reason, outcome: picked })}>Mark as fell through</Button>
+          <button type="button" onClick={() => { setMode(null); setPicked(null); }} className="text-[var(--ink-muted)] hover:text-[var(--ink)]">Cancel</button>
         </div>
       )}
     </li>

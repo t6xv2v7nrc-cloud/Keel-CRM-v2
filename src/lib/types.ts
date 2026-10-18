@@ -46,6 +46,8 @@ export interface Applicant {
   iced_at?: string | null;          // put on ice: paused until they are ready
   iced_until?: string | null;       // YYYY-MM-DD they come back by themselves; null until taken off by hand
   iced_reason?: string | null;
+  nominated_at?: string | null;       // 0022: when the housing officer's nomination arrived (empty: when they got in touch)
+  officer_replied_at?: string | null; // 0022: when Keel first replied to that nomination
   created_at: string;
   updated_at: string;
 }
@@ -119,6 +121,8 @@ export interface Call {
 }
 
 /** A property a client is going for, and how far it has got (0009). */
+export type ViewingOutcome = 'viewed' | 'no_show' | 'offered' | 'declined' | 'signed';
+export type ReasonLost = 'too_far' | 'too_small' | 'failed_affordability' | 'client_dropped_out' | 'property_issue' | 'other';
 export type DealStatus = 'sent' | 'interested' | 'viewing' | 'viewed' | 'offered' | 'accepted' | 'moved_in' | 'fell_through';
 export interface Deal {
   id: string;
@@ -132,6 +136,11 @@ export interface Deal {
   notes: string | null;
   /** 0015: move-in checks ticked, check → the day it was ticked (YYYY-MM-DD) */
   checklist?: Record<string, string>;
+  /** 0022: how the viewing went, why it was lost, when that was recorded, and when it went back to the housing officer */
+  viewing_outcome?: ViewingOutcome | null;
+  reason_lost?: ReasonLost | null;
+  outcome_at?: string | null;
+  outcome_sent_to_officer_at?: string | null;
   created_by?: string | null;
   created_at: string;
   updated_at: string;

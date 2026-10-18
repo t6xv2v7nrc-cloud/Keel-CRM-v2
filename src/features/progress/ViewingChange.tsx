@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Button, Icon, useToast } from '../../components/ui';
 import { useApplicants, useClientNote, useDeals, useMoveDeal, usePeople, useProperties, useProviders } from '../../lib/hooks';
 import { activeSettings } from '../../lib/settings';
-import { FELL_THROUGH_REASONS, shortAddress, viewingWords } from '../../lib/progress';
+import { shortAddress, viewingWords } from '../../lib/progress';
+import { LostReasonSelect } from './Responses';
 import { firstNameOf, providerFor, requestMessage, slotWords } from '../../lib/requests';
 import { viewingMessage, waLink, waNumber } from '../../lib/whatsapp';
 
@@ -46,7 +47,7 @@ function ViewingChangeSheet({ dealId, onClose }: { dealId: string; onClose: () =
   const [mode, setMode] = useState<'move' | 'cancel'>('move');
   const [when, setWhen] = useState(deal?.viewing_at ? toLocalInput(deal.viewing_at) : '');
   const [stillKeen, setStillKeen] = useState(true);
-  const [reason, setReason] = useState<string>(FELL_THROUGH_REASONS[1]);
+  const [reason, setReason] = useState<string>('Client said no');
   const [done, setDone] = useState<null | { mode: 'move' | 'cancel'; oldAt: string; newAt: string | null }>(null);
 
   useEffect(() => {
@@ -123,10 +124,7 @@ function ViewingChangeSheet({ dealId, onClose }: { dealId: string; onClose: () =
                   <label className="flex items-center gap-2"><input type="radio" checked={stillKeen} onChange={() => setStillKeen(true)} className="accent-[var(--accent)]" />{who} still wants it: rebook later</label>
                   <label className="flex items-center gap-2"><input type="radio" checked={!stillKeen} onChange={() => setStillKeen(false)} className="accent-[var(--accent)]" />It is not going ahead</label>
                   {!stillKeen && (
-                    <select value={reason} onChange={(e) => setReason(e.target.value)} aria-label="Why"
-                      className="h-10 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[14px] text-[var(--ink)]">
-                      {FELL_THROUGH_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
-                    </select>
+                    <LostReasonSelect value={reason} onChange={setReason} className="h-10 px-2 text-[14px]" />
                   )}
                 </div>
               )}

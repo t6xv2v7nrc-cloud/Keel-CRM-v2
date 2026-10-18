@@ -31,6 +31,12 @@ src/
               geo.ts (placing postcodes via postcodes.io, cached per device; a client's areas as districts),
               progress.ts (deals: each property a client is going for; stage follows deals, next steps, stuck, gone cold,
                            the move-in checklist on accepted and moved-in deals (`deals.checklist`, items in Settings)),
+              viewings.ts (0022: how a viewing went (viewed, no_show, offered, declined, signed; `outcomeForMove` writes it as
+                           deals move), why a deal was lost (`LOST_REASONS` grouped by `reason_lost`; old ones read by
+                           `reasonLostOf`, never written back), working hours, the first reply to an officer's nomination
+                           (`replyState`, nominated_at else created_at) and the outcome back the same day (`outcomeBack`);
+                           `responsesDue` is Home's Waiting on us; `caseworkAddress` never writes to someone who left or bounced;
+                           UI in features/progress/Responses.tsx and features/dashboard/WaitingOnUs.tsx),
               requests.ts (providers' rules, request messages to providers, follow-ups; never phone, surname or health),
               money.ts (Finances: receivables per placement (letting fees and incentives), fees worked out from the rent
                         (£, % of a month's rent, weeks of rent; a week is pcm × 12 ÷ 52), due dates from sign up or from the
@@ -150,7 +156,7 @@ supabase/checks/live-vs-repo.sql  (read-only: which migrations the live database
 
 Ridwan's brief "make Keel stop bad matches and bad emails before they happen", worked step by step in this order: diff live
 vs repo (done: live has had 0001 to 0017), LHA table (Step 1, done: 0018), property fields (Step 2, done: 0019), officers send status (Step 3, done: 0020) plus `council_schemes`, placements and
-incentives (Step 4, done: 0021), viewings, matching, a "sendable" view, KPI dashboard. After each step: run it, test it, say what changed in 3 lines.
+incentives (Step 4, done: 0021), viewings (Step 5, done: 0022), matching, a "sendable" view, KPI dashboard. After each step: run it, test it, say what changed in 3 lines.
 - Do not ask Ridwan to run pending migrations until he says; `supabase/checks/live-vs-repo.sql` lists what is pending.
   Live also has tables from HELM (the old name and version of Keel CRM): `leads`, `officers` (108 rows: temp, score,
   last_contact_at, prefers_sms...), `activity_log`, `notifications`, `eod_reports`, all RLS on, unused by this app.
@@ -166,6 +172,11 @@ incentives (Step 4, done: 0021), viewings, matching, a "sendable" view, KPI dash
 - Money is in council incentives (£1,500 to £8,000), not fees: show expected Keel income per match, incentive-bearing first.
   Placements read amounts from `receivables` (never typed twice) and use `provider_id` for the partner.
 - Focus boroughs: Harrow, Hounslow, Hillingdon, Croydon, Haringey, Islington (wish-list Sutton, Kingston).
+- Response discipline (Step 5, 0022): an officer's nomination gets a first reply within 4 working hours (Mon to Fri, 9 to
+  5:30, Team settings `responses`), a viewing's outcome goes back to the officer the same day. Once a viewing's time has
+  passed, Progress asks how it went instead of offering the next step. Updates about an officer's own client still go to
+  one who opted out of property emails; never to one who left or bounced (their mailbox, else nothing). Nominations and
+  viewings older than `watchDays` (14) are not chased, and an old nomination is never stamped "replied" with today's time.
 
 ## Env vars
 
@@ -203,7 +214,9 @@ Never commit `.env.local`. Never expose the service role key or Anthropic key to
   app already does this for new ones, and the review card's "First got in touch" date can change it), then 0017 (on ice),
   then 0018 (LHA rates and postcode areas with their source), then 0019 (property kind, suits, safety papers; backs up
   properties into keel_backup first), then 0020 (officer send status, officer_sends, council_schemes; backs up officers),
-  then 0021 (placements on moved-in deals: who invoices, split in writing; backs up placements, makes one per moved-in deal).
+  then 0021 (placements on moved-in deals: who invoices, split in writing; backs up placements, makes one per moved-in deal),
+  then 0022 (viewing outcome, reason lost, outcome sent to the officer on deals; nominated_at and officer_replied_at on
+  applicants; backs up deals and applicants, fills nothing in).
 - Check every migration runs, twice, on a scratch Postgres before committing one:
   `npm i --no-save @electric-sql/pglite && node scripts/check-migrations.mjs` (it also tests the merge and invoice numbers).
 

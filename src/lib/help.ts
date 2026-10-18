@@ -137,6 +137,16 @@ export const HELP = {
       'Stuck means nothing has moved for longer than Team settings allow at that stage. A viewing coming up always counts as moving.',
       'Gone cold means a lead or referral with no property in play, no next step booked and nothing moving for 30 days (Team settings). Home offers to move them all to Lost in one tap; each gets a line on their timeline, and you can set any back on their page.',
       'Active clients are the ones still being housed: lead, referred, viewing or offer. Clients who have moved in are counted as housed.',
+      'Once a viewing\'s time has passed, Keel asks how it went: they viewed it, offer made, signed up, not going ahead (with why), or did not turn up (back to Interested, to rebook). Why a property was lost is kept in six groups (too far, too small, failed affordability or referencing, client dropped out, problem with the property, other) so the reasons can be counted.',
+    ],
+  },
+  responses: {
+    title: 'Waiting on us',
+    body: [
+      'How fast Keel answers housing officers. When an officer sends a client, the first reply is due within 4 working hours (Monday to Friday, 9am to 5:30pm). Record it with Replied once you have answered them.',
+      'After a viewing, the officer should hear how it went the same day. Email them from the client\'s Progress (the email is written for you, and sending it is recorded), or press Told them another way if you phoned or messaged.',
+      'Updates about an officer\'s own client still go to an officer who opted out of property emails. Nothing goes to someone who has left or whose email bounced: their team mailbox if one is saved on Councils, else Keel asks you to find who has the case now.',
+      'Viewings whose time has passed with nothing recorded are listed too. Anything older than 14 days drops off the list. The targets and working hours are in Team settings, under Client progress.',
     ],
   },
   arrange: {

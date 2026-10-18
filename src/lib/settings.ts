@@ -154,7 +154,13 @@ export interface AppSettings {
   focusBoroughs: string[];
   /** Boroughs Keel would like to work next: sorted after the focus ones. */
   wishlistBoroughs: string[];
+  /** How fast Keel answers housing officers: first reply within replyHours working hours of a nomination, a viewing's
+   *  outcome back the same day. Working hours are Monday to Friday, dayStart to dayEnd ("09:00"). Nominations and
+   *  viewings older than watchDays are no longer chased. */
+  responses: ResponseRules;
 }
+
+export interface ResponseRules { replyHours: number; dayStart: string; dayEnd: string; watchDays: number }
 
 export const DEFAULT_WHATSAPP_MESSAGE = [
   'Hi {first name}, I have {a property} that could suit you:',
@@ -316,6 +322,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   targets: DEFAULT_TARGETS,
   focusBoroughs: ['Harrow', 'Hounslow', 'Hillingdon', 'Croydon', 'Haringey', 'Islington'],
   wishlistBoroughs: ['Sutton', 'Kingston upon Thames'],
+  responses: { replyHours: 4, dayStart: '09:00', dayEnd: '17:30', watchDays: 14 },
 };
 
 /** Settings each person sets for themselves; everything else is shared by the team. */

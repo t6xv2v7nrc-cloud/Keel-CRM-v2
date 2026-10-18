@@ -7,7 +7,7 @@ import type { AppSettings } from './settings';
 import { addDays, OUTCOME_LABEL, todayIso } from './calls';
 import { DEAL_LABEL, isLive, shortAddress, shouldAdvance, stageFromDeals, stepAfter, takesOver, viewingWords } from './progress';
 import { computeTier } from './tiering';
-import { moneyFee, shortDate } from './format';
+import { clockTime, moneyFee, shortDate } from './format';
 import type {
   Activity, Applicant, Call, CallOutcome, Deal, DealStatus, Profile, Property, Provider, ProviderRequest, Receivable, RequestStatus, RequestType,
 } from './types';
@@ -25,6 +25,8 @@ import { FEE_TYPE_WORDS, INVOICER_WORDS, ROUTE_WORDS } from './placements';
 import type { Placement } from './placements';
 import type { CouncilScheme, OfficerRecord, OfficerSend, OfficerStatus, SendKind } from './councils';
 import type { LhaRateRow, LhaTable } from './lha';
+import { MOVED_IN_ELSEWHERE, outcomeForMove, reasonCode } from './viewings';
+import type { ViewingOutcome } from './types';
 import type { ApplicantStage } from '../types/extraction';
 
 // ── Applicants ──────────────────────────────────────────────────────
@@ -1009,19 +1011,34 @@ async function updateApplicant(id: string, patch: Record<string, unknown>) {
   if (retry.error) throw retry.error;
 }
 
-/** Every deal (a client going for a property), most recently moved first. `ready` is false until 0009 is run. */
-export async function fetchDeals(): Promise<{ deals: Deal[]; ready: boolean }> {
+/** Every deal (a client going for a property), most recently moved first. `ready` is false until 0009 is run;
+ *  `outcomes` is false until 0022 is (how each viewing went, and when it went back to the officer). */
+export async function fetchDeals(): Promise<{ deals: Deal[]; ready: boolean; outcomes?: boolean }> {
   const { data, error } = await supabase.from('deals').select('*').order('updated_at', { ascending: false });
   if (error) {
-    if (missingTable(error)) return { deals: [], ready: false };
+    if (missingTable(error)) return { deals: [], ready: false, outcomes: false };
     throw error;
   }
-  return { deals: data as Deal[], ready: true };
+  const rows = data as Deal[];
+  const outcomes = rows.length ? 'viewing_outcome' in rows[0] : !(await supabase.from('deals').select('viewing_outcome').limit(1)).error;
+  return { deals: rows, ready: true, outcomes };
 }
 
 export function useDeals() {
   const q = useQuery({ queryKey: ['deals'], queryFn: fetchDeals });
-  return { deals: q.data?.deals ?? [], ready: q.data?.ready ?? true, isLoading: q.isLoading };
+  return { deals: q.data?.deals ?? [], ready: q.data?.ready ?? true, outcomes: q.data?.outcomes ?? true, isLoading: q.isLoading };
+}
+
+const VIEWINGS_UPDATE =
+  'Viewing outcomes and replies to officers need a one-off database update: run supabase/migrations/0022_viewings.sql in the Supabase SQL Editor.';
+/** Columns added by 0022. Until it is run they are left out, so deals still move. */
+const OUTCOME_COLUMNS = ['viewing_outcome', 'reason_lost', 'outcome_at', 'outcome_sent_to_officer_at'];
+
+/** Change a deal. Before 0022 the outcome columns are dropped and it is tried again. */
+async function updateDeal(id: string, patch: Record<string, unknown>) {
+  const res = await supabase.from('deals').update(patch).eq('id', id);
+  if (!res.error || !isMissingColumn(res.error)) return res;
+  return supabase.from('deals').update(Object.fromEntries(Object.entries(patch).filter(([k]) => !OUTCOME_COLUMNS.includes(k)))).eq('id', id);
 }
 
 type DealProperty = { id?: string; address_line: string };
@@ -1062,20 +1079,24 @@ export function useAddDeals() {
 export function useMoveDeal() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ applicant, deal, to, viewingAt, moveInOn, reason, allDeals, property, activityBody }: {
+    mutationFn: async ({ applicant, deal, to, viewingAt, moveInOn, reason, allDeals, property, activityBody, outcome }: {
       applicant: Applicant; deal: Deal; to: DealStatus; allDeals: Deal[];
       viewingAt?: string | null; moveInOn?: string | null; reason?: string | null; activityBody?: string;
       property?: (Pick<Property, 'id' | 'status' | 'address_line'> & Partial<Omit<Property, 'id' | 'status' | 'address_line'>>) | null;
+      /** how the viewing went, when picked by hand (0022); otherwise worked out from the move */
+      outcome?: ViewingOutcome | null;
     }): Promise<{ stage: ApplicantStage | null; step: string | null; fee: string | null }> => {
       const patch: Partial<Deal> = { status: to };
       if (to === 'viewing') patch.viewing_at = viewingAt ?? deal.viewing_at;
       if (deal.status === 'viewing' && to === 'interested') patch.viewing_at = null;
       if (to === 'moved_in') patch.move_in_on = moveInOn ?? todayIso();
-      if (to === 'fell_through') patch.fell_through_reason = reason ?? null;
-      const { error } = await supabase.from('deals').update(patch).eq('id', deal.id);
+      if (to === 'fell_through') { patch.fell_through_reason = reason ?? null; patch.reason_lost = reasonCode(reason); }
+      Object.assign(patch, outcomeForMove(deal, to, { picked: outcome, reason }) ?? {});
+      const { error } = await updateDeal(deal.id, patch);
       if (error) throw missingTable(error) ? new Error(PROGRESS_UPDATE) : error;
 
-      const body = activityBody ?? (to === 'viewing' && patch.viewing_at ? `Viewing booked at ${deal.address}: ${viewingWords(patch.viewing_at)}`
+      const body = activityBody ?? (outcome === 'no_show' ? `${deal.address}: did not turn up to the viewing`
+        : to === 'viewing' && patch.viewing_at ? `Viewing booked at ${deal.address}: ${viewingWords(patch.viewing_at)}`
         : to === 'fell_through' ? `${deal.address} fell through${reason ? `: ${reason}` : ''}`
         : to === 'moved_in' ? `Moved in to ${deal.address}${patch.move_in_on ? ` on ${shortDate(patch.move_in_on)}` : ''}`
         : `${deal.address}: ${DEAL_LABEL[to].toLowerCase()}`);
@@ -1088,6 +1109,7 @@ export function useMoveDeal() {
       const stage = shouldAdvance(applicant.stage, target) ? target : null;
       if (stage) { client.stage = stage; client.stage_changed_at = new Date().toISOString(); }
       let next = stepAfter(to, deal.address, patch.viewing_at);
+      if (outcome === 'no_show') next = { step: `Rebook the viewing at ${shortAddress(deal.address)}, or let it go`, on: addDays(1) };
       if (to === 'fell_through' && !theirs.some(isLive)) next = { step: 'Send more properties', on: addDays(1) };
       const stepTakesOver = next !== null && takesOver(applicant, next, deal.address);
       if (next && stepTakesOver) { client.next_step = next.step; client.next_call_at = next.on; }
@@ -1111,12 +1133,12 @@ export function useMoveDeal() {
         const others = allDeals.filter((d) => d.id !== deal.id && d.applicant_id !== applicant.id && isLive(d)
           && ((deal.property_id && d.property_id === deal.property_id) || d.address === deal.address));
         for (const o of others) {
-          await supabase.from('deals').update({ status: 'fell_through', fell_through_reason: 'Let to someone else' }).eq('id', o.id);
+          await updateDeal(o.id, { status: 'fell_through', fell_through_reason: 'Let to someone else', reason_lost: 'property_issue', ...outcomeForMove(o, 'fell_through') });
           await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: o.applicant_id, kind: 'progress', body: `${o.address} fell through: Let to someone else` });
         }
-        // and this client no longer needs their other properties
+        // and this client no longer needs their other properties (not a loss: they are housed)
         for (const o of theirs.filter((d) => d.id !== deal.id && isLive(d))) {
-          await supabase.from('deals').update({ status: 'fell_through', fell_through_reason: 'Client found somewhere else' }).eq('id', o.id);
+          await updateDeal(o.id, { status: 'fell_through', fell_through_reason: MOVED_IN_ELSEWHERE });
         }
       }
 
@@ -1172,6 +1194,48 @@ export function useMoveDeal() {
       qc.invalidateQueries({ queryKey: ['applicants', applicant.id] });
       qc.invalidateQueries({ queryKey: ['properties'] });
       qc.invalidateQueries({ queryKey: ['receivables'] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+/** The viewing's outcome went back to the housing officer (0022), by the email Keel wrote or another way; or undo it. */
+export function useOutcomeSent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ deal, sent, how, officer }: { deal: Deal; sent: boolean; how?: 'email' | 'other'; officer?: string | null }) => {
+      const { error } = await supabase.from('deals').update({ outcome_sent_to_officer_at: sent ? new Date().toISOString() : null }).eq('id', deal.id);
+      if (error) throw isMissingColumn(error) ? new Error(VIEWINGS_UPDATE) : error;
+      const who = officer?.trim() || 'the officer';
+      await supabase.from('activities').insert({
+        entity_type: 'applicant', entity_id: deal.applicant_id, kind: 'progress',
+        body: sent ? `Told ${who} how the viewing at ${shortAddress(deal.address)} went${how === 'email' ? ' (email)' : ''}` : `Undone: outcome of ${shortAddress(deal.address)} sent to ${who}`,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['deals'] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+/** When the officer's nomination arrived and when Keel first replied to it (0022). */
+export function useOfficerReply() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ applicant, patch, officer }: { applicant: Applicant; patch: { officer_replied_at?: string | null; nominated_at?: string | null }; officer?: string | null }) => {
+      const { error } = await supabase.from('applicants').update(patch).eq('id', applicant.id);
+      if (error) throw isMissingColumn(error) ? new Error(VIEWINGS_UPDATE) : error;
+      const who = officer?.trim() || 'the officer';
+      const lines = [
+        'officer_replied_at' in patch ? (patch.officer_replied_at ? `First reply to ${who} recorded: ${shortDate(patch.officer_replied_at)}, ${clockTime(patch.officer_replied_at)}` : `First reply to ${who} cleared`) : null,
+        'nominated_at' in patch ? (patch.nominated_at ? `Nomination from ${who} dated ${shortDate(patch.nominated_at)}, ${clockTime(patch.nominated_at)}` : 'Nomination dated from when they got in touch') : null,
+      ].filter(Boolean) as string[];
+      for (const body of lines) await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: applicant.id, kind: 'progress', body });
+    },
+    onSuccess: (_d, { applicant }) => {
+      qc.invalidateQueries({ queryKey: ['applicants'] });
+      qc.invalidateQueries({ queryKey: ['applicants', applicant.id] });
       qc.invalidateQueries({ queryKey: ['activities'] });
     },
   });
