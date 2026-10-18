@@ -28,6 +28,15 @@ src/
               propertyChecks.ts (0019: kind of place, who it suits, safety papers; LHA gap and shared-rate gap worked out,
                                never typed; flags red over LHA, amber suits not set or outside Greater London, grey not
                                ready (papers or under 3 photos); `sendBlockers` = red and grey; card in features/properties/Checks.tsx),
+              matchRules.ts (Step 6, 0023: the rules on top of propertyMatch's scores; every screen matches through it:
+                           LHA at the rate the client is paid (`rateOf` in clientProfile.ts) in the property's BRMA, hidden
+                           when over unless `showOverLha`; shared kitchen or HMO room never to couples or families;
+                           `suitable_for` respected; families never under their size; BRMA must be one they want
+                           (`targetsOf`: their areas, districts, postcode_area; "London"; else their council and next door);
+                           London officers' clients see nothing outside Greater London unless `showOutsideLondon`;
+                           one-line reason (`line`), expected income (`incomeFor`: provider fee + incentive on Finances, else
+                           the scheme's max, else "likely" for an officer referral); on a property, incentive-bearing first;
+                           `hiddenForApplicant` counts what the rules hid; UI bits in features/properties/MatchBits.tsx),
               geo.ts (placing postcodes via postcodes.io, cached per device; a client's areas as districts),
               progress.ts (deals: each property a client is going for; stage follows deals, next steps, stuck, gone cold,
                            the move-in checklist on accepted and moved-in deals (`deals.checklist`, items in Settings)),
@@ -107,6 +116,11 @@ supabase/checks/live-vs-repo.sql  (read-only: which migrations the live database
   "Self-contained only" (the client's Shared accommodation switch, stored as those words in their must-haves; the same
   wish in their own words counts) is never matched to anything shared: rooms, en-suite rooms and studios, HMOs, house
   shares, or notes saying shared kitchen or bathroom (`selfContainedFrom`, `withSelfContained`, `shared` in propertyMatch.ts).
+- Matching rules (Step 6, matchRules.ts) decide what anyone is offered: within the LHA the client is paid there (wins
+  over the premium rule), in an LHA area they want, a kind of place that suits them; out-of-London never to a London
+  officer's client by default. What the rules hide is counted under each list, with Show over LHA and Show outside
+  London switches (personal settings set the default). Needed for matching (Profile): postcode area, age band, who is
+  moving in, UC, benefit cap, PIP or LCWRA (`matchingGaps`).
 - Short lists, not endless ones: each property shows only its best few clients (`bestFew`), one line each. No kanban.
 - Nothing scrolls sideways, on a phone especially.
 - Properties go to clients, and requests go to providers, as WhatsApp links (wa.me) the person sends by hand; every
@@ -156,7 +170,7 @@ supabase/checks/live-vs-repo.sql  (read-only: which migrations the live database
 
 Ridwan's brief "make Keel stop bad matches and bad emails before they happen", worked step by step in this order: diff live
 vs repo (done: live has had 0001 to 0017), LHA table (Step 1, done: 0018), property fields (Step 2, done: 0019), officers send status (Step 3, done: 0020) plus `council_schemes`, placements and
-incentives (Step 4, done: 0021), viewings (Step 5, done: 0022), matching, a "sendable" view, KPI dashboard. After each step: run it, test it, say what changed in 3 lines.
+incentives (Step 4, done: 0021), viewings (Step 5, done: 0022), matching (Step 6, done: 0023), a "sendable" view, KPI dashboard. After each step: run it, test it, say what changed in 3 lines.
 - Do not ask Ridwan to run pending migrations until he says; `supabase/checks/live-vs-repo.sql` lists what is pending.
   Live also has tables from HELM (the old name and version of Keel CRM): `leads`, `officers` (108 rows: temp, score,
   last_contact_at, prefers_sms...), `activity_log`, `notifications`, `eod_reports`, all RLS on, unused by this app.
@@ -216,7 +230,8 @@ Never commit `.env.local`. Never expose the service role key or Anthropic key to
   properties into keel_backup first), then 0020 (officer send status, officer_sends, council_schemes; backs up officers),
   then 0021 (placements on moved-in deals: who invoices, split in writing; backs up placements, makes one per moved-in deal),
   then 0022 (viewing outcome, reason lost, outcome sent to the officer on deals; nominated_at and officer_replied_at on
-  applicants; backs up deals and applicants, fills nothing in).
+  applicants; backs up deals and applicants, fills nothing in), then 0023 (postcode_area, age_band, benefit_cap on
+  applicants for matching; backs up applicants).
 - Check every migration runs, twice, on a scratch Postgres before committing one:
   `npm i --no-save @electric-sql/pglite && node scripts/check-migrations.mjs` (it also tests the merge and invoice numbers).
 

@@ -6,9 +6,12 @@ import {
 } from '../../components/ui';
 import {
   sentKey, useActivities, useApplicant, useApplicants, useAssign, useCalls, useDeals, useDeleteApplicant, usePeople, useProperties, useProviders, useRequests,
-  useSaveSettings, useSentOnWhatsApp, useSettings,
+  useMatchOptions, useSaveSettings, useSentOnWhatsApp, useSettings,
 } from '../../lib/hooks';
-import { bestFew, brief, matchesForApplicant } from '../../lib/propertyMatch';
+import { bestFew, brief } from '../../lib/propertyMatch';
+import { hiddenForApplicant, matchesForApplicant } from '../../lib/matchRules';
+import { HiddenNote, IncomeTag, RuleWarnings } from '../properties/MatchBits';
+import { activeSettings } from '../../lib/settings';
 import { money, shortDate, timeAgo } from '../../lib/format';
 import { effectiveTier, isActive, isFresh, isIced, isUrgent } from '../../lib/search';
 import { URGENCY_LABEL } from '../../lib/tiering';
@@ -268,8 +271,13 @@ function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
   const [showAll, setShowAll] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
   const [pinned, setPinned] = useState<string | null>(null);
-  const available = properties.filter((p) => p.status === 'void' || p.status === 'under_offer');
-  const all = matchesForApplicant(applicant, available);
+  const available = useMemo(() => properties.filter((p) => p.status === 'void' || p.status === 'under_offer'), [properties]);
+  const base = useMatchOptions();
+  const [overLha, setOverLha] = useState(() => activeSettings().showOverLha);
+  const [outside, setOutside] = useState(() => activeSettings().showOutsideLondon);
+  const opts = useMemo(() => ({ ...base, showOverLha: overLha, showOutsideLondon: outside }), [base, overLha, outside]);
+  const all = useMemo(() => matchesForApplicant(applicant, available, opts), [applicant, available, opts]);
+  const hidden = useMemo(() => hiddenForApplicant(applicant, available, opts), [applicant, available, opts]);
   const best = bestFew(all, (x) => x.match.strength);
   const atPin = pinned ? available.filter((p) => placeKey(p) === pinned) : [];
   const matches = pinned ? all.filter((x) => placeKey(x.property) === pinned) : showAll ? all : best;
@@ -315,9 +323,12 @@ function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
       ) : pinned && matches.length === 0 ? (
         <div className="pb-2" />
       ) : matches.length === 0 ? (
-        <Empty icon="search" title="Nothing fits yet">
-          None of the {available.length} available {available.length === 1 ? 'property fits' : 'properties fit'}. Check their area, household and budget are filled in.
-        </Empty>
+        <>
+          <Empty icon="search" title="Nothing fits yet">
+            None of the {available.length} available {available.length === 1 ? 'property fits' : 'properties fit'}. Check their area, household and budget are filled in.
+          </Empty>
+          <div className="px-5 pb-4"><HiddenNote counts={hidden} overLha={overLha} onOverLha={setOverLha} outside={outside} onOutside={setOutside} /></div>
+        </>
       ) : (
         <div className="px-5 pb-3 pt-1">
           <ul className="m-0 flex list-none flex-col divide-y divide-[var(--line)] p-0">
@@ -326,17 +337,19 @@ function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
               return (
                 <li key={p.id} className="flex items-center gap-3 py-2.5">
                   <span className="w-[68px] shrink-0 rounded px-2 py-0.5 text-center text-[12px] font-semibold" style={{ background: st.bg, color: st.fg }}>{st.label}</span>
-                  <div className="min-w-0 flex-1" title={[...m.reasons, ...m.cautions.map((c) => `Check: ${c}`)].join('\n')}>
+                  <div className="min-w-0 flex-1" title={[m.line, ...m.warnings.map((w) => w.words), ...m.cautions.map((c) => `Check: ${c}`), m.income.words ? `Keel could expect: ${m.income.words}` : null].filter(Boolean).join('\n')}>
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="text-[15px] font-medium text-[var(--ink)]">{p.address_line}</span>
                       <LhaChip property={p} />
+                      <IncomeTag income={m.income} />
                       <SentTag sent={sent.get(sentKey(applicant.id, p.address_line))} />
                     </div>
                     <div className="text-[13px] text-[var(--ink-muted)] sm:truncate">
-                      {[p.property_type, rentShown(p), p.area && !/^london$/i.test(p.area) ? p.area : p.borough]
-                        .filter(Boolean).join(' · ')}
-                      {m.cautions[0] && <span className="text-[var(--note-fg)]"> · {brief(m.cautions[0])}</span>}
+                      {[p.property_type, rentShown(p)].filter(Boolean).join(' · ')}
+                      {m.line && <> · <span className="text-[var(--ink)]">{m.line}</span></>}
+                      {!m.warnings.length && m.cautions[0] && <span className="text-[var(--note-fg)]"> · {brief(m.cautions[0])}</span>}
                     </div>
+                    {m.warnings.length > 0 && <div className="mt-1 flex flex-wrap gap-1"><RuleWarnings warnings={m.warnings} /></div>}
                   </div>
                   <RequestButton property={p} client={applicant} compact />
                   <WhatsAppLink to={applicant} properties={[p]} icon />
@@ -349,6 +362,7 @@ function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
               {showAll ? 'Show only the best' : `Show all ${all.length} properties`}
             </button>
           )}
+          {!pinned && <div className="mt-2"><HiddenNote counts={hidden} overLha={overLha} onOverLha={setOverLha} outside={outside} onOutside={setOutside} /></div>}
         </div>
       )}
       </>)}

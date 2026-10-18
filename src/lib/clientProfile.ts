@@ -59,7 +59,7 @@ export interface ClientProfile {
   rateType: Known<RateType>;
   size: Known<LhaSize>;
   /** rentCap: the most they can be matched to on UC alone (Team settings), or null when the limit does not apply */
-  benefits: { uc: boolean | null; pip: boolean | null; lcwra: boolean | null; working: boolean | null; rentCap: number | null };
+  benefits: { uc: boolean | null; pip: boolean | null; lcwra: boolean | null; working: boolean | null; rentCap: number | null; cap: Applicant['benefit_cap'] | null };
   wants: { beds: string | null; areas: string[]; anywhere: boolean; selfContained: boolean; stepFree: boolean };
   council: { name: string | null; route: 'housing officer' | 'council' | 'self'; incentive: string | null; incentiveMax: number | null };
   places: Place[];
@@ -87,24 +87,36 @@ export function exemptionsFrom(a: Applicant): string[] {
   return out;
 }
 
-/** Everything known or worked out about a client, and where they can be placed among the properties given. */
-export function profileOf(a: Applicant, opts: { properties?: Array<PropertyLike & PropertyForLha & { id?: string; status?: string }>; schemes?: CouncilScheme[]; today?: string } = {}): ClientProfile {
-  const today = opts.today ?? todayIso();
+/** Who is moving in, their age and age band, and the LHA rate they are paid at. Used by the profile and by matching. */
+export interface RateFacts {
+  household: Known<HouseholdKey>;
+  age: Known<number>;
+  ageBand: Known<'under_35' | '35_plus'>;
+  exemptions: string[];
+  rateType: Known<RateType>;
+  size: Known<LhaSize>;
+}
+
+const rateCache = new WeakMap<Applicant, { today: string; facts: RateFacts }>();
+
+export function rateOf(a: Applicant, today = todayIso()): RateFacts {
+  const hit = rateCache.get(a);
+  if (hit && hit.today === today) return hit.facts;
   const text = [a.notes, a.requirements].filter(Boolean).join('\n');
-  const toAsk: ClientProfile['toAsk'] = [];
 
   // Who is moving in
   const recorded = householdOf(a);
   const read = recorded ? null : readHouseholdText(text);
   const household: Known<HouseholdKey> = recorded ? { value: recorded, how: a.household_type ? 'recorded' : 'worked out', why: a.household_type ? undefined : 'from adults and children' }
     : read ? { value: read.type, how: 'read', why: read.note ?? `“${text.slice(read.at, read.at + read.length)}”` } : { value: null, how: 'not known' };
-  if (!household.value) toAsk.push({ what: 'Who is moving in', why: 'decides the size of home and the rate they are paid' });
 
-  // Age
+  // Age: the date of birth, else the age band recorded (0023), else an age they gave
   const ageRead = a.date_of_birth ? null : readAgeText(text);
   const age: Known<number> = a.date_of_birth ? { value: yearsSince(a.date_of_birth, today), how: 'recorded' }
     : ageRead?.age != null ? { value: ageRead.age, how: 'read', why: `“${text.slice(ageRead.at, ageRead.at + ageRead.length)}”` } : { value: null, how: 'not known' };
-  const ageBand: Known<'under_35' | '35_plus'> = age.value != null ? { value: age.value < 35 ? 'under_35' : '35_plus', how: age.how }
+  const ageBand: Known<'under_35' | '35_plus'> = a.date_of_birth && age.value != null ? { value: age.value < 35 ? 'under_35' : '35_plus', how: 'recorded' }
+    : a.age_band ? { value: a.age_band, how: 'recorded' }
+    : age.value != null ? { value: age.value < 35 ? 'under_35' : '35_plus', how: age.how }
     : ageRead?.band ? { value: ageRead.band, how: 'read' } : { value: null, how: 'not known' };
   const exemptions = exemptionsFrom(a);
 
@@ -131,11 +143,44 @@ export function profileOf(a: Applicant, opts: { properties?: Array<PropertyLike 
     } else {
       rateType = { value: null, how: 'not known', why: 'needs their age' };
       size = { value: null, how: 'not known', why: '1 bed rate if 35 or over, the shared rate if under' };
-      toAsk.push({ what: 'Their date of birth', why: 'under 35 they are paid the shared rate unless exempt; 35 or over, the 1 bed rate' });
     }
   } else {
     rateType = { value: null, how: 'not known' };
     size = { value: null, how: 'not known' };
+  }
+  const facts = { household, age, ageBand, exemptions, rateType, size };
+  rateCache.set(a, { today, facts });
+  return facts;
+}
+
+/** The answers matching needs (Step 6) that are still missing: where they want to live, age band, who is moving in,
+ *  UC, the benefit cap and PIP or LCWRA. */
+export function matchingGaps(a: Applicant, today = todayIso()): string[] {
+  const r = rateOf(a, today);
+  const needs = clientNeeds(a);
+  const text = [a.notes, a.requirements].filter(Boolean).join('\n');
+  const out: string[] = [];
+  if (!a.postcode_area?.trim() && !needs.askNames.length && !needs.flexible && !/\blondon\b/i.test(text)) out.push('Postcode area');
+  if (!r.household.value) out.push('Who is moving in');
+  if ((r.household.value === 'single' || r.household.value === 'other' || !r.household.value) && !r.ageBand.value) out.push('Age band');
+  if (a.on_uc == null && !benefitsOf(a).some((b) => b.key === 'uc')) out.push('UC');
+  if ('benefit_cap' in a && !a.benefit_cap && a.on_uc !== false) out.push('Benefit cap');
+  if (a.pip == null && a.lcwra == null) out.push('PIP or LCWRA');
+  return out;
+}
+
+/** Everything known or worked out about a client, and where they can be placed among the properties given. */
+export function profileOf(a: Applicant, opts: { properties?: Array<PropertyLike & PropertyForLha & { id?: string; status?: string }>; schemes?: CouncilScheme[]; today?: string } = {}): ClientProfile {
+  const today = opts.today ?? todayIso();
+  const text = [a.notes, a.requirements].filter(Boolean).join('\n');
+  const toAsk: ClientProfile['toAsk'] = [];
+
+  const { household, age, ageBand, exemptions, rateType, size } = rateOf(a, today);
+  const h = household.value;
+  const needs = clientNeeds(a);
+  if (!household.value) toAsk.push({ what: 'Who is moving in', why: 'decides the size of home and the rate they are paid' });
+  if ((h === 'single' || h === 'other') && !ageBand.value) {
+    toAsk.push({ what: 'Their date of birth', why: 'under 35 they are paid the shared rate unless exempt; 35 or over, the 1 bed rate' });
   }
 
   // Benefits
@@ -143,11 +188,11 @@ export function profileOf(a: Applicant, opts: { properties?: Array<PropertyLike 
   const working = a.work_status ? a.work_status === 'full_time' || a.work_status === 'part_time' : null;
   const benefits = {
     uc: a.on_uc ?? (has('uc') ? true : null), pip: a.pip ?? (has('pip') ? true : null), lcwra: a.lcwra ?? (has('lcwra') ? true : null),
-    working, rentCap: needs.rentCap,
+    working, rentCap: needs.rentCap, cap: a.benefit_cap ?? null,
   };
   if (benefits.uc === null) toAsk.push({ what: 'Whether they are on Universal Credit', why: 'LHA only pays the rent for people on UC or housing benefit' });
   if (benefits.uc && benefits.pip === null && benefits.lcwra === null) toAsk.push({ what: 'PIP or LCWRA', why: `either lifts the ${money(activeSettings().ucOnlyRentCap)} limit on UC alone${ageBand.value === 'under_35' ? ', and PIP can exempt them from the shared rate' : ''}` });
-  if (benefits.uc && !working && benefits.pip !== true && benefits.lcwra !== true) toAsk.push({ what: 'Whether the benefit cap applies to them', why: 'a capped household may not cover the full LHA' });
+  if (benefits.uc && !working && benefits.pip !== true && benefits.lcwra !== true && !a.benefit_cap) toAsk.push({ what: 'Whether the benefit cap applies to them', why: 'a capped household may not cover the full LHA' });
 
   // What they asked for
   const bedsWords = needs.beds ? (needs.beds.min === needs.beds.max ? (needs.beds.min === 0 ? 'a studio' : `a ${needs.beds.min} bed`) : needs.beds.min === 0 ? `a studio or ${needs.beds.max} bed` : `${needs.beds.min} to ${needs.beds.max} bed`) : null;

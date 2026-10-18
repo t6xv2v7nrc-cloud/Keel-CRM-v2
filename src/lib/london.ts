@@ -161,6 +161,12 @@ export function districtsIn(text: string): string[] {
 
 export const boroughFromDistrict = (d: string | null) => (d ? DISTRICT[d] ?? null : null);
 
+/** Every postcode district Keel knows in a postcode area: "HA" → HA0, HA1... ("N" is N1 to N22, not NW). */
+export const districtsOfArea = (area: string) => {
+  const a = area.trim().toUpperCase();
+  return /^[A-Z]{1,2}$/.test(a) ? Object.keys(DISTRICT).filter((d) => d.startsWith(a) && /\d/.test(d.charAt(a.length))) : [];
+};
+
 /** Every postcode district Keel knows in a borough: "Barnet" → N2, N3, N12, NW4... */
 export const districtsOfBorough = (borough: string) => Object.keys(DISTRICT).filter((d) => DISTRICT[d] === borough);
 

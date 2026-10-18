@@ -21,7 +21,7 @@ import { LHA_RATES, LHA_YEAR } from '../data/lha-rates';
 import { POSTCODE_PLACES } from '../data/postcode-places';
 import { activeSettings } from './settings';
 import { money } from './format';
-import { boroughFromDistrict, canonicalBorough, districtOf } from './london';
+import { boroughFromDistrict, canonicalBorough, districtOf, districtsOfBorough } from './london';
 
 export const LHA_DIRECT_URL = 'https://lha-direct.voa.gov.uk/search.aspx';
 
@@ -232,6 +232,22 @@ function areaFor(district: string | null, boroughText: string | null, sector: st
   if (borough && BOROUGH_BRMA[borough] && known[BOROUGH_BRMA[borough]]) return { brma: BOROUGH_BRMA[borough], how: 'estimated', basis: borough };
   return null;
 }
+
+/** The LHA area a postcode district is in ("HA1" → North West London), with team corrections, or null. */
+export const brmaOfDistrict = (district: string) => areaFor(district, null, null)?.brma ?? null;
+
+/** Every LHA area a borough reaches into: the areas of its postcode districts, and its own. "Barnet" → Outer North
+ *  London, Inner North London, North West London. */
+export function brmasOfBorough(borough: string): string[] {
+  const out = new Set<string>();
+  for (const d of districtsOfBorough(borough)) { const b = brmaOfDistrict(d); if (b) out.add(b); }
+  const own = areaFor(null, borough, null)?.brma;
+  if (own) out.add(own);
+  return [...out];
+}
+
+export const isLondonBrma = (brma: string) => LONDON_BRMAS.has(brma);
+export const londonBrmas = () => [...LONDON_BRMAS];
 
 // ── Postcode lookup ────────────────────────────────────────────────
 

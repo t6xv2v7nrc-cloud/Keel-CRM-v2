@@ -25,7 +25,7 @@ import { tierCount, tierLabel, URGENCY_LABEL } from './tiering';
 import { activeSettings } from './settings';
 import { clientLhaSize, lhaCheck, rateFor, sizeWords } from './lha';
 import {
-  areNeighbours, areasIn, boroughFromDistrict, boroughOfArea, boroughsIn, canonicalBorough, CENTRAL_DISTRICTS, districtOf, districtsIn,
+  areNeighbours, areasIn, boroughFromDistrict, boroughOfArea, boroughsIn, canonicalBorough, CENTRAL_DISTRICTS, districtOf, districtsIn, districtsOfArea,
   boroughsOfRegion, regionsIn, titleCase,
 } from './london';
 
@@ -127,12 +127,14 @@ export function withSelfContained(requirements: string | null, on: boolean): str
 }
 
 export function clientNeeds(a: Applicant): Needs {
-  const text = [a.notes, a.requirements].filter(Boolean).join(' \n ');
+  const text = [a.notes, a.requirements, a.postcode_area].filter(Boolean).join(' \n ');
   const household = householdOf(a);
   const children = Math.max(a.children ?? 0, household === 'family' && !a.children ? 1 : 0);
 
   const wantedAreas = areasIn(text);
-  const wantedDistricts = districtsIn(text);
+  // the postcode area they want (0023): districts ("HA1") or whole postcode areas ("HA", "UB")
+  const areaCodes = (a.postcode_area ?? '').split(/[\s,;/]+/).flatMap(districtsOfArea);
+  const wantedDistricts = [...new Set([...districtsIn(text), ...areaCodes])];
   const wantedBoroughs: Needs['wantedBoroughs'] = new Map();
   const want = (b: string | null, why: string, ask: string) => { if (b && !wantedBoroughs.has(b)) wantedBoroughs.set(b, { why, ask }); };
   for (const area of wantedAreas) {

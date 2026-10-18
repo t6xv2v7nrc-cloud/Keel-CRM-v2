@@ -27,6 +27,7 @@ import type { CouncilScheme, OfficerRecord, OfficerSend, OfficerStatus, SendKind
 import type { LhaRateRow, LhaTable } from './lha';
 import { MOVED_IN_ELSEWHERE, outcomeForMove, reasonCode } from './viewings';
 import type { ViewingOutcome } from './types';
+import type { RuleOptions } from './matchRules';
 import type { ApplicantStage } from '../types/extraction';
 
 // ── Applicants ──────────────────────────────────────────────────────
@@ -711,6 +712,14 @@ export function useCouncilSchemes() {
     },
   });
   return { schemes: q.data?.schemes ?? [], ready: q.data?.ready ?? false };
+}
+
+/** What matching needs to say what Keel could expect per match: providers' fees, council schemes, incentives on Finances. */
+export function useMatchOptions(): RuleOptions {
+  const { providers } = useProviders();
+  const { schemes } = useCouncilSchemes();
+  const { receivables } = useReceivables();
+  return useMemo(() => ({ providers, schemes, receivables }), [providers, schemes, receivables]);
 }
 
 /** Add or change a council scheme; every change is noted. */

@@ -6,7 +6,7 @@ import {
 } from '../../lib/hooks';
 import { addDays, dayLabel, dayWord, todayIso } from '../../lib/calls';
 import { timeAgo, shortDate } from '../../lib/format';
-import { matchesForApplicant } from '../../lib/propertyMatch';
+import { matchesForApplicant } from '../../lib/matchRules';
 import {
   checklistProgress, DEAL_LABEL, DEAL_STEPS, isLive, isPlaced, needsChecklist, nextMove, shortAddress, stuckDays,
   viewingShort, viewingWords,

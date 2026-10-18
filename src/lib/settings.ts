@@ -96,6 +96,10 @@ export interface AppSettings {
   premiumFor: { pip: boolean; lcwra: boolean; fullTime: boolean; partTime: boolean };
   /** Show "Possible" matches as well as Good and Strong. */
   showPossibleMatches: boolean;
+  /** Show properties over a client's LHA, with a red warning (the LHA rule hides them as standard). */
+  showOverLha: boolean;
+  /** Show properties outside Greater London to clients sent by London housing officers, with an amber warning. */
+  showOutsideLondon: boolean;
   /** Days until the next call, suggested after each outcome. */
   callAgainAfterNoAnswer: number;
   callAgainAfterAnswered: number;
@@ -291,6 +295,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ucOnlyRentCap: 1100,
   premiumFor: { pip: true, lcwra: false, fullTime: true, partTime: false },
   showPossibleMatches: true,
+  showOverLha: false,
+  showOutsideLondon: false,
   callAgainAfterNoAnswer: 2,
   callAgainAfterAnswered: 7,
   firstCallWithinDays: 1,
@@ -326,7 +332,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 };
 
 /** Settings each person sets for themselves; everything else is shared by the team. */
-const PERSONAL_KEYS = ['showPossibleMatches', 'callAgainAfterNoAnswer', 'callAgainAfterAnswered', 'startPage', 'callsView', 'clientPageOrder'] as const;
+const PERSONAL_KEYS = ['showPossibleMatches', 'showOverLha', 'showOutsideLondon', 'callAgainAfterNoAnswer', 'callAgainAfterAnswered', 'startPage', 'callsView', 'clientPageOrder'] as const;
 type PersonalKey = (typeof PERSONAL_KEYS)[number];
 export type MySettings = Pick<AppSettings, PersonalKey>;
 export type TeamSettings = Omit<AppSettings, PersonalKey>;

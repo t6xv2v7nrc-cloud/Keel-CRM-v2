@@ -9,7 +9,7 @@ import { longDay, money, timeAgo } from '../../lib/format';
 import { ghostTotal, potentials, totals as moneyTotals } from '../../lib/money';
 import { isPlaced } from '../../lib/progress';
 import { effectiveTier, isActive, isHoused, isIced, isUrgent } from '../../lib/search';
-import { matchesForProperty } from '../../lib/propertyMatch';
+import { matchesForProperty } from '../../lib/matchRules';
 import { addDays, callQueue, isoDay, lastCallMap, queueLabel } from '../../lib/calls';
 import { tierColor, tierCount, tierLabel, tierNumbers, URGENCY_LABEL } from '../../lib/tiering';
 import type { ApplicantStage } from '../../types/extraction';

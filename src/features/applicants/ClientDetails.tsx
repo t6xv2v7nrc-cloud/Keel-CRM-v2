@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, CardHeader, Help, Icon, useToast } from '../../components/ui';
+import { Card, CardHeader, Help, Icon, UpdateNote, useToast } from '../../components/ui';
 import type { IconName } from '../../components/ui';
 import { useMoveStage, usePeople, useProviders, useUpdateTriage } from '../../lib/hooks';
 import { activeSettings } from '../../lib/settings';
@@ -20,6 +20,8 @@ const STAGES: Array<[ApplicantStage, string]> = [
   ['lead', 'Lead'], ['referred', 'Referred'], ['viewing', 'Viewing'], ['offer', 'Offer'], ['placed', 'Placed'], ['lost', 'Lost'],
 ];
 const yesNoWord = (b: boolean | null | undefined) => (b === true ? 'yes' : b === false ? 'no' : 'not known');
+const AGE_BAND_WORDS: Record<string, string> = { under_35: 'Under 35', '35_plus': '35 or over' };
+const CAP_WORDS: Record<string, string> = { capped: 'Capped', not_capped: 'Not capped', exempt: 'Exempt from the cap' };
 
 /** Everything about a client, edited in one place. Each box saves when you
  *  leave it; the tier follows the answers unless it was set by hand. */
@@ -126,6 +128,15 @@ export function ClientDetails({ applicant }: { applicant: Applicant }) {
         <NothingShared applicant={a} busy={triage.isPending}
           onChange={(on) => save({ requirements: withSelfContained(a.requirements, on) },
             on ? 'Self-contained only: no rooms, en-suites or shared houses' : 'Shared accommodation is fine again')} />
+        {'benefit_cap' in a ? (
+          <Box label="Postcode area they want" value={a.postcode_area ?? ''} placeholder="e.g. HA1, HA2 or UB" mono onSave={(v) => {
+            const value = v.trim().toUpperCase().replace(/\s*,\s*/g, ', ') || null;
+            if ((a.postcode_area ?? null) === value) return;
+            save({ postcode_area: value }, value ? `Postcode area set to ${value}` : 'Postcode area cleared');
+          }} wide />
+        ) : (
+          <UpdateNote title="Postcode area, age band and benefit cap need a one-off database update." file="0023_matching.sql" />
+        )}
         <NotesReader applicant={a} save={save} busy={triage.isPending} />
       </Section>
 
@@ -154,6 +165,12 @@ export function ClientDetails({ applicant }: { applicant: Applicant }) {
           <Box label="Budget pcm" value={a.budget_pcm != null ? String(a.budget_pcm) : ''} type="number" mono prefix="£"
             onSave={number('Budget', 'budget_pcm', (n) => `£${n.toLocaleString('en-GB')}`)} />
           <Box label="LHA band" value={a.lha_band ?? ''} placeholder="e.g. 1-Bed" onSave={text('LHA band', 'lha_band')} />
+          {'age_band' in a && (
+            <Row label="Age band">
+              <Choice value={a.age_band ?? ''} options={[['', a.date_of_birth ? 'From date of birth' : 'Not known'], ...Object.entries(AGE_BAND_WORDS)]}
+                onChange={(v) => save({ age_band: (v || null) as Applicant['age_band'] }, `Age band set to ${v ? AGE_BAND_WORDS[v].toLowerCase() : 'not known'}`)} />
+            </Row>
+          )}
         </Section>
 
         <Section icon="layers" title="Benefits and work" border="md:border-r">
@@ -167,6 +184,12 @@ export function ClientDetails({ applicant }: { applicant: Applicant }) {
             <Choice value={a.work_status ?? ''} options={[['', 'Not known'], ...Object.entries(WORK_STATUS_LABEL)]}
               onChange={(v) => save({ work_status: v || null }, `Work set to ${v ? WORK_STATUS_LABEL[v].toLowerCase() : 'not known'}`)} />
           </Row>
+          {'benefit_cap' in a && (
+            <Row label="Benefit cap">
+              <Choice value={a.benefit_cap ?? ''} options={[['', 'Not known'], ...Object.entries(CAP_WORDS)]}
+                onChange={(v) => save({ benefit_cap: (v || null) as Applicant['benefit_cap'] }, `Benefit cap set to ${v ? CAP_WORDS[v].toLowerCase() : 'not known'}`)} />
+            </Row>
+          )}
         </Section>
 
         <Section icon="home" title="Housing">

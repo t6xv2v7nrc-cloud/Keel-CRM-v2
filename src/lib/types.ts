@@ -48,6 +48,9 @@ export interface Applicant {
   iced_reason?: string | null;
   nominated_at?: string | null;       // 0022: when the housing officer's nomination arrived (empty: when they got in touch)
   officer_replied_at?: string | null; // 0022: when Keel first replied to that nomination
+  postcode_area?: string | null;      // 0023: where they want to live, as postcode areas or districts ("HA1, HA2")
+  age_band?: 'under_35' | '35_plus' | null; // 0023: when the date of birth is not known
+  benefit_cap?: 'capped' | 'not_capped' | 'exempt' | null; // 0023
   created_at: string;
   updated_at: string;
 }

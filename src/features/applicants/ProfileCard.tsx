@@ -2,8 +2,8 @@ import { useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { Button, Card, CardHeader, Icon, useToast } from '../../components/ui';
 import { useCouncilSchemes, useProperties, useUpdateTriage } from '../../lib/hooks';
-import { useFold } from '../../lib/collapse';
-import { profileOf, RATE_TYPE_WORDS } from '../../lib/clientProfile';
+import { openCard, useFold } from '../../lib/collapse';
+import { matchingGaps, profileOf, RATE_TYPE_WORDS } from '../../lib/clientProfile';
 import type { Known, Source } from '../../lib/clientProfile';
 import { sizeWords } from '../../lib/lha';
 import { money } from '../../lib/format';
@@ -20,6 +20,11 @@ export function ProfileCard({ applicant: a }: { applicant: Applicant }) {
   const { toast } = useToast();
   const fold = useFold('client.profile');
   const p = useMemo(() => profileOf(a, { properties, schemes }), [a, properties, schemes]);
+  const gaps = useMemo(() => matchingGaps(a), [a]);
+  const toDetails = () => {
+    openCard('client.details');
+    setTimeout(() => document.getElementById('details')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+  };
 
   const fillIn = () => {
     const patch = Object.assign({}, ...p.sureAnswers.map((s) => s.patch)) as Partial<Applicant>;
@@ -34,7 +39,7 @@ export function ProfileCard({ applicant: a }: { applicant: Applicant }) {
     p.household.value ? HOUSEHOLD_LABEL[p.household.value] : null,
     p.size.value ? `${sizeWords(p.size.value)} rate` : null,
     fit ? `${fit} ${fit === 1 ? 'property fits' : 'properties fit'}` : null,
-    p.toAsk.length ? `${p.toAsk.length} to ask` : null,
+    gaps.length ? `${gaps.length} needed for matching` : p.toAsk.length ? `${p.toAsk.length} to ask` : null,
   ].filter(Boolean).join(' · ');
 
   return (
@@ -43,6 +48,14 @@ export function ProfileCard({ applicant: a }: { applicant: Applicant }) {
       {fold.open && (
         <div className="flex flex-col gap-4 px-5 py-4">
           <p className="m-0 text-[15px] leading-relaxed text-[var(--ink)]">{p.summary}</p>
+
+          {gaps.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-md px-3 py-2 text-[14px]" style={{ background: 'var(--note-bg)', color: 'var(--note-fg)' }}>
+              <Icon name="alert" size={15} />
+              <span className="min-w-0 flex-1 basis-[220px]">Needed for matching: {gaps.join(', ')}. Until then matches are a best guess.</span>
+              <Button className="min-h-0 px-3 py-1.5 text-[13px]" onClick={toDetails}>Fill in Client details</Button>
+            </div>
+          )}
 
           {p.sureAnswers.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 rounded-md px-3 py-2 text-[14px]" style={{ background: 'var(--accent-soft)', color: 'var(--accent-ink)' }}>
@@ -60,7 +73,8 @@ export function ProfileCard({ applicant: a }: { applicant: Applicant }) {
               extra={p.rateType.value ? RATE_TYPE_WORDS[p.rateType.value] : p.size.why} />
             <Fact label="Benefits" known={{ value: 1, how: 'recorded' }} hideSource
               value={[p.benefits.uc ? 'UC' : p.benefits.uc === false ? 'Not on UC' : 'UC not known', p.benefits.pip ? 'PIP' : null, p.benefits.lcwra ? 'LCWRA' : null,
-                p.benefits.working ? 'working' : null, p.benefits.rentCap != null ? `on UC alone, so up to ${money(p.benefits.rentCap)}` : null].filter(Boolean).join(', ')} />
+                p.benefits.working ? 'working' : null, p.benefits.rentCap != null ? `on UC alone, so up to ${money(p.benefits.rentCap)}` : null,
+                p.benefits.cap === 'capped' ? 'benefit cap applies' : p.benefits.cap === 'exempt' ? 'exempt from the benefit cap' : p.benefits.cap === 'not_capped' ? 'not capped' : null].filter(Boolean).join(', ')} />
             <Fact label="Wants" known={{ value: 1, how: 'read' }} hideSource
               value={[p.wants.beds, p.wants.areas.length ? p.wants.areas.slice(0, 4).join(', ') : p.wants.anywhere ? 'anywhere' : null,
                 p.wants.selfContained ? 'nothing shared' : null, p.wants.stepFree ? 'step-free' : null].filter(Boolean).join(' · ') || null} />

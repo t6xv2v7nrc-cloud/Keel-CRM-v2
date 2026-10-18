@@ -100,6 +100,9 @@ export const HELP = {
     title: 'Suitable properties',
     body: [
       'Available properties this client could suit, from your saved property lists. Only the best few show at first; Show all lists the rest.',
+      'The rules come first. A property shows only when its rent is within the LHA the client is paid in that LHA area (under 35s the shared rate, couples, 35 plus and anyone exempt the 1 bed rate, families by bedrooms), it is in an LHA area they want, and its kind suits them (a shared kitchen or HMO room never goes to a couple or a family). A client sent by a London housing officer never sees anything outside Greater London.',
+      'What the rules hide is counted under the list. Show over LHA and Show outside London bring those back, marked in red or amber; My settings sets them for good.',
+      'Each property says in one line why it fits, and what Keel could expect: the provider\'s fee and the council incentive (on Finances, or the most the council\'s scheme pays). Hover for every reason.',
       'Strong: area, size and rent all fit. Good: a solid fit, perhaps in the borough next door. Possible: a looser fit, such as a different area or no area given, so check with the client.',
       'Anything to check shows in amber. Hover over a property for every reason.',
       'Send them on WhatsApp sends the best few in one message. A tick shows what has already been sent, and by whom.',
@@ -206,6 +209,7 @@ export const HELP = {
     title: 'Profile',
     body: [
       'Everything Keel knows or can work out about a client, put together to say where they can be placed. Each answer says where it came from: recorded on the form, read from their message, or worked out.',
+      'Needed for matching lists what is still missing: the postcode area they want, their age band, who is moving in, UC, the benefit cap, and PIP or LCWRA. Until those are in, matches are a best guess.',
       'Who is moving in comes from the form, or from what they wrote: someone writing as one person who only asks for a studio or a 1 bed reads as a single adult. Their age comes from their date of birth, or an age they gave.',
       'The rate they are paid: families by the bedrooms their children need; couples, people 35 or over, and under-35s exempt from the shared rate, the 1 bed rate; other under-35s, the shared accommodation rate. Possible exemptions (PIP, leaving care, a hostel stay, MAPPA, domestic abuse) are pointed out to check, never assumed.',
       'Where to place them: the LHA areas of the available properties that match them, counting those whose rent is within the LHA they would be paid there. Focus boroughs are starred. Ask next lists the answers that would change where they can go.',
@@ -374,6 +378,7 @@ export const HELP = {
     title: 'Matching clients',
     body: [
       'Each property shows only its best few clients: every Strong one, topped up with Good ones, or the top two Possible ones when nothing fits better. Show all lists everyone.',
+      'The same rules as a client\'s Suitable properties decide who can be offered it (their LHA, their area, the kind of place). Clients whose council pays an incentive come first, looser fits last; each line says why they fit and what Keel could expect.',
       'Strong: area, size and rent all fit. Good: a solid fit, perhaps in the borough next door. Possible: a looser fit, so check with the client first.',
       'Anything to check shows in amber. Hover over a client for every reason.',
       'Properties over the premium rent in Team settings are always offered to clients on PIP or in full-time work.',

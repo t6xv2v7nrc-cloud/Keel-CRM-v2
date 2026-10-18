@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Button, Help, Icon, useToast } from '../../components/ui';
 import { useApplicants, useCreateRequest, usePeople, useProviders, useRequests } from '../../lib/hooks';
-import { matchesForProperty } from '../../lib/propertyMatch';
+import { matchesForProperty } from '../../lib/matchRules';
 import type { Strength } from '../../lib/propertyMatch';
 import {
   firstNameOf, needsConsent, propertyProblems, providerFor, REQUEST_LABEL, REQUEST_TYPES, requestMessage, ruleProblems,

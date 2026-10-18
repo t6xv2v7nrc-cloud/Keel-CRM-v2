@@ -169,6 +169,12 @@ function MySettingsTab({ draft, set, name, setName, teamReady, email }: {
           <Row icon="sparkle" title="Show Possible matches" text="Possible matches are a looser fit (another area, or area not stated). Turn off to see only Good and Strong.">
             <Switch on={draft.showPossibleMatches} onChange={(v) => set('showPossibleMatches', v)} label="Show Possible matches" />
           </Row>
+          <Row icon="pound" title="Show properties over a client's LHA" text="As standard Keel hides anything whose rent is above the LHA the client is paid there. Turn on to see them too, marked in red.">
+            <Switch on={draft.showOverLha} onChange={(v) => set('showOverLha', v)} label="Show properties over LHA" />
+          </Row>
+          <Row icon="pin" title="Show outside London to London officers' clients" text="As standard a client sent by a London housing officer is never offered anything outside Greater London. Turn on to see it, marked in amber.">
+            <Switch on={draft.showOutsideLondon} onChange={(v) => set('showOutsideLondon', v)} label="Show outside London" />
+          </Row>
         </div>
       </Card>
 

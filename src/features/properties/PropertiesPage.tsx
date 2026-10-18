@@ -3,15 +3,18 @@ import { Link } from 'react-router-dom';
 import { Button, Card, Help, Icon, NewBadge, PageHeader, TierBadge, UrgentChip, useToast } from '../../components/ui';
 import {
   NeedsDatabaseUpdate, PROPERTY_STATUS_LABEL, sentKey, useAddProperties, useApplicants, useDeleteProperties, useProperties,
-  useDeals, useProviders, useRequests, useSentOnWhatsApp, useSetPropertyProvider, useSetPropertyStatus,
+  useDeals, useMatchOptions, useProviders, useRequests, useSentOnWhatsApp, useSetPropertyProvider, useSetPropertyStatus,
 } from '../../lib/hooks';
 import { isLocalProperty, localProperties } from '../../lib/localProperties';
 import type { NewProperty, SavedProperty, SentOnWhatsApp } from '../../lib/hooks';
 import type { Applicant, Deal, Property } from '../../lib/types';
 import { parsePropertyList } from '../../lib/parseProperties';
 import type { ParsedProperty } from '../../lib/parseProperties';
-import { bestFew, brief, matchesForProperty } from '../../lib/propertyMatch';
-import type { Match, Strength } from '../../lib/propertyMatch';
+import { bestFew, brief } from '../../lib/propertyMatch';
+import type { Strength } from '../../lib/propertyMatch';
+import { matchesForProperty } from '../../lib/matchRules';
+import type { RuledMatch } from '../../lib/matchRules';
+import { IncomeTag, RuleWarnings } from './MatchBits';
 import { BOROUGHS } from '../../lib/london';
 import { activeSettings } from '../../lib/settings';
 import { lhaCheck, rentShown } from '../../lib/lha';
@@ -106,9 +109,10 @@ export function PropertiesPage() {
   });
   const setView = (v: 'list' | 'map') => { setViewState(v); try { localStorage.setItem('keel-properties-view', v); } catch { /* fine */ } };
 
+  const matchOptions = useMatchOptions();
   const matches = useMemo(
-    () => new Map(properties.map((p) => [p.id, isAvailable(p) ? matchesForProperty(p, applicants) : []])),
-    [properties, applicants],
+    () => new Map(properties.map((p) => [p.id, isAvailable(p) ? matchesForProperty(p, applicants, matchOptions) : []])),
+    [properties, applicants, matchOptions],
   );
 
   const counts = {
@@ -618,7 +622,7 @@ function PasteImport({ existing, applicants, canClose, onClose, onAdded, onNeeds
 // ── Property card with its matches ────────────────────────────────
 
 function PropertyCard({ p, matches, deals, names, sent, openRequests, isNew, selected, onToggle, onStatus, onDelete }: {
-  p: Property; matches: Match[]; deals: Deal[]; names: Map<string, string>; sent: Map<string, SentOnWhatsApp>; openRequests: number; isNew: boolean; selected: boolean;
+  p: Property; matches: RuledMatch[]; deals: Deal[]; names: Map<string, string>; sent: Map<string, SentOnWhatsApp>; openRequests: number; isNew: boolean; selected: boolean;
   onToggle: () => void; onStatus: (s: Property['status']) => void; onDelete: () => void;
 }) {
   const [showAll, setShowAll] = useState(false);
@@ -753,13 +757,13 @@ function InPlay({ deals, names }: { deals: Deal[]; names: Map<string, string> })
   );
 }
 
-function MatchRow({ m, p, sent, deal }: { m: Match; p: Property; sent: SentOnWhatsApp | undefined; deal: Deal | undefined }) {
+function MatchRow({ m, p, sent, deal }: { m: RuledMatch; p: Property; sent: SentOnWhatsApp | undefined; deal: Deal | undefined }) {
   const a = m.applicant;
   const tier = effectiveTier(a);
-  // tier and urgency already show as badges
-  const reasons = m.reasons.filter((r) => r !== tierLabel(1) && !r.startsWith('Urgent:')).map(brief);
+  // tier and urgency already show as badges; the one line says why it fits
+  const reasons = m.line ? [m.line] : m.reasons.filter((r) => r !== tierLabel(1) && !r.startsWith('Urgent:')).map(brief);
   const urgentWhy = m.reasons.find((r) => r.startsWith('Urgent:'));
-  const detail = [...m.reasons, ...m.cautions.map((c) => `Check: ${c}`)].join('\n');
+  const detail = [...m.reasons, ...m.warnings.map((w) => w.words), ...m.cautions.map((c) => `Check: ${c}`), m.income.words ? `Keel could expect: ${m.income.words}` : null].filter(Boolean).join('\n');
   return (
     <li className="flex items-center gap-3 py-2.5">
       <StrengthBadge s={m.strength} />
@@ -769,12 +773,14 @@ function MatchRow({ m, p, sent, deal }: { m: Match; p: Property; sent: SentOnWha
           <TierBadge tier={tier} />
           {isFresh(a) && <NewBadge />}
           {isUrgent(a) && <UrgentChip reason={urgentWhy?.replace(/^Urgent:\s*/, '')} />}
+          <IncomeTag income={m.income} />
           {deal && deal.status !== 'sent' ? <DealChip deal={deal} /> : <SentTag sent={sent} />}
         </div>
         <div className="text-[13px] text-[var(--ink-muted)] sm:truncate">
           {reasons.join(' · ')}
-          {m.cautions[0] && <span className="text-[var(--note-fg)]">{reasons.length ? ' · ' : ''}{brief(m.cautions[0])}</span>}
+          {!m.warnings.length && m.cautions[0] && <span className="text-[var(--note-fg)]">{reasons.length ? ' · ' : ''}{brief(m.cautions[0])}</span>}
         </div>
+        {m.warnings.length > 0 && <div className="mt-1 flex flex-wrap gap-1"><RuleWarnings warnings={m.warnings} /></div>}
       </div>
       <WhatsAppLink to={a} properties={[p]} icon />
       {a.phone && (

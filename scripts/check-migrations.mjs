@@ -212,13 +212,28 @@ check('an unknown outcome or reason lost is refused', vBad === 2, String(vBad));
 const vBackup = (await fresh22.query(`select (select count(*)::int from keel_backup.deals_before_0022) as d, (select count(*)::int from keel_backup.applicants_before_0022) as a`)).rows[0];
 check('deals and applicants are backed up first, once', vBackup.d === 1 && vBackup.a === 1, JSON.stringify(vBackup));
 
+// 0023: what matching needs on every client; applicants backed up, nothing filled in
+const fresh23 = await freshDb({ upTo: '0022' });
+await fresh23.exec(`insert into applicants (id, full_name, stage) values ('abababab-abab-abab-abab-abababababab', 'Match Person', 'lead');`);
+for (let i = 0; i < 2; i++) await fresh23.exec(readFileSync(dir + '0023_matching.sql', 'utf8'));
+const m23 = (await fresh23.query(`select postcode_area, age_band, benefit_cap from applicants`)).rows[0];
+check('clients gain postcode area, age band and benefit cap, empty', m23 && m23.postcode_area === null && m23.age_band === null && m23.benefit_cap === null, JSON.stringify(m23));
+await fresh23.exec(`update applicants set postcode_area = 'HA1, HA2', age_band = 'under_35', benefit_cap = 'capped'`);
+let mBad = 0;
+for (const sql of [`update applicants set age_band = '40'`, `update applicants set benefit_cap = 'maybe'`]) {
+  try { await fresh23.exec(sql); } catch { mBad++; }
+}
+check('an unknown age band or benefit cap is refused', mBad === 2, String(mBad));
+const m23b = (await fresh23.query(`select count(*)::int as n from keel_backup.applicants_before_0023`)).rows[0].n;
+check('applicants are backed up first', m23b === 1, String(m23b));
+
 // The read-only check of a live database against these files
 const liveCheck = readFileSync(new URL('../supabase/checks/live-vs-repo.sql', import.meta.url).pathname, 'utf8');
 const status = async (d) => Object.fromEntries((await d.query(liveCheck)).rows.map((r) => [r.item, [r.status, r.detail]]));
 const full = await status(db);
 const numbered = Object.keys(full).filter((k) => /^\d{4}$/.test(k));
 check('live check: every migration reads as done on a database that has had them all (data-only ones cannot be told)',
-  numbered.length === 22 && numbered.every((k) => full[k][0] === 'done' || (['0003', '0016'].includes(k) && full[k][0].startsWith('cannot tell'))), JSON.stringify(full));
+  numbered.length === 23 && numbered.every((k) => full[k][0] === 'done' || (['0003', '0016'].includes(k) && full[k][0].startsWith('cannot tell'))), JSON.stringify(full));
 const behind = await freshDb();
 await behind.exec(`alter table properties drop column lha_area; drop table postcode_brma;
   create table eod_reports (id uuid primary key, report_date date, data jsonb);`);
