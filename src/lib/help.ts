@@ -143,6 +143,16 @@ export const HELP = {
       'Once a viewing\'s time has passed, Keel asks how it went: they viewed it, offer made, signed up, not going ahead (with why), or did not turn up (back to Interested, to rebook). Why a property was lost is kept in six groups (too far, too small, failed affordability or referencing, client dropped out, problem with the property, other) so the reasons can be counted.',
     ],
   },
+  numbers: {
+    title: 'Weekly numbers',
+    body: [
+      'How Keel is doing, a week at a time (Monday to Sunday), or a month. Everything comes from what Keel already holds: nothing here is typed in.',
+      'Placements are clients who moved in, by the council that placed them (focus boroughs first, starred) and by route. Viewings per placement counts viewings that took place (no-shows left out). Why properties were lost uses the six reason groups; a client\'s other properties closing when they move in with Keel is not counted as a loss.',
+      'Incentive per placement is the incentive on Finances for each placement that has one; Split in writing is how many of those have the split agreed in writing. Sign up to cash is the middle number of days from sign up to paid, for fees and incentives paid in the period.',
+      'Sent within LHA is the share of properties sent in the period (to clients, or in the Mailer) whose rent was within LHA: the target is 100%. First replies and outcomes back follow the targets in Team settings.',
+      'The month\'s goal (Team settings, Targets) shows placements against a range, and how many carry a council incentive, with an even-pace marker.',
+    ],
+  },
   mailer: {
     title: 'Mailer',
     body: [

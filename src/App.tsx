@@ -15,6 +15,7 @@ import { CallsPage } from './features/calls/CallsPage';
 import { MoneyPage } from './features/money/MoneyPage';
 import { CouncilsPage } from './features/councils/CouncilsPage';
 import { MailerPage } from './features/mailer/MailerPage';
+import { NumbersPage } from './features/dashboard/NumbersPage';
 import { InvoicePage } from './features/money/InvoicePage';
 import { SettingsPage } from './features/settings/SettingsPage';
 import { CommandSearch, openSearch } from './features/search/CommandSearch';
@@ -161,6 +162,7 @@ function Shell() {
           <Route path="/finances" element={<MoneyPage />} />
           <Route path="/councils" element={<CouncilsPage />} />
           <Route path="/mailer" element={<MailerPage />} />
+          <Route path="/numbers" element={<NumbersPage />} />
           <Route path="/finances/invoice/:id" element={<InvoicePage />} />
           {/* The page's earlier addresses; old links and bookmarks still land */}
           <Route path="/receivables" element={<Navigate to="/finances" replace />} />

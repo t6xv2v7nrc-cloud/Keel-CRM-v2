@@ -84,6 +84,11 @@ src/
                            summary (sub) in view when folded; `openCard` opens one from elsewhere; some start folded),
               clientLayout.ts (order of the client page's cards: personal setting `clientPageOrder`, Arrange panel),
               targets.ts (weekly, monthly, annual targets: placements moved in and fees signed up, pace; Team settings `targets`),
+              kpis.ts (Step 8, Weekly numbers at /numbers, features/dashboard/NumbersPage.tsx, linked from Home: placements by
+                       borough (focus first) and route, viewings per placement, reasons lost (moving in with Keel is no
+                       loss), incentive per placement and share split in writing, sign-up to cash (middle value), sent
+                       within LHA (target 100%), first replies and outcomes on time, list health; the month's goal from
+                       Team settings `monthlyGoal` (6 to 8 placements, 4 with an incentive); read-only, no migration),
               help.ts (words behind the "?" help buttons)
   components/ ui primitives on tokens (Button, StageBadge, Card, Field, Toast, Icon,
               Visuals: avatars, page headers, stat tiles, SVG charts, UpdateNote for "run this migration")
@@ -181,7 +186,7 @@ supabase/checks/live-vs-repo.sql  (read-only: which migrations the live database
 
 Ridwan's brief "make Keel stop bad matches and bad emails before they happen", worked step by step in this order: diff live
 vs repo (done: live has had 0001 to 0017), LHA table (Step 1, done: 0018), property fields (Step 2, done: 0019), officers send status (Step 3, done: 0020) plus `council_schemes`, placements and
-incentives (Step 4, done: 0021), viewings (Step 5, done: 0022), matching (Step 6, done: 0023), the Mailer with its "sendable" view (Step 7, done: 0024), KPI dashboard. After each step: run it, test it, say what changed in 3 lines.
+incentives (Step 4, done: 0021), viewings (Step 5, done: 0022), matching (Step 6, done: 0023), the Mailer with its "sendable" view (Step 7, done: 0024), KPI dashboard (Step 8, done: Weekly numbers). All steps done. After each step: run it, test it, say what changed in 3 lines.
 - Do not ask Ridwan to run pending migrations until he says; `supabase/checks/live-vs-repo.sql` lists what is pending.
   Live also has tables from HELM (the old name and version of Keel CRM): `leads`, `officers` (108 rows: temp, score,
   last_contact_at, prefers_sms...), `activity_log`, `notifications`, `eod_reports`, all RLS on, unused by this app.

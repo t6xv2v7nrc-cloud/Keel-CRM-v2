@@ -103,6 +103,7 @@ export function DashboardPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button onClick={() => navigate('/numbers')}><Icon name="trend" size={16} />Weekly numbers</Button>
           <Button variant="primary" onClick={() => navigate('/bin')}><Icon name="inbox" size={16} />Paste a screenshot</Button>
         </div>
       </header>

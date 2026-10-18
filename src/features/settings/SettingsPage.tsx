@@ -407,8 +407,26 @@ function TargetsSettings({ draft, set }: { draft: AppSettings; set: <K extends k
             </span>
           </div>
         ))}
+        <div className="flex flex-col gap-2 rounded-lg bg-[var(--surface-2)] px-3 py-2.5">
+          <span className="text-[15px] font-medium text-[var(--ink)]">The month's goal, on Weekly numbers</span>
+          <span className="flex flex-wrap items-center gap-2 text-[14px] text-[var(--ink-muted)]">
+            <GoalBox label="Placements at least" value={draft.monthlyGoal.placementsMin} onChange={(v) => set('monthlyGoal', { ...draft.monthlyGoal, placementsMin: v })} />
+            to
+            <GoalBox label="Placements at most" value={draft.monthlyGoal.placementsMax} onChange={(v) => set('monthlyGoal', { ...draft.monthlyGoal, placementsMax: v })} />
+            placements, at least
+            <GoalBox label="With an incentive" value={draft.monthlyGoal.withIncentive} onChange={(v) => set('monthlyGoal', { ...draft.monthlyGoal, withIncentive: v })} />
+            with an incentive
+          </span>
+        </div>
       </div>
     </Card>
+  );
+}
+
+function GoalBox({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  return (
+    <input type="number" min={0} value={value} aria-label={label} onChange={(e) => { const n = Math.round(Number(e.target.value)); if (Number.isFinite(n)) onChange(Math.max(0, n)); }}
+      className="h-10 w-20 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2.5 font-mono text-[15px] text-[var(--ink)] outline-none focus:border-[var(--accent)]" />
   );
 }
 

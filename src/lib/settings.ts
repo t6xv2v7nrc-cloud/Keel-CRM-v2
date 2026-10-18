@@ -82,6 +82,8 @@ function fromOldRules(r: OldTierRules): TierLogic {
 export interface Target { placements: number; fees: number }
 export interface Targets { week: Target; month: Target; year: Target }
 export const DEFAULT_TARGETS: Targets = { week: { placements: 0, fees: 0 }, month: { placements: 0, fees: 0 }, year: { placements: 0, fees: 0 } };
+/** The month's goal on Weekly numbers: a range of placements and how many of them should carry a council incentive. */
+export interface MonthlyGoal { placementsMin: number; placementsMax: number; withIncentive: number }
 
 export interface AppSettings {
   tierLogic: TierLogic;
@@ -164,6 +166,8 @@ export interface AppSettings {
   responses: ResponseRules;
   /** Keel's credentials for the Mailer's footer and email signatures. Blank ones are left out (placeholders until joined). */
   business: BusinessDetails;
+  /** The month's goal on Weekly numbers (Ridwan's October target: 6 to 8 placements, at least 4 with an incentive). */
+  monthlyGoal: MonthlyGoal;
 }
 
 export interface BusinessDetails {
@@ -349,6 +353,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   wishlistBoroughs: ['Sutton', 'Kingston upon Thames'],
   responses: { replyHours: 4, dayStart: '09:00', dayEnd: '17:30', watchDays: 14 },
   business: DEFAULT_BUSINESS,
+  monthlyGoal: { placementsMin: 6, placementsMax: 8, withIncentive: 4 },
 };
 
 /** Settings each person sets for themselves; everything else is shared by the team. */

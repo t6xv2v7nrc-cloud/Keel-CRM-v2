@@ -74,7 +74,7 @@ function PeriodBars({ period, lines }: { period: Period; lines: TargetLine[] }) 
 }
 
 /** One target: how far, where an even pace would be, and whether that is on track. Colour is never the only sign. */
-function TargetBar({ line, period }: { line: TargetLine; period: Period }) {
+export function TargetBar({ line, period }: { line: TargetLine; period: Period }) {
   const reached = line.share >= 1;
   const status = reached ? { icon: 'check' as const, text: 'Target reached', color: 'var(--accent-ink)' }
     : line.onTrack ? { icon: 'check' as const, text: 'On track', color: 'var(--accent-ink)' }

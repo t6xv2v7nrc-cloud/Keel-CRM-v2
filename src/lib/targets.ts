@@ -52,7 +52,7 @@ export function progressIn(p: Pick<Period, 'from' | 'to'>, deals: Deal[], receiv
 }
 
 export interface TargetLine {
-  key: 'placements' | 'fees';
+  key: string;
   label: string;
   done: number;
   target: number;
