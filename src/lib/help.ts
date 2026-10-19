@@ -278,7 +278,8 @@ export const HELP = {
     body: [
       'Every property in the list, placed by its postcode. Filters above still apply. Click a pin for the property and its best clients.',
       'Type a client\'s name to shade the places they asked for (darker) and the wider borough or region (lighter), and to colour each pin by how well it fits them. "Somewhere central" counts as central London.',
-      'Postcodes are placed using postcodes.io, a free public lookup; only property postcodes are sent, never anything about a client. The map is from OpenStreetMap.',
+      'Housing officers (tick the box) show as squares, one per council, with how many officers work there: dark when at least one can be emailed under the mailing list rules, light when none can. Click a square for its officers, how each stands, the clients they referred and how to reach them. A council sits at the middle of its postcode districts; one outside London is found by its name. Officers named only on clients show as not on the officer list.',
+      'Postcodes are placed using postcodes.io, a free public lookup; only property postcodes, postcode districts and council names are sent, never anything about a client or an officer. The map is from OpenStreetMap.',
     ],
   },
   money: {

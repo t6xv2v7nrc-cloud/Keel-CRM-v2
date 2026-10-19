@@ -48,7 +48,11 @@ src/
                            one-line reason (`line`), expected income (`incomeFor`: provider fee + incentive on Finances, else
                            the scheme's max, else "likely" for an officer referral); on a property, incentive-bearing first;
                            `hiddenForApplicant` counts what the rules hid; UI bits in features/properties/MatchBits.tsx),
-              geo.ts (placing postcodes via postcodes.io, cached per device; a client's areas as districts),
+              geo.ts (placing postcodes via postcodes.io, cached per device; a client's areas as districts; `locateCouncils`:
+                      a council at the middle of its districts, else by name from postcodes.io places),
+              officerMap.ts (housing officers on the Properties map: `officerPlaces` groups the officer list and officers
+                      named only on clients by council, with send status from `mailingList`, clients referred; squares
+                      on the map (features/map), a council's officers in a panel under it; no call or email to one who left),
               progress.ts (deals: each property a client is going for; stage follows deals, next steps, stuck, gone cold,
                            the move-in checklist on accepted and moved-in deals (`deals.checklist`, items in Settings)),
               viewings.ts (0022: how a viewing went (viewed, no_show, offered, declined, signed; `outcomeForMove` writes it as

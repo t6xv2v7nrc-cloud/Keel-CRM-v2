@@ -81,6 +81,41 @@ export async function locate(keys: string[]): Promise<void> {
   remember();
 }
 
+// ── Where a council is (housing officers on the map) ───────────────
+
+/** The key a council's place is remembered under ("council:Harrow"); read it with `pointOf`. */
+export const councilKey = (council: string) => `council:${council}`;
+
+/** The middle of some points: plain averaging is close enough across one council. */
+export function middleOf(points: LatLng[]): LatLng | null {
+  if (!points.length) return null;
+  return [points.reduce((s, p) => s + p[0], 0) / points.length, points.reduce((s, p) => s + p[1], 0) / points.length];
+}
+
+/** Place councils: the middle of their postcode districts, else their name looked up on postcodes.io's list of
+ *  places (towns and cities first). Only council names and districts are sent, never an officer or a client. */
+export async function locateCouncils(councils: Array<{ council: string; districts: string[]; query: string }>): Promise<void> {
+  const todo = councils.filter((c) => !known.has(councilKey(c.council)));
+  if (!todo.length) return;
+  await locate(todo.flatMap((c) => c.districts));
+  const byName = todo.filter((c) => !c.districts.length);
+  for (const c of todo) {
+    if (c.districts.length) known.set(councilKey(c.council), middleOf(c.districts.map((d) => known.get(d) ?? null).filter((x): x is LatLng => !!x)));
+  }
+  for (let i = 0; i < byName.length; i += 4) {
+    await Promise.all(byName.slice(i, i + 4).map(async (c) => {
+      const r = await fetch(`${API}/places?q=${encodeURIComponent(c.query)}&limit=10`);
+      if (!r.ok) { if (r.status === 404) known.set(councilKey(c.council), null); else throw new Error(`postcodes.io ${r.status}`); return; }
+      const j = await r.json() as { result: Array<{ name_1: string; local_type: string; latitude: number | null; longitude: number | null }> | null };
+      const hits = (j.result ?? []).filter((x) => x.latitude != null && x.longitude != null);
+      const named = hits.filter((x) => x.name_1.toLowerCase() === c.query.toLowerCase());
+      const best = named.find((x) => /^(City|Town)$/.test(x.local_type)) ?? named[0] ?? hits.find((x) => /^(City|Town)$/.test(x.local_type)) ?? null;
+      known.set(councilKey(c.council), best ? [best.latitude!, best.longitude!] : null);
+    }));
+  }
+  remember();
+}
+
 // ── A client's areas ───────────────────────────────────────────────
 
 export interface ClientAreas {

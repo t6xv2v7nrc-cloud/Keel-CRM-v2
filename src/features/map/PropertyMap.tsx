@@ -3,7 +3,8 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import './map.css';
 import { POSTCODE_PLACES } from '../../data/postcode-places';
-import { clientAreas, isLocated, locate, placeKey, pointOf } from '../../lib/geo';
+import { clientAreas, councilKey, isLocated, locate, locateCouncils, placeKey, pointOf } from '../../lib/geo';
+import type { OfficerPlace } from '../../lib/officerMap';
 import { scoreMatch } from '../../lib/propertyMatch';
 import type { Strength } from '../../lib/propertyMatch';
 import type { Applicant, Property } from '../../lib/types';
@@ -22,13 +23,19 @@ export interface PropertyMapProps {
   selected?: string | null;
   onSelect?: (placeKey: string | null) => void;
   height?: number;
+  /** Housing officers by council, as squares; the council picked, and what happens on a click. */
+  officers?: OfficerPlace[];
+  selectedCouncil?: string | null;
+  onSelectCouncil?: (council: string | null) => void;
 }
 
 /** Available properties on a map of London and around, placed by postcode. */
-export default function PropertyMap({ properties, focus = null, bestStrength, selected = null, onSelect, height = 480 }: PropertyMapProps) {
+export default function PropertyMap({ properties, focus = null, bestStrength, selected = null, onSelect, height = 480, officers = [], selectedCouncil = null, onSelectCouncil }: PropertyMapProps) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
-  const layers = useRef<{ areas: L.LayerGroup; pins: L.LayerGroup } | null>(null);
+  const layers = useRef<{ areas: L.LayerGroup; officers: L.LayerGroup; pins: L.LayerGroup } | null>(null);
+  const selectCouncil = useRef(onSelectCouncil);
+  selectCouncil.current = onSelectCouncil;
   const [version, setVersion] = useState(0); // bumps when new places arrive
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const select = useRef(onSelect);
@@ -60,6 +67,20 @@ export default function PropertyMap({ properties, focus = null, bestStrength, se
     return () => { live = false; };
   }, [missing]);
 
+  // Place any councils with officers not placed yet
+  const missingCouncils = officers.filter((c) => !isLocated(councilKey(c.council))).map((c) => c.council).sort().join('|');
+  useEffect(() => {
+    if (!missingCouncils) return;
+    let live = true;
+    setStatus('loading');
+    locateCouncils(officers.filter((c) => !isLocated(councilKey(c.council)))).then(
+      () => { if (live) { setStatus('idle'); setVersion((v) => v + 1); } },
+      () => { if (live) setStatus('error'); },
+    );
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [missingCouncils]);
+
   // The map itself, once
   useEffect(() => {
     if (!el.current) return;
@@ -68,9 +89,9 @@ export default function PropertyMap({ properties, focus = null, bestStrength, se
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
     }).addTo(m);
-    layers.current = { areas: L.layerGroup().addTo(m), pins: L.layerGroup().addTo(m) };
+    layers.current = { areas: L.layerGroup().addTo(m), officers: L.layerGroup().addTo(m), pins: L.layerGroup().addTo(m) };
     map.current = m;
-    m.on('click', () => select.current?.(null));
+    m.on('click', () => { select.current?.(null); selectCouncil.current?.(null); });
     // A map drawn while hidden or mid-resize measures 0 pixels and zooms out to the world: re-measure and re-frame
     let last = '';
     const ro = new ResizeObserver(() => {
@@ -90,6 +111,20 @@ export default function PropertyMap({ properties, focus = null, bestStrength, se
     if (!ly) return;
     ly.areas.clearLayers();
     ly.pins.clearLayers();
+    ly.officers.clearLayers();
+    // housing officers: a square per council, the number of officers on it; dark when someone there can be emailed
+    for (const c of officers) {
+      const pt = pointOf(councilKey(c.council));
+      if (!pt) continue;
+      const cls = `keel-officer${c.sendable ? '' : ' is-quiet'}${c.council === selectedCouncil ? ' is-selected' : ''}`;
+      const icon = L.divIcon({ className: '', html: `<span class="${cls}">${c.officers.length}</span>`, iconSize: [26, 26], iconAnchor: [13, 13] });
+      const lines = c.officers.slice(0, 6).map((o) => `<div>${esc(o.name)} <span style="color:var(--ink-muted)">· ${esc(o.words)}</span></div>`);
+      if (c.officers.length > 6) lines.push(`<div>and ${c.officers.length - 6} more</div>`);
+      L.marker(pt, { icon, title: `${c.council}: ${c.officers.length} housing ${c.officers.length === 1 ? 'officer' : 'officers'}`, zIndexOffset: -200, riseOnHover: true })
+        .bindTooltip(`<div><strong>${esc(c.council)}</strong> · ${c.officers.length} housing ${c.officers.length === 1 ? 'officer' : 'officers'}, ${c.sendable} can be emailed</div>${lines.join('')}`, { direction: 'top', offset: [0, -13] })
+        .on('click', (e) => { L.DomEvent.stopPropagation(e); select.current?.(null); selectCouncil.current?.(c.council); })
+        .addTo(ly.officers);
+    }
     if (areas) {
       const draw = (ds: string[], cls: string) => ds.forEach((d) => {
         const pt = pointOf(d);
@@ -116,10 +151,10 @@ export default function PropertyMap({ properties, focus = null, bestStrength, se
         .on('click', (e) => { L.DomEvent.stopPropagation(e); select.current?.(key); })
         .addTo(ly.pins);
     }
-  }, [groups, areas, fit, selected, version]);
+  }, [groups, areas, fit, selected, version, officers, selectedCouncil]);
 
   // Frame the pins and the client's areas when they change (not when a pin is picked)
-  const frame = `${[...groups.keys()].sort().join('|')}#${areas ? `${areas.exact.join(',')}/${areas.broad.length}` : ''}#${version}`;
+  const frame = `${[...groups.keys()].sort().join('|')}#${areas ? `${areas.exact.join(',')}/${areas.broad.length}` : ''}#${version}#${groups.size ? '' : officers.map((c) => c.council).join(',')}`;
   useEffect(() => {
     const m = map.current;
     if (!m) return;
@@ -128,6 +163,8 @@ export default function PropertyMap({ properties, focus = null, bestStrength, se
       ...(areas ? areas.exact.map(pointOf) : []),
       ...(areas && areas.exact.length === 0 ? areas.broad.map(pointOf) : []),
     ].filter((x): x is [number, number] => !!x);
+    // no properties to frame: frame the officers instead
+    if (!pts.length) pts.push(...officers.map((c) => pointOf(councilKey(c.council))).filter((x): x is [number, number] => !!x));
     framed.current = pts;
     if (pts.length && el.current?.clientWidth) m.fitBounds(L.latLngBounds(pts).pad(0.12), { maxZoom: 14, animate: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -138,7 +175,7 @@ export default function PropertyMap({ properties, focus = null, bestStrength, se
       <div ref={el} className="keel-map w-full" style={{ height }} role="region" aria-label="Map of properties" />
       {status !== 'idle' && (
         <div className="pointer-events-none absolute left-14 top-3 z-[500] rounded-md border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1.5 text-[13px] text-[var(--ink-muted)] shadow-[var(--shadow-card)]">
-          {status === 'loading' ? 'Placing properties on the map…' : 'Could not reach the postcode lookup. Check your connection and reopen the map.'}
+          {status === 'loading' ? 'Placing on the map…' : 'Could not reach the postcode lookup. Check your connection and reopen the map.'}
         </div>
       )}
     </div>

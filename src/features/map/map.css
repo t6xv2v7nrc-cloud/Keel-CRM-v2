@@ -18,6 +18,16 @@
 .keel-pin-none { background: var(--paper-2); color: var(--ink-muted); border-color: var(--line-strong); opacity: 0.75; transform: scale(0.8); }
 .keel-pin.is-selected { outline: 3px solid var(--ink); outline-offset: 1px; transform: scale(1.15); }
 
+/* Housing officers: a square per council with how many officers; dark when someone there can be emailed */
+.keel-officer {
+  display: grid; place-items: center; width: 26px; height: 26px; border-radius: 6px;
+  font: 700 12px/1 var(--font-body); cursor: pointer;
+  background: var(--ink); color: var(--surface); border: 2px solid var(--surface);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+.keel-officer.is-quiet { background: var(--surface); color: var(--ink-muted); border-color: var(--ink-muted); }
+.keel-officer.is-selected { outline: 3px solid var(--accent); outline-offset: 1px; transform: scale(1.15); }
+
 /* A client's areas: the places they named, and the wider boroughs or regions */
 .keel-area { stroke: none; fill: var(--accent); }
 .keel-area-exact { fill-opacity: 0.22; }
