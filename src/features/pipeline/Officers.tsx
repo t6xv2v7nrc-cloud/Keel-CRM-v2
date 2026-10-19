@@ -49,7 +49,7 @@ export function HousingOfficersBox({ applicants, onClose }: { applicants: Applic
   };
 
   return (
-    <Card>
+    <Card fold="pipeline.officers">
       <CardHeader icon="users" title="Housing officers" sub={`${officers.length}`} help="officers">
         <button type="button" onClick={onClose} aria-label="Close housing officers" title="Close"
           className="grid h-8 w-8 place-items-center rounded-md text-[var(--ink-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--ink)]">

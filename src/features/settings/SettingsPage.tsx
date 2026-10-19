@@ -20,6 +20,7 @@ import { RequestTemplates } from './RequestTemplates';
 import { isActive } from '../../lib/search';
 import { addDays, isoDay } from '../../lib/calls';
 import { money } from '../../lib/format';
+import { openCard } from '../../lib/collapse';
 
 const same = (x: unknown, y: unknown) => JSON.stringify(x) === JSON.stringify(y);
 
@@ -44,10 +45,12 @@ export function SettingsPage() {
   const [name, setName] = useState('');
   useEffect(() => { if (!isLoading) setDraft(settings); }, [settings, isLoading]);
   useEffect(() => { setName(people.myName ?? ''); }, [people.myName]);
-  // a link such as /settings?tab=team#invoices lands on that card
+  // a link such as /settings?tab=team#invoices lands on that card, opened
   useEffect(() => {
     const hash = window.location.hash.slice(1);
-    if (hash && !isLoading) document.getElementById(hash)?.scrollIntoView({ block: 'start' });
+    if (!hash || isLoading) return;
+    openCard(`settings.${hash}`);
+    requestAnimationFrame(() => document.getElementById(hash)?.scrollIntoView({ block: 'start' }));
   }, [tab, isLoading]);
 
   const set = <K extends keyof AppSettings>(k: K, v: AppSettings[K]) => setDraft((d) => ({ ...d, [k]: v }));
@@ -132,7 +135,7 @@ function MySettingsTab({ draft, set, name, setName, teamReady, email }: {
   return (
     <>
       <WhoNote icon="user">These only change Keel for you. Your co-worker has their own.</WhoNote>
-      <Card>
+      <Card fold="settings.you" startsFolded>
         <CardHeader icon="user" title="You" help="mySettings" />
         <div className="flex flex-col gap-5 p-5">
           <Row icon="pencil" title="Your name" text={`Shown to your co-worker next to calls and changes you make${email ? ` (signed in as ${email})` : ''}.`}>
@@ -149,7 +152,7 @@ function MySettingsTab({ draft, set, name, setName, teamReady, email }: {
         </div>
       </Card>
 
-      <Card>
+      <Card fold="settings.yourcalls" startsFolded>
         <CardHeader icon="phone" title="Your calls" help="logCall" />
         <div className="flex flex-col gap-5 p-5">
           <Row icon="users" title="Calls page shows first" text="Everyone's clients, or only the ones assigned to you. You can switch on the Calls page at any time.">
@@ -164,7 +167,7 @@ function MySettingsTab({ draft, set, name, setName, teamReady, email }: {
         </div>
       </Card>
 
-      <Card>
+      <Card fold="settings.yourmatches" startsFolded>
         <CardHeader icon="building" title="Your property matches" help="matchStrength" />
         <div className="flex flex-col gap-5 p-5">
           <Row icon="sparkle" title="Show Possible matches" text="Possible matches are a looser fit (another area, or area not stated). Turn off to see only Good and Strong.">
@@ -208,7 +211,7 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
       )}
       {!rolesReady && <UpdateNote file="0007_owner.sql" title="To make team settings yours alone, run a one-off database update.">Until then anyone signed in can change them.</UpdateNote>}
 
-      <Card>
+      <Card fold="settings.tiers" startsFolded>
         <CardHeader icon="layers" title="Referral triage: tier logic" help="tiers" />
         <div className="flex flex-col gap-4 p-5">
           <p className="m-0 text-[15px] text-[var(--ink-muted)]">
@@ -227,7 +230,7 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
         </div>
       </Card>
 
-      <Card>
+      <Card fold="settings.urgency" startsFolded>
         <CardHeader icon="alert" title="Referral triage: urgency" sub={`${urgentDraft} active flagged`} help="urgent" />
         <div className="flex flex-col gap-3 p-5">
           <p className="m-0 text-[15px] text-[var(--ink-muted)]">Urgent clients are flagged, sorted first in the pipeline and call list, and ranked higher for properties.</p>
@@ -240,7 +243,7 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
         </div>
       </Card>
 
-      <Card>
+      <Card fold="settings.matching" startsFolded>
         <CardHeader icon="building" title="Property matching" help="matchStrength" />
         <div className="flex flex-col gap-5 p-5">
           <Row icon="flag" title="Premium properties" text={`Anything over ${money(draft.premiumRent)} pcm is always offered to these clients, whatever their budget or area.`}>
@@ -276,7 +279,7 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
       <InvoiceSettingsCard draft={draft} set={set} />
       <BusinessDetailsCard draft={draft} set={set} />
 
-      <Card>
+      <Card fold="settings.progress" startsFolded>
         <CardHeader icon="flag" title="Client progress" help="progress" />
         <div className="flex flex-col gap-4 p-5">
           <p className="m-0 text-[15px] text-[var(--ink-muted)]">
@@ -317,7 +320,7 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
 
       <ChecklistSettings draft={draft} set={set} />
 
-      <Card>
+      <Card fold="settings.calls" startsFolded>
         <CardHeader icon="phone" title="Calls" help="calls" />
         <div className="flex flex-col gap-5 p-5">
           <Row icon="user" title="First call for new clients" text="A new client not called within this many days of arriving shows as overdue on the Calls page for both of you.">
@@ -350,7 +353,7 @@ function MoneySettings({ draft, set }: { draft: AppSettings; set: <K extends key
     </span>
   );
   return (
-    <Card>
+    <Card fold="settings.finances" startsFolded>
       <CardHeader icon="pound" title="Finances" help="money" />
       <div className="flex flex-col gap-5 p-5">
         <Row icon="calendar" title="Letting fees fall due" text="For the landlord, or a provider with no rule of its own. A provider's own rule (Settings, Providers) wins.">
@@ -387,7 +390,7 @@ function TargetsSettings({ draft, set }: { draft: AppSettings; set: <K extends k
   const rows: Array<[keyof Targets, string]> = [['week', 'Each week'], ['month', 'Each month'], ['year', 'Each year']];
   const put = (k: keyof Targets, field: keyof Target, v: number) => set('targets', { ...draft.targets, [k]: { ...draft.targets[k], [field]: v } });
   return (
-    <Card id="targets" className="scroll-mt-28">
+    <Card fold="settings.targets" startsFolded id="targets" className="scroll-mt-28">
       <CardHeader icon="flag" title="Targets" help="targets" />
       <div className="flex flex-col gap-3 p-5">
         <p className="m-0 text-[15px] text-[var(--ink-muted)]">
@@ -442,7 +445,7 @@ function ChecklistSettings({ draft, set }: { draft: AppSettings; set: <K extends
   const standard = same(draft.moveInChecklist, DEFAULT_MOVE_IN_CHECKLIST);
 
   return (
-    <Card>
+    <Card fold="settings.checklist" startsFolded>
       <CardHeader icon="list" title="Move-in checklist" help="checklist" />
       <div className="flex flex-col gap-2 p-5">
         <label htmlFor="move-in-checklist" className="text-[15px] text-[var(--ink-muted)]">
@@ -471,7 +474,7 @@ function InvoiceSettingsCard({ draft, set }: { draft: AppSettings; set: <K exten
     </label>
   );
   return (
-    <Card id="invoices">
+    <Card fold="settings.invoices" startsFolded id="invoices">
       <CardHeader icon="file" title="Invoices" help="invoices" />
       <div className="flex flex-col gap-5 p-5">
         <p className="m-0 text-[14px] text-[var(--ink-muted)]">Printed on every invoice. Raise one from the Invoice button next to a fee on Finances.</p>
@@ -548,7 +551,7 @@ function SharingSettings({ draft, set, clients }: {
   };
   const small = 'min-h-0 px-3 py-1.5 text-[13px]';
   return (
-    <Card>
+    <Card fold="settings.sharing" startsFolded>
       <CardHeader icon="users" title="Sharing with landlords" sub={`${on} of ${clients.length} OK`} help="requests" />
       <div className="flex flex-col gap-5 p-5">
         <Row icon="plus" title="New clients start as OK to share"
@@ -590,7 +593,7 @@ function PeopleTab() {
     <>
       {!people.ready && <UpdateNote file="0006_team.sql" title="The team list, names and assigning clients need a one-off database update." />}
 
-      <Card>
+      <Card fold="settings.signin" startsFolded>
         <CardHeader icon="users" title="Who can sign in" sub={String(people.members.length)} help="team" />
         {people.members.length === 0 ? (
           <p className="m-0 p-5 text-[15px] text-[var(--ink-muted)]">Nobody yet. Each person appears here the first time they sign in after the update.</p>
@@ -629,7 +632,7 @@ function PeopleTab() {
         )}
       </Card>
 
-      <Card>
+      <Card fold="settings.addperson" startsFolded>
         <CardHeader icon="plus" title="Adding a co-worker">
           <Help title="Why invite only?">
             <p className="m-0">Keel holds clients' personal details, so only people you invite should be able to sign in. The sign-in page no longer creates new accounts.</p>

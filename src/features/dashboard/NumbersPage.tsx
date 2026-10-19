@@ -58,7 +58,7 @@ export function NumbersPage() {
       </PageHeader>
 
       {goal.length > 0 && (
-        <Card>
+        <Card fold="numbers.month">
           <CardHeader icon="flag" title={`${month.label} goal`} help="numbers" />
           <div className="grid gap-5 px-5 py-4 md:grid-cols-2">
             {goal.map((l) => <TargetBar key={l.key} line={l} period={month} />)}
@@ -84,19 +84,19 @@ export function NumbersPage() {
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <Card>
+        <Card fold="numbers.borough">
           <CardHeader icon="pin" title="Placements by borough" sub={`${k.placements}`} />
           <div className="px-5 py-4"><BarList items={k.byBorough} empty="No placements in this period." /></div>
         </Card>
-        <Card>
+        <Card fold="numbers.route">
           <CardHeader icon="users" title="Placements by route" sub={`${k.placements}`} />
           <div className="px-5 py-4"><BarList items={k.byRoute} empty="No placements in this period." /></div>
         </Card>
-        <Card>
+        <Card fold="numbers.lost">
           <CardHeader icon="x" title="Why properties were lost" sub={`${k.lostTotal}`} />
           <div className="px-5 py-4"><BarList items={k.lost} empty="Nothing lost in this period." /></div>
         </Card>
-        <Card>
+        <Card fold="numbers.listhealth">
           <CardHeader icon="users" title="Officer list health" sub={`${officers.length} on the list`} help="councils" />
           <div className="grid grid-cols-2 gap-2 px-5 py-4 sm:grid-cols-4">
             {HEALTH.map((h) => {

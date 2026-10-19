@@ -31,7 +31,7 @@ export function AwaitingProviders({ applicants }: { applicants: Applicant[] }) {
   const shown = all ? list : list.slice(0, 6);
 
   return (
-    <Card>
+    <Card fold="requests.awaiting">
       <CardHeader icon="send" title="Awaiting providers" sub={`${list.length} open${due ? ` · ${due} to chase` : ''}`} help="requests" />
       <ul className="m-0 flex list-none flex-col divide-y divide-[var(--line)] p-0">
         {shown.map(({ request, overdue }) => (

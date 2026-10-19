@@ -43,8 +43,9 @@ const room = checksFor(P({ property_type: 'En-suite Room', accommodation_type: '
 check('a shared-kitchen unit shows the shared rate and its gap', room.sar === sar && room.sarGap === Math.round((1000 - sar) * 100) / 100, JSON.stringify({ sar: room.sar, gap: room.sarGap }));
 check('a self-contained flat has no shared-rate gap', ok.sar === null && ok.sarGap === null);
 const noSuits = checksFor(P({ property_type: 'En-suite Room', accommodation_type: 'shared_kitchen', rent_pcm: 1000, suitable_for: [] }), today);
-check('shared kitchen with nobody marked as suited is amber', noSuits.flags.some((f) => f.tone === 'amber' && f.key === 'suits_not_set'));
-check('amber does not stop a send', sendBlockers(noSuits).length === 0);
+check('shared kitchen with nobody marked as suited: no note about it', noSuits.flags.length === 0, JSON.stringify(noSuits.flags));
+check('and it can be sent', sendBlockers(noSuits).length === 0);
+check('the LHA line does not repeat the shared rate', !/shared rate/.test(lhaLine(room) ?? ''), lhaLine(room) ?? '');
 
 // Greater London
 check('N12 is in Greater London', inGreaterLondon(P({})) === true);
@@ -80,6 +81,11 @@ check('before 0019: papers unknown, no grey flag, still sendable', !before.paper
 
 // Kind of place, from the type when not set
 check('a room is an HMO room', accommodationOf({ property_type: 'Room', notes: null })?.type === 'hmo_room');
+check('an HMO studio is a self-contained studio, not a room', accommodationOf({ property_type: 'HMO Studio', notes: null })?.type === 'self_contained'
+  && accommodationOf({ property_type: 'Studio', notes: 'In a licensed HMO' })?.type === 'self_contained');
+check('an HMO room is still an HMO room', accommodationOf({ property_type: 'HMO Room', notes: null })?.type === 'hmo_room' && accommodationOf({ property_type: 'HMO', notes: null })?.type === 'hmo_room');
+const hmoStudio = checksFor(P({ property_type: 'HMO Studio', bedrooms: 0, rent_pcm: oneBed - 20, accommodation_type: undefined }), today);
+check('an HMO studio is measured against the 1 bed LHA, with no shared notes', hmoStudio.lha?.size === 1 && hmoStudio.sar === null && hmoStudio.flags.length === 0, JSON.stringify({ size: hmoStudio.lha?.size, sar: hmoStudio.sar, flags: hmoStudio.flags }));
 check('an en-suite room has a shared kitchen', accommodationOf({ property_type: 'En-suite Room', notes: null })?.type === 'shared_kitchen');
 check('a studio is self-contained unless the notes say shared kitchen', accommodationOf({ property_type: 'Studio', notes: null })?.type === 'self_contained'
   && accommodationOf({ property_type: 'Studio', notes: 'Shared kitchen on the first floor' })?.type === 'shared_kitchen');

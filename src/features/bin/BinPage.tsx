@@ -234,7 +234,7 @@ export function BinPage() {
 
       {/* Paste a website enquiry email (structured — no OCR needed) */}
       {stage === 'idle' && (
-        <Card>
+        <Card fold="bin.paste">
           <CardHeader title="Paste a website enquiry" sub="from keellettings.com" />
           <div className="flex flex-col gap-3 p-4">
             <textarea

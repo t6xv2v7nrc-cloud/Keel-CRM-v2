@@ -37,7 +37,7 @@ export function RequestTemplates({ draft, set }: { draft: AppSettings; set: <K e
   });
 
   return (
-    <Card>
+    <Card fold="settings.requests" startsFolded>
       <CardHeader icon="send" title="Requests to providers" help="requests" />
       <div className="flex flex-col gap-4 p-5">
         <label className="flex flex-wrap items-center gap-3 text-[15px] text-[var(--ink)]">

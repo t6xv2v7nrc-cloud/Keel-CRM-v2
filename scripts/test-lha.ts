@@ -24,6 +24,8 @@ check('studio counts as 1 bed', lhaSizeOf({ property_type: 'Studio', bedrooms: 0
 check('self-contained studio counts as 1 bed', lhaSizeOf({ property_type: 'Self-Contained Studio', bedrooms: 0 }) === 1);
 check('en-suite room counts as 1 bed', lhaSizeOf({ property_type: 'En-suite Room', bedrooms: 0 }) === 1);
 check('en-suite HMO room counts as 1 bed', lhaSizeOf({ property_type: 'En-suite HMO Room', bedrooms: 0 }) === 1);
+check('an HMO studio counts as 1 bed', lhaSizeOf({ property_type: 'HMO Studio', bedrooms: 0 }) === 1);
+check('an HMO room is a shared room', lhaSizeOf({ property_type: 'HMO Room', bedrooms: 0 }) === 'shared');
 check('a plain room is a shared room', lhaSizeOf({ property_type: 'Room', bedrooms: 0 }) === 'shared');
 check('2-bed flat is 2 bed', lhaSizeOf({ property_type: '2-Bed Flat', bedrooms: 2 }) === 2);
 check('5 bed is capped at 4 bed', lhaSizeOf({ property_type: '5-Bed House', bedrooms: 5 }) === 4);

@@ -297,7 +297,7 @@ export const districtFor = (p: PropertyForLha) => districtOf(p.postcode ?? '') ?
 
 // ── Which size ─────────────────────────────────────────────────────
 
-/** Studios and en-suite rooms count as 1 bed; other rooms as a shared room; 4 bed at most. */
+/** Studios (HMO studios too) and en-suite rooms count as 1 bed; other rooms as a shared room; 4 bed at most. */
 export function lhaSizeOf(p: Pick<PropertyForLha, 'property_type' | 'bedrooms'>): LhaSize | null {
   const t = (p.property_type ?? '').toLowerCase();
   if (/\b(studio|bedsit)\b/.test(t)) return 1;

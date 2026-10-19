@@ -27,7 +27,7 @@ export const hasPhotoLinks = (p: Partial<Property>, local = false) => local || '
 export const hasCheckFields = (p: Partial<Property>, local = false) => local || 'gas_expiry' in p;
 
 /** The usual property types, for picking from a list. */
-export const TYPE_OPTIONS = ['Room', 'En-suite Room', 'HMO Room', 'Studio', 'En-suite Studio', 'Self-Contained Studio', '1-Bed Flat', '2-Bed Flat', '3-Bed Flat', '2-Bed House', '3-Bed House', '4-Bed House'];
+export const TYPE_OPTIONS = ['Room', 'En-suite Room', 'HMO Room', 'Studio', 'HMO Studio', 'En-suite Studio', 'Self-Contained Studio', '1-Bed Flat', '2-Bed Flat', '3-Bed Flat', '2-Bed House', '3-Bed House', '4-Bed House'];
 
 /** Bedrooms from a type label: "2-Bed Flat" is 2; rooms and studios are 0; anything else is not known. */
 export function bedsOfType(t: string | null): number | null {

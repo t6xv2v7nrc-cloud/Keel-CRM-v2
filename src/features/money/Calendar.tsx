@@ -109,7 +109,7 @@ export function MoneyCalendar({ receivables, byId, providers }: { receivables: R
         </div>
       </Card>
 
-      <Card>
+      <Card fold="finances.day">
         <CardHeader icon="calendar" title={picked === today ? `Today, ${day(picked)}` : day(picked)}
           sub={onDay.length ? `${onDay.length} ${onDay.length === 1 ? 'thing' : 'things'}` : undefined} />
         <div className="flex flex-col px-4 py-2 sm:px-5">
@@ -135,7 +135,7 @@ export function MoneyCalendar({ receivables, byId, providers }: { receivables: R
       </Card>
 
       {nextUp.length > 0 && (
-        <Card>
+        <Card fold="finances.comingup">
           <CardHeader icon="clock" title="Coming up" />
           <ul className="m-0 flex list-none flex-col divide-y divide-[var(--line)] px-4 py-0 sm:px-5">
             {nextUp.map((e) => (

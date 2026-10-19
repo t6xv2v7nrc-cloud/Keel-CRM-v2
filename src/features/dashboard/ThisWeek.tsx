@@ -67,7 +67,7 @@ export function ThisWeek({ applicants }: { applicants: Applicant[] }) {
   if (!ready) return null;
 
   return (
-    <Card>
+    <Card fold="home.thisweek">
       <CardHeader icon="calendar" title="This week" sub={`${viewingCount} ${viewingCount === 1 ? 'viewing' : 'viewings'} · ${stuck.length} stuck${cold.length ? ` · ${cold.length} cold` : ''}`} help="progress" />
       <div className="grid gap-6 p-5 lg:grid-cols-2">
         <section className="flex min-w-0 flex-col gap-3">

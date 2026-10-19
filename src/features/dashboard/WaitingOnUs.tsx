@@ -25,7 +25,7 @@ export function WaitingOnUs({ applicants }: { applicants: Applicant[] }) {
   const list = all ? shown : shown.slice(0, 6);
 
   return (
-    <Card>
+    <Card fold="home.waiting">
       <CardHeader icon="clock" title="Waiting on us" sub={`${shown.length} due${overdue ? ` · ${overdue} overdue` : ''}`} help="responses" />
       <ul className="m-0 flex list-none flex-col gap-1 p-3 sm:p-4">
         {list.map((i) => <Row key={`${i.kind}-${i.kind === 'reply' ? i.applicant.id : i.deal.id}`} item={i} />)}

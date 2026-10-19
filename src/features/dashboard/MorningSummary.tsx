@@ -34,7 +34,7 @@ export function MorningSummary({ applicants }: { applicants: Applicant[] }) {
   };
 
   return (
-    <Card>
+    <Card fold="home.today">
       <CardHeader icon="sun" title="Today" sub={digest.lines.length ? String(digest.lines.length) : undefined} help="summary">
         <Button className={small} onClick={copy}><Icon name="file" size={14} />Copy</Button>
         <a href={waLink(null, digest.text)} target="_blank" rel="noreferrer"

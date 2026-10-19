@@ -34,6 +34,8 @@ for (const t of ['Room', 'En-suite Room', 'En-suite Studio', 'HMO Room', 'En-sui
   check(`switched on: never offered a ${t}`, !offered(noShared, t));
 }
 check('switched on: a studio is still offered', offered(noShared, 'Studio'));
+check('switched on: an HMO studio is a studio, so it is offered', offered(noShared, 'HMO Studio') && offered(noShared, 'Studio', { notes: 'Studio in a licensed HMO' }));
+check('switched on: notes saying HMO room still count as shared', !offered(noShared, 'Studio', { notes: 'HMO room, own sink' }));
 check('switched on: a self-contained studio is still offered', offered(noShared, 'Self-Contained Studio'));
 check('switched on: a 1 bed flat is still offered', offered(noShared, '1-Bed Flat'));
 check('switched on: a studio whose notes say shared kitchen is not offered', !offered(noShared, 'Studio', { notes: 'Shared kitchen on the first floor' }));

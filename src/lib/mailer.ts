@@ -71,10 +71,10 @@ export function sendables(properties: Property[], today = todayIso()): Sendable[
   }).sort((x, y) => Number(x.over) - Number(y.over));
 }
 
-/** "1 bed flat", "Studio, shared kitchen", "HMO room" */
+/** "1 bed flat", "Studio, shared kitchen", "HMO room": the kind of place only when set by hand, never a guess */
 export function typeWords(p: Pick<Property, 'property_type' | 'bedrooms'>, checks: Pick<Checks, 'accommodation'>): string {
   const base = p.property_type?.trim() || (p.bedrooms ? `${p.bedrooms} bed` : p.bedrooms === 0 ? 'Studio' : 'Property');
-  const kind = checks.accommodation?.type;
+  const kind = checks.accommodation && !checks.accommodation.estimated ? checks.accommodation.type : null;
   if (kind === 'shared_kitchen' && !/shared/i.test(base)) return `${base}, shared kitchen`;
   if (kind === 'hmo_room' && !/hmo/i.test(base)) return `${base}, HMO room`;
   return base;
@@ -120,7 +120,6 @@ export function propertyLines(s: Sendable, today: string): string[] {
     p.address_line,
     `${typeWords(p, c)} · ${rent != null ? `${money(rent)} pcm` : 'rent to confirm'}${bills.length ? `, including ${bills.join(', ').toLowerCase()}` : ''}`,
     c.lha ? `LHA: the ${c.lha.size === 'shared' ? 'shared accommodation' : sizeWords(c.lha.size)} rate in ${c.lha.area.brma} is ${money(c.lha.rate)} pcm${gapWords(c.gap)}` : null,
-    c.sar !== null ? `Shared accommodation rate there: ${money(c.sar)} pcm` : null,
     `${availableWords(p, today)[0].toUpperCase()}${availableWords(p, today).slice(1)}${floorWords(p.floor, p.lift) ? ` · ${floorWords(p.floor, p.lift)}` : ''}${p.furnished ? ` · ${p.furnished}` : ''}`,
     complianceLine(p) ? `Safety: ${complianceLine(p)}` : null,
   ].filter((x): x is string => x !== null);

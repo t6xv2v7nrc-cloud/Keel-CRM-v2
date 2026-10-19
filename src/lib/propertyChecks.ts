@@ -43,7 +43,9 @@ export function accommodationOf(p: Pick<Property, 'property_type' | 'notes'> & P
   const text = `${t} ${(p.notes ?? '').toLowerCase()}`;
   if (!t) return null;
   const ensuite = /en[- ]?suite/.test(t);
-  if (/\bhmo\b/.test(t) || (/\broom\b/.test(t) && !ensuite && !/\bbed\b/.test(t))) return { type: 'hmo_room', estimated: true };
+  // an HMO studio is a studio (1 bed for LHA, its own kitchen): only an HMO room is a room in a shared house
+  const unit = /\b(studio|bedsit|flat|house|maisonette|bungalow|apartment)\b|\d\s*-?\s*bed/.test(t);
+  if ((/\bhmo\b/.test(t) && !unit) || (/\broom\b/.test(t) && !ensuite && !/\bbed\b/.test(t))) return { type: 'hmo_room', estimated: true };
   if ((ensuite && /\b(room|studio)\b/.test(t)) || (/\b(room|studio|bedsit)\b/.test(t) && /\bshared\s+(kitchen|bathroom|facilities)\b/.test(text))) {
     return { type: 'shared_kitchen', estimated: true };
   }
@@ -93,7 +95,7 @@ export function papersFor(p: ForChecks, today = todayIso()): Papers {
   return { known: true, complete: missing.length === 0 && failing.length === 0, missing, failing };
 }
 
-export interface Flag { tone: 'red' | 'amber' | 'grey'; key: 'over_lha' | 'suits_not_set' | 'outside_london' | 'papers_lapsed' | 'not_ready'; words: string; detail?: string }
+export interface Flag { tone: 'red' | 'amber' | 'grey'; key: 'over_lha' | 'outside_london' | 'papers_lapsed' | 'not_ready'; words: string; detail?: string }
 
 export interface Checks {
   lha: LhaCheck | null;
@@ -129,7 +131,6 @@ export function checksFor(p: ForChecks, today = todayIso()): Checks {
 
   const flags: Flag[] = [];
   if (overLha(gap)) flags.push({ tone: 'red', key: 'over_lha', words: `${money(gap)} over LHA`, detail: `The rent is above the ${lha!.size === 'shared' ? 'shared' : `${lha!.size} bed`} LHA rate of ${money(lha!.rate)} in ${lha!.area.brma}.` });
-  if (accommodation?.type === 'shared_kitchen' && suits.length === 0) flags.push({ tone: 'amber', key: 'suits_not_set', words: 'Suits not set', detail: 'mark who a shared-kitchen unit suits, so it goes to the right clients' });
   if (london === false) flags.push({ tone: 'amber', key: 'outside_london', words: 'Outside Greater London', detail: 'not offered to London councils by default' });
   // papers recorded here that have run out are worth a word with the supplier; missing ones are theirs to hold
   if (papers.failing.length) flags.push({ tone: 'amber', key: 'papers_lapsed', words: 'Check the papers', detail: `${papers.failing.join(', ')}: ask the supplier` });
@@ -145,13 +146,12 @@ export function sendBlockers(c: Pick<Checks, 'flags'>): string[] {
   return c.flags.filter((f) => f.tone === 'grey').map((f) => (f.detail ? `${f.words}: ${f.detail}` : f.words));
 }
 
-/** "BRMA Outer North London · 1 bed LHA £1,150 · £50 under · shared rate £595 (£55 over)" */
+/** "BRMA Outer North London · 1 bed LHA £1,150 · £50 under" (the shared rate is not repeated: a room's own LHA is it) */
 export function lhaLine(c: Checks): string | null {
   if (!c.lha) return null;
   const size = c.lha.size === 'shared' ? 'shared' : `${c.lha.size} bed`;
   const parts = [`${c.lha.area.brma}`, `${size} LHA ${money(c.lha.rate)}`];
   if (c.gap !== null) parts.push(`${gapWords(c.gap)}${Math.abs(c.gap) < 1 ? ' LHA' : ''}`);
-  if (c.sar !== null) parts.push(`shared rate ${money(c.sar)}${c.sarGap !== null ? ` (${gapWords(c.sarGap)})` : ''}`);
   return parts.join(' · ');
 }
 

@@ -40,7 +40,7 @@ export function BinFiled({ inbox }: { inbox: InboxItem[] }) {
   return (
     <>
       {notes.length > 0 && (
-        <Card>
+        <Card fold="bin.notes">
           <CardHeader icon="pencil" title="Notes" sub={String(notes.length)} help="binNotes" />
           <div className="flex flex-col gap-3 p-5">
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search notes: a name, phone, area" aria-label="Search notes"
@@ -88,7 +88,7 @@ export function BinFiled({ inbox }: { inbox: InboxItem[] }) {
       )}
 
       {toClients.length > 0 && (
-        <Card>
+        <Card fold="bin.filed">
           <CardHeader title="Recently filed to clients" sub={String(toClients.length)} />
           <ul className="m-0 list-none p-0">
             {toClients.map((item) => (

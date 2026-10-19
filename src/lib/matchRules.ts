@@ -158,8 +158,7 @@ export function rulesFor(p: RuleProperty, a: Applicant, opts: RuleOptions = {}):
       warnings.unshift({ tone: 'red', words });
     }
     if (!lha.theirs && (facts.household.value === 'single' || facts.household.value === 'other') && !facts.ageBand.value) {
-      const sar = rateFor(check.area.brma, 'shared');
-      warnings.push({ tone: 'amber', words: `Age not known: under 35 they get the shared rate${sar !== null ? ` (${money(sar)} here)` : ''}` });
+      warnings.push({ tone: 'amber', words: 'Age not known: ask it, it sets their LHA' });
     }
   }
   if (benefitCapOf(a).status === 'capped') warnings.push({ tone: 'amber', words: 'The benefit cap applies: check the rent is covered' });

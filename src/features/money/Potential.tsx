@@ -33,7 +33,7 @@ export function PotentialList({ pots, byId, totals }: { pots: Potential[]; byId:
         const sum = group.reduce((s, p) => s + (p.amount ?? 0), 0);
         const unknown = group.filter((p) => p.amount == null).length;
         return (
-          <Card key={step}>
+          <Card fold={`finances.potential.${step}`} key={step}>
             <CardHeader title={DEAL_LABEL[step]} sub={`${unknown === group.length ? 'fee not known' : `${money(sum)}${unknown ? ` + ${unknown} not known` : ''}`} · ${group.length}`} />
             <ul className="m-0 flex list-none flex-col divide-y divide-[var(--line)] px-4 py-0 sm:px-5">
               {group.map((p) => {

@@ -12,7 +12,7 @@ const small = 'min-h-0 px-3 py-1.5 text-[13px]';
 export function DuplicatesBox({ groups, onClose, onChange }: { groups: DuplicateGroup[]; onClose: () => void; onChange: () => void }) {
   const ready = useMergeReady();
   return (
-    <Card>
+    <Card fold="pipeline.duplicates">
       <CardHeader icon="users" title="Possible duplicates" sub={String(groups.length)} help="duplicates">
         <button type="button" onClick={onClose} aria-label="Close duplicates" title="Close"
           className="grid h-8 w-8 place-items-center rounded-md text-[var(--ink-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--ink)]">

@@ -71,7 +71,7 @@ export function LhaSettings({ draft, set }: { draft: AppSettings; set: <K extend
   const typed = district.trim() ? lookupPostcode(district) : null;
 
   return (
-    <Card>
+    <Card fold="settings.lha" startsFolded>
       <CardHeader icon="pound" title="LHA rates" sub={`${table.year} · ${names.length} areas`} help="lha" />
       <div className="flex flex-col gap-5 p-5">
         {/* Which rates, and where they came from */}

@@ -206,7 +206,7 @@ export const HELP = {
   nothingShared: {
     title: 'Shared accommodation',
     body: [
-      'Self-contained only means the client is never matched to anything shared: rooms, en-suite rooms and en-suite studios (an en-suite still shares a kitchen), HMO rooms, house shares, or a studio whose notes say the kitchen or bathroom is shared. Plain studios and flats still match.',
+      'Self-contained only means the client is never matched to anything shared: rooms, en-suite rooms and en-suite studios (an en-suite still shares a kitchen), HMO rooms, house shares, or a studio whose notes say the kitchen or bathroom is shared. Plain studios, HMO studios and flats still match.',
       'It adds "Self-contained only" to their must-haves; Fine takes it out again. If the client wrote "self-contained", "no shared house" or "own kitchen" in their own words, it is already on.',
     ],
   },
@@ -252,10 +252,10 @@ export const HELP = {
   propertyChecks: {
     title: 'Ready to send?',
     body: [
-      'Each property shows its BRMA, the monthly LHA rate for its size, and the gap: the rent minus that rate. Shared-kitchen units and HMO rooms also show the gap to the shared rate (SAR).',
+      'Each property shows its BRMA, the monthly LHA rate for its size, and the gap: the rent minus that rate. An HMO room is measured against the shared rate; an HMO studio is a studio, so the 1 bed rate.',
       'Red: the rent is at least £1 above LHA, so a client on benefits would have a shortfall to make up. It shows in red everywhere; clients only see it with Show over LHA on.',
       'Every property is ready to send as standard: the suppliers make sure their safety checks are done. Mark not ready holds one back, with your reason, until you mark it ready again.',
-      'Amber: a shared-kitchen unit nobody is marked as suited to, a property outside Greater London (not offered to London councils by default), or safety papers you recorded that have run out or an EPC below E (worth a word with the supplier). Amber is a warning, not a stop.',
+      'Amber: a property outside Greater London (not offered to London councils by default), or safety papers you recorded that have run out or an EPC below E (worth a word with the supplier). Amber is a warning, not a stop.',
       'Grey: marked not ready by hand, the only thing that stops a property going out. Red (at least £1 over LHA) can still be sent from the Mailer, marked red; clients are only offered it with Show over LHA on.',
       'Papers and photos are optional: fill them in with Edit on the property card, under Letting details and safety papers, and the Mailer prints their dates. Who it suits: UC 35 plus, SAR-exempt, under 35 standard, couples, families. Every change goes on the property\'s history.',
     ],
@@ -266,7 +266,7 @@ export const HELP = {
       'Compares the rent with the Local Housing Allowance for the property\'s size in its area (Broad Rental Market Area), using the rates in Team settings.',
       'The owner loads the rates from the gov.uk CSV, with the page it came from and the day they apply from; weekly figures become the monthly Universal Credit amount (× 52 ÷ 12). Until then Keel uses built-in rates that are not checked against gov.uk, and says so next to every rate.',
       'A rent written as "1-Bed LHA" is shown as the pounds it means for that property\'s area, never as the label.',
-      'Studios and en-suite rooms count as 1 bed. Other rooms use the shared rate. LHA stops at 4 bed. A rent written as "1-Bed LHA" counts as exactly that rate.',
+      'Studios (HMO studios too) and en-suite rooms count as 1 bed. Other rooms, HMO rooms among them, use the shared rate. LHA stops at 4 bed. A rent written as "1-Bed LHA" counts as exactly that rate.',
       'The area is estimated from the postcode, which is usually right but not always. Check an address on the VOA\'s LHA Direct and use Change area if it differs; the owner can apply it to every property in that postcode district.',
       'When matching, clients on UC or housing benefit with no budget are judged on their own LHA: 1 bed for singles and couples, and by bedrooms needed for families.',
       'To look up a postcode, type it (NW11, or HA8 7AB) or a place (Golders Green) in the search box, or in LHA rates in Team settings. It shows where it is, its LHA area and the rates.',

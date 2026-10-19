@@ -8,7 +8,7 @@ const LONDON = [...LONDON_BOROUGHS].sort((a, b) => a.localeCompare(b));
 /** Team settings: the boroughs Keel works hardest (first and starred everywhere) and the ones it would like to work next. */
 export function FocusBoroughs({ draft, set }: { draft: AppSettings; set: <K extends keyof AppSettings>(k: K, v: AppSettings[K]) => void }) {
   return (
-    <Card>
+    <Card fold="settings.focus" startsFolded>
       <CardHeader icon="flag" title="Focus boroughs" sub={`${draft.focusBoroughs.length} focus, ${draft.wishlistBoroughs.length} on the wish-list`} help="councils" />
       <div className="flex flex-col gap-4 p-5">
         <BoroughList label="Focus" note="Listed first and starred on Councils, and first on dashboards." value={draft.focusBoroughs}

@@ -132,7 +132,7 @@ export function DashboardPage() {
 
       {/* Next steps due: from a client's page or their progress (a viewing to book, an answer to chase) */}
       {stepsDue.length > 0 && (
-        <Card>
+        <Card fold="home.nextsteps">
           <CardHeader icon="calendar" title="Next steps due" sub={String(stepsDue.length)} help="nextCall" />
           <ul className="m-0 grid list-none gap-x-6 p-2 md:grid-cols-2">
             {stepsDue.slice(0, 8).map(({ a, state }) => (
@@ -165,7 +165,7 @@ export function DashboardPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
         {/* Triage */}
-        <Card>
+        <Card fold="home.triage">
           <CardHeader icon="layers" title="Referral triage" sub={`${active.length} active`} help="tiers">
             {urgent > 0 && <Link to="/pipeline?urgency=urgent" className="hover:opacity-80"><UrgentChip /></Link>}
             <Link to="/settings" className="text-[13px] text-[var(--link)] hover:underline">Rules</Link>
@@ -179,7 +179,7 @@ export function DashboardPage() {
         </Card>
 
         {/* Pipeline funnel */}
-        <Card>
+        <Card fold="home.pipeline">
           <CardHeader icon="list" title="Pipeline" sub={`${applicants.length} clients`}>
             <Link to="/pipeline" className="text-[13px] text-[var(--link)] hover:underline">Open</Link>
           </CardHeader>
@@ -196,7 +196,7 @@ export function DashboardPage() {
       </div>
 
       {/* Recent activity */}
-      <Card>
+      <Card fold="home.activity">
         <CardHeader icon="clock" title="Recent activity" />
         {recent.length === 0 ? (
           <Empty icon="inbox" title="Nothing yet">Paste a screenshot or a website enquiry into the Bin to begin.</Empty>

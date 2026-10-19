@@ -30,7 +30,8 @@ import { tierLabel } from '../../lib/tiering';
 import { shortDate } from '../../lib/format';
 import { bedsOfType, TYPE_OPTIONS } from '../../lib/propertyEdit';
 import { EditProperty } from './EditProperty';
-import { PropertyChecks } from './Checks';
+import { FlagChip, PropertyChecks } from './Checks';
+import { checksFor } from '../../lib/propertyChecks';
 
 const normAddr = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -97,6 +98,8 @@ export function PropertiesPage() {
   const [listsOpen, setListsOpen] = useState(false);
   const [justAdded, setJustAdded] = useState<Set<string>>(new Set());
   const [status, setStatusFilter] = useState<'available' | Property['status'] | 'all'>('available');
+  // on a phone the filters sit behind one button, so the list starts on the first screen
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [borough, setBorough] = useState('all');
   const [q, setQ] = useState('');
   const [lhaFilter, setLhaFilter] = useState<'any' | 'within' | 'over' | 'unknown'>('any');
@@ -109,6 +112,13 @@ export function PropertiesPage() {
     try { return localStorage.getItem('keel-properties-view') === 'map' ? 'map' : 'list'; } catch { return 'list'; }
   });
   const setView = (v: 'list' | 'map') => { setViewState(v); try { localStorage.setItem('keel-properties-view', v); } catch { /* fine */ } };
+  // Cards open or folded to a line or two; the choice for all is remembered on this device, one card's for now
+  const [foldAll, setFoldAllState] = useState(() => {
+    try { return localStorage.getItem('keel-properties-folded') === '1'; } catch { return false; }
+  });
+  const [flipped, setFlipped] = useState<Set<string>>(new Set());
+  const setFoldAll = (v: boolean) => { setFoldAllState(v); setFlipped(new Set()); try { localStorage.setItem('keel-properties-folded', v ? '1' : '0'); } catch { /* fine */ } };
+  const flip = (id: string) => setFlipped((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const matchOptions = useMatchOptions();
   const matches = useMemo(
@@ -148,6 +158,7 @@ export function PropertiesPage() {
         || b.created_at.localeCompare(a.created_at));
   }, [properties, status, borough, q, justAdded, matches, lhaFilter, providerFilter, providers]);
 
+  const activeFilters = [status !== 'available', borough !== 'all', lhaFilter !== 'any', providerFilter !== 'any'].filter(Boolean).length;
   const toggle = (id: string) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const selectedRows = rows.filter((p) => selected.has(p.id));
 
@@ -176,6 +187,8 @@ export function PropertiesPage() {
       openRequests={requests.filter((r) => r.status === 'sent' && (r.property_id === p.id || r.property_address === p.address_line)).length}
       sent={sent}
       isNew={justAdded.has(p.id)}
+      folded={!justAdded.has(p.id) && foldAll !== flipped.has(p.id)}
+      onFold={() => flip(p.id)}
       selected={selected.has(p.id)}
       onToggle={() => toggle(p.id)}
       onStatus={(s) => setStatus.mutate({ p, status: s }, { onSuccess: () => toast(`${PROPERTY_STATUS_LABEL[s]}: ${p.address_line}`, 'success') })}
@@ -237,6 +250,11 @@ export function PropertiesPage() {
       {properties.length > 0 && (
         <>
           <div className="flex flex-wrap items-end gap-3">
+            <button type="button" onClick={() => setFiltersOpen((v) => !v)} aria-expanded={filtersOpen}
+              className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-md border px-3 text-[14px] font-medium sm:hidden ${filtersOpen || activeFilters ? 'border-[var(--accent)] text-[var(--accent-ink)]' : 'border-[var(--line-strong)] text-[var(--ink)]'} bg-[var(--surface)]`}>
+              <Icon name="sliders" size={15} />Filters{activeFilters ? ` (${activeFilters})` : ''}
+            </button>
+            <div className={`${filtersOpen ? 'flex' : 'hidden'} w-full flex-wrap items-end gap-3 sm:contents`}>
             <label className="flex flex-col gap-1">
               <span className="text-[13px] font-medium text-[var(--ink-muted)]">Show</span>
               <select value={status} onChange={(e) => setStatusFilter(e.target.value as typeof status)}
@@ -277,6 +295,7 @@ export function PropertiesPage() {
                 </select>
               </label>
             )}
+            </div>
             <label className="flex min-w-[220px] flex-1 flex-col gap-1">
               <span className="text-[13px] font-medium text-[var(--ink-muted)]">Search</span>
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Address, area, postcode, source"
@@ -294,6 +313,20 @@ export function PropertiesPage() {
                 ))}
               </div>
             </div>
+            {view === 'list' && (
+              <div className="flex flex-col gap-1">
+                <span className="text-[13px] font-medium text-[var(--ink-muted)]">Cards</span>
+                <div className="flex min-h-[40px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] p-0.5" role="group" aria-label="Cards">
+                  {([[false, 'Open'], [true, 'Folded']] as const).map(([v, label]) => (
+                    <button key={label} type="button" onClick={() => setFoldAll(v)} aria-pressed={foldAll === v}
+                      className={`inline-flex items-center gap-1.5 rounded px-3 text-[13px] font-medium transition-colors ${
+                        foldAll === v ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'text-[var(--ink-muted)] hover:text-[var(--ink)]'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {selectedRows.length > 0 && (
@@ -628,8 +661,9 @@ function PasteImport({ existing, applicants, canClose, onClose, onAdded, onNeeds
 
 // ── Property card with its matches ────────────────────────────────
 
-function PropertyCard({ p, matches, deals, names, sent, openRequests, isNew, selected, onToggle, onStatus, onDelete }: {
-  p: Property; matches: RuledMatch[]; deals: Deal[]; names: Map<string, string>; sent: Map<string, SentOnWhatsApp>; openRequests: number; isNew: boolean; selected: boolean;
+function PropertyCard({ p, matches, deals, names, sent, openRequests, isNew, folded, onFold, selected, onToggle, onStatus, onDelete }: {
+  p: Property; matches: RuledMatch[]; deals: Deal[]; names: Map<string, string>; sent: Map<string, SentOnWhatsApp>; openRequests: number; isNew: boolean;
+  folded: boolean; onFold: () => void; selected: boolean;
   onToggle: () => void; onStatus: (s: Property['status']) => void; onDelete: () => void;
 }) {
   const [showAll, setShowAll] = useState(false);
@@ -658,18 +692,29 @@ function PropertyCard({ p, matches, deals, names, sent, openRequests, isNew, sel
         <input type="checkbox" checked={selected} onChange={onToggle} aria-label={`Select ${p.address_line}`}
           className="mt-1 h-4 w-4 shrink-0 accent-[var(--accent)]" />
         <div className="min-w-0 flex-1 basis-[240px]">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="m-0 text-[17px] font-semibold text-[var(--ink)]">{p.address_line}</h3>
-            {isNew && <span className="rounded bg-[var(--accent)] px-1.5 py-0.5 text-[12px] font-semibold text-[var(--on-accent)]">New</span>}
-            {isLocalProperty(p.id) && <DeviceOnlyTag />}
+          <div className="flex items-start gap-1.5">
+            <button type="button" onClick={onFold} aria-expanded={!folded} title={folded ? 'Open this card' : 'Fold this card'} aria-label={`${folded ? 'Open' : 'Fold'} ${p.address_line}`}
+              className="-ml-1 mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded text-[var(--ink-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--ink)]">
+              <Icon name="chevronDown" size={16} className={`transition-transform ${folded ? '-rotate-90' : ''}`} />
+            </button>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <h3 className="m-0 text-[17px] font-semibold text-[var(--ink)]">{p.address_line}</h3>
+              {isNew && <span className="rounded bg-[var(--accent)] px-1.5 py-0.5 text-[12px] font-semibold text-[var(--on-accent)]">New</span>}
+              {isLocalProperty(p.id) && <DeviceOnlyTag />}
+            </div>
           </div>
           <div className="mt-0.5 text-[14px] text-[var(--ink-muted)]">{facts.join(' · ') || 'No details'}</div>
-          <div className="mt-1.5"><LhaLine property={p} /></div>
-          <PropertyChecks property={p} />
-          <InPlay deals={deals} names={names} />
-          <ProviderPicker property={p} />
+          {folded ? <FoldedSummary p={p} matches={matches} deals={deals} /> : (
+            <>
+              <div className="mt-1.5"><LhaLine property={p} /></div>
+              <PropertyChecks property={p} />
+              <InPlay deals={deals} names={names} />
+              <ProviderPicker property={p} />
+            </>
+          )}
         </div>
-        <div className="flex w-full flex-wrap items-center gap-2 pl-7 sm:w-auto sm:justify-end sm:pl-0">
+        {/* folded on a phone, the buttons wait until the card is opened */}
+        <div className={`${folded ? 'hidden sm:flex' : 'flex'} w-full flex-wrap items-center gap-2 pl-7 sm:w-auto sm:justify-end sm:pl-0`}>
           {openRequests > 0 && (
             <span className="inline-flex items-center gap-1 whitespace-nowrap rounded bg-[var(--chip-bg)] px-1.5 py-0.5 text-[12px] font-medium text-[var(--chip-fg)]"
               title="Requests to the provider still waiting on a reply">
@@ -695,7 +740,7 @@ function PropertyCard({ p, matches, deals, names, sent, openRequests, isNew, sel
 
       {editing && <EditProperty p={p} onDone={() => setEditing(false)} />}
 
-      {isAvailable(p) && (
+      {isAvailable(p) && !folded && (
         <div className="border-t border-[var(--line)] px-5 pb-3 pt-2">
           {matches.length === 0 ? (
             <p className="m-0 py-1 text-[14px] text-[var(--ink-muted)]">No matching clients yet.</p>
@@ -718,7 +763,24 @@ function PropertyCard({ p, matches, deals, names, sent, openRequests, isNew, sel
   );
 }
 
-/** One client: strength, who, the reasons in brief (all of them on hover), and ways to reach them. */
+/** A folded card in a line: its LHA, anything red or held back, and how many clients fit or are in play. */
+function FoldedSummary({ p, matches, deals }: { p: Property; matches: RuledMatch[]; deals: Deal[] }) {
+  const flags = checksFor(p).flags.filter((f) => f.tone === 'grey' || (f.tone === 'red' && f.key !== 'over_lha'));
+  const strong = matches.filter((m) => m.strength === 'strong').length;
+  const going = deals.filter((d) => d.status !== 'sent' && d.status !== 'fell_through').length;
+  const words = [
+    isAvailable(p) ? (matches.length ? `${matches.length} ${matches.length === 1 ? 'client fits' : 'clients fit'}${strong ? `, ${strong} strong` : ''}` : 'No matching clients yet') : null,
+    going ? `${going} in play` : null,
+  ].filter(Boolean);
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[var(--ink-muted)]">
+      <LhaChip property={p} />
+      {flags.map((f) => <FlagChip key={f.key} flag={f} />)}
+      {words.length > 0 && <span>{words.join(' · ')}</span>}
+    </div>
+  );
+}
+
 /** Who supplies this property: picked from the providers, or worked out from the list's tag. */
 function ProviderPicker({ property }: { property: Property }) {
   const { providers, ready } = useProviders();
@@ -764,6 +826,7 @@ function InPlay({ deals, names }: { deals: Deal[]; names: Map<string, string> })
   );
 }
 
+/** One client: strength, who, the reasons in brief (all of them on hover), and ways to reach them. */
 function MatchRow({ m, p, sent, deal }: { m: RuledMatch; p: Property; sent: SentOnWhatsApp | undefined; deal: Deal | undefined }) {
   const a = m.applicant;
   const tier = effectiveTier(a);

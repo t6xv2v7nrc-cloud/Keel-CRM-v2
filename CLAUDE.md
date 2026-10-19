@@ -35,8 +35,8 @@ src/
               propertyEdit.ts (editing a saved property: typed rent, bedrooms from the type, what changed in words;
                                the Edit button on each property card, features/properties/EditProperty.tsx),
               propertyChecks.ts (0019, 0025: kind of place, who it suits, safety papers; LHA gap and shared-rate gap worked
-                               out, never typed; flags red over LHA, amber suits not set, outside Greater London or recorded
-                               papers lapsed, grey marked not ready by hand (`not_ready_at`, `not_ready_note`); `sendBlockers`
+                               out, never typed (the shared rate is never shown as a note); flags red over LHA, amber outside
+                               Greater London or recorded papers lapsed, grey marked not ready by hand (`not_ready_at`, `not_ready_note`); `sendBlockers`
                                = grey only (over LHA is red but still sendable from the Mailer, marked red); card and Mark
                                not ready / Mark ready in features/properties/Checks.tsx),
               matchRules.ts (Step 6, 0023: the rules on top of propertyMatch's scores; every screen matches through it:
@@ -144,10 +144,13 @@ supabase/checks/live-vs-repo.sql  (read-only: which migrations the live database
 - Keel works in London and the home counties only; area lists show those first, the rest of England behind one option.
 - Matching: anything over £1,300 pcm is always offered to clients on PIP or in full-time work (`premiumRent`). Clients on
   UC alone (no PIP or LCWRA, not working) are never matched above £1,100 (`ucOnlyRentCap`), whatever budget they gave.
-  Studios and en-suite rooms count as 1 bed for LHA. "Central" means the zone 1 districts (`CENTRAL_DISTRICTS`).
+  Studios (HMO studios too: "HMO" alone never makes a studio shared) and en-suite rooms count as 1 bed for LHA; only HMO
+  rooms and plain rooms use the shared rate. "Central" means the zone 1 districts (`CENTRAL_DISTRICTS`).
   "Self-contained only" (the client's Shared accommodation switch, stored as those words in their must-haves; the same
-  wish in their own words counts) is never matched to anything shared: rooms, en-suite rooms and studios, HMOs, house
+  wish in their own words counts) is never matched to anything shared: rooms, en-suite rooms and studios, HMO rooms, house
   shares, or notes saying shared kitchen or bathroom (`selfContainedFrom`, `withSelfContained`, `shared` in propertyMatch.ts).
+  No "shared" notes on properties (Ridwan's call): no shared-rate line on cards or in emails, no "Suits not set" amber,
+  and a guessed kind of place is never printed (only one set by hand shows, on the card and in Mailer wording).
 - Matching rules (Step 6, matchRules.ts) decide what anyone is offered: within the LHA the client is paid there (wins
   over the premium rule), in an LHA area they want, a kind of place that suits them; out-of-London never to a London
   officer's client by default. What the rules hide is counted under each list, with Show over LHA and Show outside
@@ -162,6 +165,10 @@ supabase/checks/live-vs-repo.sql  (read-only: which migrations the live database
   LCWRA lifts the benefit cap and the UC-only limit, not the shared rate. PIP clients are still held to LHA (Step 6).
 - Short lists, not endless ones: each property shows only its best few clients (`bestFew`), one line each. No kanban.
 - Nothing scrolls sideways, on a phone especially.
+- Cards fold away: `<Card fold="page.name">` (startsFolded for Settings, which reads as a list of sections) folds from its
+  CardHeader, remembered per device (collapse.ts); a link to a Settings card (#targets) opens it. Property cards fold too
+  (Cards: Open or Folded on the Properties page, remembered; folded on a phone, their buttons wait), the Mailer folds a
+  long officer list to a line, and on a phone the Properties filters sit behind one Filters button.
 - Properties go to clients, and requests go to providers, as WhatsApp links (wa.me) the person sends by hand; every
   send is logged. Providers are greeted "Salam {name}". The same goes for the other shares (shareWhatsApp.ts): matches
   to a client's referring officer, Mailer alerts and digests on WhatsApp (recorded like an email), a housed client asked

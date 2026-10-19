@@ -39,7 +39,7 @@ export function WhatsAppSettings({ draft, set }: { draft: AppSettings; set: <K e
   const [viewingKind, setViewingKind] = useState<ViewingKey>('whatsappReminder');
   const [, viewingLabel, viewingDefault] = VIEWING_KINDS.find(([k]) => k === viewingKind)!;
   return (
-    <Card>
+    <Card fold="settings.whatsapp" startsFolded>
       <CardHeader icon="chat" title="WhatsApp message" help="whatsapp" />
       <div className="grid gap-5 p-5 md:grid-cols-2">
         <div className="flex flex-col gap-2">

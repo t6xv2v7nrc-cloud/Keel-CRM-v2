@@ -37,7 +37,7 @@ export function WeeklyTargets() {
     );
   }
   return (
-    <Card>
+    <Card fold="home.targets.week">
       <CardHeader icon="flag" title="Weekly target" sub={week.period.label} help="targets" />
       <PeriodBars period={week.period} lines={week.lines} />
     </Card>

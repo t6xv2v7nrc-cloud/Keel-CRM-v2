@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Button, Icon, useToast } from '../../components/ui';
 import { useSetPropertyReady } from '../../lib/hooks';
 import { isLocalProperty } from '../../lib/localProperties';
-import { money } from '../../lib/format';
 import { ACCOMMODATION_LABEL, BILLS_LABEL, checksFor, floorWords, SUITS_LABEL } from '../../lib/propertyChecks';
 import type { Flag } from '../../lib/propertyChecks';
 import type { Property } from '../../lib/types';
@@ -33,10 +32,10 @@ export function PropertyChecks({ property }: { property: Property }) {
   const { toast } = useToast();
   const [holding, setHolding] = useState(false);
   const [note, setNote] = useState('');
+  // the kind of place only when set by hand (its type already says the rest), who it suits only when marked
   const facts = [
-    c.accommodation ? `${ACCOMMODATION_LABEL[c.accommodation.type]}${c.accommodation.estimated ? ' (from its type)' : ''}` : null,
-    c.suits.length ? `Suits ${c.suits.map((s) => SUITS_LABEL[s]).join(', ')}` : c.papers.known && !c.flags.some((f) => f.key === 'suits_not_set') ? 'Suits: not set' : null,
-    c.sar !== null ? `Shared rate ${money(c.sar)}${c.sarGap !== null ? ` (${Math.abs(c.sarGap) < 0.005 ? 'at it' : `${money(Math.abs(c.sarGap))} ${c.sarGap > 0 ? 'over' : 'under'}`})` : ''}` : null,
+    c.accommodation && !c.accommodation.estimated ? ACCOMMODATION_LABEL[c.accommodation.type] : null,
+    c.suits.length ? `Suits ${c.suits.map((s) => SUITS_LABEL[s]).join(', ')}` : null,
     floorWords(property.floor, property.lift),
     property.bills_included?.length ? `Bills: ${property.bills_included.map((b) => BILLS_LABEL[b as keyof typeof BILLS_LABEL] ?? b).join(', ')}` : null,
   ].filter(Boolean);

@@ -96,7 +96,7 @@ export function MoneyPage() {
             <Tile label="Paid, last 30 days" value={money(t.paid30)} onClick={() => setView('paid')} hint="Letting fees and incentives" className="col-span-2 sm:col-span-1" />
           </div>
 
-          <Card>
+          <Card fold="finances.bymonth">
             <CardHeader icon="trend" title="By month" />
             <div className="px-4 pb-3 pt-4 sm:px-5">
               <MonthBars months={months} />
@@ -208,7 +208,7 @@ function AccountantExport({ receivables, nameOf }: { receivables: Receivable[]; 
   const download = () => saveFile(`keel-finances-${period.key === 'all' ? 'all' : `${period.from}-to-${period.to}`}.csv`,
     financesCsv(receivables, period, nameOf), 'text/csv;charset=utf-8');
   return (
-    <Card>
+    <Card fold="finances.accountant">
       <CardHeader icon="file" title="For your accountant" help="accountant" />
       <div className="flex flex-wrap items-end gap-3 p-4 sm:px-5">
         <label className="flex min-w-0 flex-col gap-1">

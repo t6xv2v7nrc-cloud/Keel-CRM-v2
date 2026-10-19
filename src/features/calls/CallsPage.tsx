@@ -85,7 +85,7 @@ export function CallsPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-        <Card>
+        <Card fold="calls.now">
           <CardHeader icon="flag" title="To call now" sub={String(queue.length)} help="calls" />
           {queue.length === 0 ? (
             <Empty icon="check" title={view === 'mine' ? 'Nothing to call for your clients' : 'All caught up'}>
@@ -104,7 +104,7 @@ export function CallsPage() {
         </Card>
 
         <div className="flex flex-col gap-6">
-          <Card>
+          <Card fold="calls.coming">
             <CardHeader icon="calendar" title="Coming up" sub={String(upcoming.length)} />
             {upcoming.length === 0 ? (
               <p className="m-0 p-5 text-[15px] text-[var(--ink-muted)]">No calls scheduled.</p>
@@ -124,7 +124,7 @@ export function CallsPage() {
           </Card>
 
           {byPerson.length > 1 && (
-            <Card>
+            <Card fold="calls.people">
               <CardHeader icon="users" title="Calls this week, by person" />
               <div className="flex flex-col gap-0.5 p-3">
                 {byPerson.map((p) => (
@@ -134,7 +134,7 @@ export function CallsPage() {
             </Card>
           )}
 
-          <Card>
+          <Card fold="calls.fortnight">
             <CardHeader icon="trend" title="Last 14 days" />
             <div className="p-5">
               <DayBars bars={days.map((d) => ({
@@ -151,7 +151,7 @@ export function CallsPage() {
         </div>
       </div>
 
-      <Card>
+      <Card fold="calls.recent">
         <CardHeader icon="clock" title="Recent calls" sub={String(Math.min(calls.length, 25))} />
         {calls.length === 0 ? (
           <Empty icon="phone" title="No calls logged yet">Open a client and use Log call, or log one from the list above.</Empty>

@@ -444,7 +444,7 @@ export function MoneyOwedSummary({ applicants }: { applicants: Applicant[] }) {
   const t = totals(receivables);
   const byId = new Map(applicants.map((a) => [a.id, a]));
   return (
-    <Card>
+    <Card fold="home.finances">
       <CardHeader icon="pound" title="Finances" help="money"
         sub={`${money(t.owed)} owed${t.overdueCount ? ` · ${money(t.overdue)} overdue` : ''}${pt.total + t.signing ? ` · ${money(pt.total + t.signing)} potential` : ''}`}>
         <Link to="/finances" className="text-[13px] text-[var(--link)] hover:underline">See all {list.length}</Link>

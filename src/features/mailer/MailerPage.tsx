@@ -389,7 +389,10 @@ function Composer({ kind, to, recent, sends = [], properties, subject, body, wha
     setOff((d) => new Set([...d, ...fresh]));
   }, [recentKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const [sentAt, setSentAt] = useState<string | null>(null);
+  // a long list of officers folds to a line; a short one shows
+  const [showTo, setShowTo] = useState(to.to.length <= 4);
   const chosen = to.to.filter((t) => !off.has(String(t.officer.id)));
+  const recentOff = to.to.filter((t) => off.has(String(t.officer.id)) && recent?.has(String(t.officer.id))).length;
   const addresses = [...new Map(chosen.map((t) => [t.address.toLowerCase(), t.address])).values()];
   const greeting = chosen.length === 1 ? chosen[0].officer.send_to_mailbox?.trim() ? null : chosen[0].officer.name : null;
   const text = body(greeting, myName);
@@ -413,6 +416,11 @@ function Composer({ kind, to, recent, sends = [], properties, subject, body, wha
       <Section title={`To (${addresses.length} ${addresses.length === 1 ? 'address' : 'addresses'}${addresses.length > 1 ? ', in Bcc' : ''})`}>
         {to.to.length === 0 ? (
           <p className="m-0 text-[13px] text-[var(--ink-muted)]">Nobody on the mailing list for this one.</p>
+        ) : !showTo ? (
+          <p className="m-0 text-[14px] text-[var(--ink)]">
+            {chosen.length} of {to.to.length} officers ticked{recentOff ? `, ${recentOff} left unticked as they had a bulk email in the last 30 days` : ''}{to.left.length ? `; ${to.left.length} left out by the rules` : ''}.{' '}
+            <button type="button" onClick={() => setShowTo(true)} className="text-[var(--link)] hover:underline">Show who</button>
+          </p>
         ) : (
           <ul className="m-0 flex list-none flex-col gap-1 p-0">
             {to.to.map(({ officer, address }) => {
@@ -434,8 +442,11 @@ function Composer({ kind, to, recent, sends = [], properties, subject, body, wha
             })}
           </ul>
         )}
-        {to.left.length > 0 && (
+        {showTo && to.left.length > 0 && (
           <p className="m-0 text-[12px] text-[var(--ink-muted)]">Left out by the rules: {to.left.map(({ officer, why }) => `${officer.name ?? 'Officer'} (${lower(why)})`).join(', ')}.</p>
+        )}
+        {showTo && to.to.length > 4 && (
+          <button type="button" onClick={() => setShowTo(false)} className="self-start text-[13px] text-[var(--link)] hover:underline">Hide the list</button>
         )}
       </Section>
 

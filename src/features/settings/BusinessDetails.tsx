@@ -18,7 +18,7 @@ const FIELDS: Array<{ key: keyof BusinessDetails; label: string; placeholder: st
 export function BusinessDetailsCard({ draft, set }: { draft: AppSettings; set: <K extends keyof AppSettings>(k: K, v: AppSettings[K]) => void }) {
   const missing = missingBusiness(draft.business);
   return (
-    <Card>
+    <Card fold="settings.business" startsFolded>
       <CardHeader icon="file" title="Business details" sub={missing.length ? `${missing.length} still to add` : 'All filled in'} help="mailer" />
       <div className="flex flex-col gap-4 p-5">
         <p className="m-0 text-[15px] text-[var(--ink-muted)]">

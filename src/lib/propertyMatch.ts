@@ -206,8 +206,9 @@ type Kind = 'room' | 'studio' | 'flat' | 'unknown';
 
 function propertyFacts(p: PropertyLike) {
   const type = p.property_type ?? '';
-  const kind: Kind = /\b(room|hmo)\b/i.test(type) && !/bed/i.test(type) ? 'room'
-    : /\bstudio|bedsit\b/i.test(type) ? 'studio'
+  // an HMO studio is a studio, not a room
+  const kind: Kind = /\b(studio|bedsit)\b/i.test(type) ? 'studio'
+    : /\b(room|hmo)\b/i.test(type) && !/bed/i.test(type) ? 'room'
     : p.bedrooms != null || /bed/i.test(type) ? 'flat' : 'unknown';
   const beds = kind === 'room' || kind === 'studio' ? 0 : p.bedrooms;
   const district = districtOf(p.postcode ?? '') ?? districtOf(p.address_line);
@@ -218,11 +219,11 @@ function propertyFacts(p: PropertyLike) {
     ...areasIn(p.address_line).filter((x) => boroughOfArea(x) === borough),
   ]);
   const text = `${type} ${p.notes ?? ''}`;
-  // shared: a room (en-suite or not), or a studio-sized place that says en-suite, HMO or shared
-  // (a 2 bed flat with an en-suite bathroom is not shared)
+  // shared: a room (en-suite or not), or a studio-sized place that says en-suite, HMO room or shared
+  // (a 2 bed flat with an en-suite bathroom is not shared; an HMO studio is a studio)
   const small = kind === 'room' || kind === 'studio' || beds === 0 || beds == null;
   const shared = kind === 'room'
-    || /\bhmo\b|\bshared\s+(?:house|flat|kitchen|bathroom|facilities|accommodation)\b|\b(?:house|flat)\s*share\b|\broom\s+in\s+a\b/i.test(text)
+    || /\bhmo\s+rooms?\b|\bshared\s+(?:house|flat|kitchen|bathroom|facilities|accommodation)\b|\b(?:house|flat)\s*share\b|\broom\s+in\s+a\b/i.test(text)
     || (small && /\ben[- ]?suite\b/i.test(text));
   return {
     kind, beds, district, borough, areas, shared,

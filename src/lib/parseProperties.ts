@@ -63,7 +63,7 @@ function detectType(t: string): Detected['type'] {
   }
   const ensuite = /\ben[- ]?suite\b/i.test(t);
   if (/\bself[- ]contained\s+studio\b/i.test(t)) return { label: 'Self-Contained Studio', bedrooms: 0 };
-  if (/\bstudios?\b|\bbedsits?\b/i.test(t)) return { label: ensuite ? 'En-suite Studio' : 'Studio', bedrooms: 0 };
+  if (/\bstudios?\b|\bbedsits?\b/i.test(t)) return { label: ensuite ? 'En-suite Studio' : /\bhmo\b/i.test(t) ? 'HMO Studio' : 'Studio', bedrooms: 0 };
   if (/\bhmo\b/i.test(t)) return { label: ensuite ? 'En-suite HMO Room' : 'HMO Room', bedrooms: 0 };
   const withoutOtherRooms = t.replace(/\b(living|sitting|bath|shower|utility|box|dining|reception|store)\s*rooms?\b/gi, '');
   if (/\brooms?\b/i.test(withoutOtherRooms)) return { label: ensuite ? 'En-suite Room' : 'Room', bedrooms: 0 };
