@@ -1,18 +1,18 @@
 // Whether a property is fit to send: its LHA rate and gap, what kind of place it is, who it suits,
 // whether its safety papers are complete and in date, and the flags that follow (Step 2 of the update brief).
 //
-//   Red    the rent is above the LHA rate for its size in its BRMA (gap above 0)
+//   Red    the rent is at least £1 above the LHA rate for its size in its BRMA (`overLha`): shown in red, and still
+//          sendable from the Mailer (Ridwan's call), never hidden there
 //   Amber  a shared-kitchen unit with nobody marked as suited to it; outside Greater London (any outreach to a
 //          London council); or safety papers recorded here that have run out or fall below the minimum
 //   Grey   marked Not ready by hand (0025), with the reason
 //
 // Ridwan's rule: the suppliers make sure their checks are done, so a property is ready to send by default. Missing
 // papers or photos never hold one back; recorded ones that have lapsed are a warning. The LHA rate, the gaps and
-// "papers complete" are always worked out here, never typed. Red and grey are what stop a property going out
-// (`sendBlockers`).
+// "papers complete" are always worked out here, never typed. Only grey stops a property going out (`sendBlockers`).
 
 import type { AccommodationType, Property } from './types';
-import { lhaCheck, rateFor } from './lha';
+import { lhaCheck, overLha, rateFor } from './lha';
 import type { LhaCheck } from './lha';
 import { LONDON_BOROUGHS, boroughFromDistrict, canonicalBorough, districtOf } from './london';
 import { money, shortDate } from './format';
@@ -110,7 +110,7 @@ export interface Checks {
   flags: Flag[];
 }
 
-const gapWords = (g: number) => (Math.abs(g) < 0.005 ? 'at' : `${money(Math.abs(g))} ${g > 0 ? 'over' : 'under'}`);
+const gapWords = (g: number) => (Math.abs(g) < 1 ? 'at' : `${money(Math.abs(g))} ${g > 0 ? 'over' : 'under'}`);
 
 /** Everything worked out about a property, and its flags. */
 export function checksFor(p: ForChecks, today = todayIso()): Checks {
@@ -128,7 +128,7 @@ export function checksFor(p: ForChecks, today = todayIso()): Checks {
   const photos = Math.max(p.photo_count ?? 0, (p.photo_urls ?? []).filter(Boolean).length);
 
   const flags: Flag[] = [];
-  if (gap !== null && gap > 0.005) flags.push({ tone: 'red', key: 'over_lha', words: `${money(gap)} over LHA`, detail: `The rent is above the ${lha!.size === 'shared' ? 'shared' : `${lha!.size} bed`} LHA rate of ${money(lha!.rate)} in ${lha!.area.brma}.` });
+  if (overLha(gap)) flags.push({ tone: 'red', key: 'over_lha', words: `${money(gap)} over LHA`, detail: `The rent is above the ${lha!.size === 'shared' ? 'shared' : `${lha!.size} bed`} LHA rate of ${money(lha!.rate)} in ${lha!.area.brma}.` });
   if (accommodation?.type === 'shared_kitchen' && suits.length === 0) flags.push({ tone: 'amber', key: 'suits_not_set', words: 'Suits not set', detail: 'mark who a shared-kitchen unit suits, so it goes to the right clients' });
   if (london === false) flags.push({ tone: 'amber', key: 'outside_london', words: 'Outside Greater London', detail: 'not offered to London councils by default' });
   // papers recorded here that have run out are worth a word with the supplier; missing ones are theirs to hold
@@ -139,10 +139,10 @@ export function checksFor(p: ForChecks, today = todayIso()): Checks {
   return { lha, gap, sarGap, sar, accommodation, suits, london, papers, photos, flags };
 }
 
-/** Why a property cannot be sent: over LHA, or marked not ready by hand. Empty means it can go: a property is
- *  ready by default, as the suppliers see to its checks. */
+/** Why a property cannot be sent: marked not ready by hand. Empty means it can go: a property is ready by default, as
+ *  the suppliers see to its checks, and one over LHA can still go, marked red. */
 export function sendBlockers(c: Pick<Checks, 'flags'>): string[] {
-  return c.flags.filter((f) => f.tone === 'red' || f.tone === 'grey').map((f) => (f.detail ? `${f.words}: ${f.detail}` : f.words));
+  return c.flags.filter((f) => f.tone === 'grey').map((f) => (f.detail ? `${f.words}: ${f.detail}` : f.words));
 }
 
 /** "BRMA Outer North London · 1 bed LHA £1,150 · £50 under · shared rate £595 (£55 over)" */
@@ -150,7 +150,7 @@ export function lhaLine(c: Checks): string | null {
   if (!c.lha) return null;
   const size = c.lha.size === 'shared' ? 'shared' : `${c.lha.size} bed`;
   const parts = [`${c.lha.area.brma}`, `${size} LHA ${money(c.lha.rate)}`];
-  if (c.gap !== null) parts.push(`${gapWords(c.gap)}${Math.abs(c.gap) < 0.005 ? ' LHA' : ''}`);
+  if (c.gap !== null) parts.push(`${gapWords(c.gap)}${Math.abs(c.gap) < 1 ? ' LHA' : ''}`);
   if (c.sar !== null) parts.push(`shared rate ${money(c.sar)}${c.sarGap !== null ? ` (${gapWords(c.sarGap)})` : ''}`);
   return parts.join(' · ');
 }

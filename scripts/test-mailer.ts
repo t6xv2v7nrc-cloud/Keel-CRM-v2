@@ -40,7 +40,9 @@ const list = sendables([good, over, noPapers, nowhere, wembley, watford, let_, h
 const of = (p: Property) => list.find((s) => s.property.id === p.id)!;
 check('only available properties are considered', !list.some((s) => s.property.id === let_.id));
 check('within LHA with papers and photos: ready', of(good).blockers.length === 0, of(good).blockers.join('; '));
-check('over LHA: held back', of(over).blockers.some((b) => /over LHA/.test(b)));
+check('over LHA: not held back, marked over, and listed after the rest', of(over).blockers.length === 0 && of(over).over && list.findIndex((s) => s.over) > list.findIndex((s) => !s.over));
+check('over LHA: the alert says how far over', alertBody(of(over), { today }).includes('£80 over the LHA'));
+check('pence over the LHA is not over', !sendables([prop({ rent_pcm: nwl + 0.5 })], today)[0].over);
 check('papers or photos missing: ready all the same (the suppliers see to the checks)', of(noPapers).blockers.length === 0);
 check('marked not ready by hand: held back, with why', of(held).blockers.some((b) => /Marked not ready: Waiting for the EICR/.test(b)));
 check('no LHA area: held back, saying what to do', of(nowhere).blockers.some((b) => /LHA area not known/.test(b)));
@@ -80,6 +82,10 @@ const small = digestPicks('Harrow', sendables([good, wembley, watford], today));
 check('the borough first, then next door; out of London left out', small.map((s) => s.property.id).join() === [good.id, wembley.id].join());
 check('out of London only when included by hand', digestPicks('Harrow', sendables([good, watford], today), { includeOutside: true }).some((s) => s.property.id === watford.id));
 check('digest subject', digestSubject('Harrow', 6, today) === '[Harrow] | 6 properties within LHA | October 2026');
+check('a digest leaves out over-LHA properties unless included, then puts them last', !digestPicks('Harrow', all).some((s) => s.over)
+  && digestPicks('Harrow', sendables([over, good], today), { includeOver: true }).map((s) => s.property.id).join() === [good.id, over.id].join());
+check('with one over LHA the subject drops "within LHA" and the body says rent against LHA', digestSubject('Harrow', 6, today, false) === '[Harrow] | 6 properties | October 2026'
+  && /each with its rent against the LHA/.test(digestBody('Harrow', sendables([good, over], today), { today })));
 const dBody = digestBody('Harrow', small, { today });
 check('digest body numbers each property', /\n1\. Flat 1, 1 Station Road/.test(dBody) && /\n2\. 5 High Street, Wembley/.test(dBody), dBody.slice(0, 300));
 

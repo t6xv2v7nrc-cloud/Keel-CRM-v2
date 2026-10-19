@@ -15,6 +15,7 @@ import { boroughOf, focusRank } from './councils';
 import type { Placement, PlacementRoute } from './placements';
 import { placementView, ROUTE_WORDS } from './placements';
 import { checksFor } from './propertyChecks';
+import { overLha } from './lha';
 import { fromHousingOfficer } from './money';
 import { councilOf } from './search';
 import { MOVED_IN_ELSEWHERE, outcomeBack, outcomeOf, reasonLostOf, REASON_WORDS, replyState } from './viewings';
@@ -130,7 +131,7 @@ export function kpisFor(p: Pick<Period, 'from' | 'to'>, data: KpiData, now = new
   for (const id of sentIds) {
     const prop = data.properties.find((x) => x.id === id);
     const gap = prop ? checksFor(prop).gap : null;
-    if (gap === null) unknown += 1; else if (gap > 0.005) over += 1; else w += 1;
+    if (gap === null) unknown += 1; else if (overLha(gap)) over += 1; else w += 1;
   }
 
   // response discipline

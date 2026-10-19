@@ -26,6 +26,8 @@ import { boroughFromDistrict, canonicalBorough, districtOf, districtsOfBorough }
 export const LHA_DIRECT_URL = 'https://lha-direct.voa.gov.uk/search.aspx';
 
 export type LhaSize = 'shared' | 1 | 2 | 3 | 4;
+/** A rent counts as over LHA only when it is at least £1 above it: £1,440 against a £1,439.97 rate is at the LHA. */
+export const overLha = (gap: number | null | undefined) => gap != null && gap >= 1;
 export const sizeWords = (s: LhaSize) => (s === 'shared' ? 'shared room' : `${s} bed`);
 
 /** Where the rates in use came from: the database (gov.uk CSV, with its source), a file in Team settings, or built in. */

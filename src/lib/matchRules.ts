@@ -23,7 +23,7 @@ import { brief, clientNeeds, scoreMatch } from './propertyMatch';
 import type { Match, PropertyLike, Strength } from './propertyMatch';
 import { rateOf } from './clientProfile';
 import { accommodationOf, inGreaterLondon } from './propertyChecks';
-import { brmaOfDistrict, brmasOfBorough, lhaCheck, lhaSizeOf, lhaTable, londonBrmas, rateFor, sizeWords } from './lha';
+import { brmaOfDistrict, brmasOfBorough, lhaCheck, lhaSizeOf, lhaTable, londonBrmas, overLha, rateFor, sizeWords } from './lha';
 import type { LhaSize, LhaTable } from './lha';
 import { feeFrom, fromHousingOfficer, rentOf, usualFee } from './money';
 import { providerFor } from './requests';
@@ -152,7 +152,7 @@ export function rulesFor(p: RuleProperty, a: Applicant, opts: RuleOptions = {}):
     const size = theirs !== null ? facts.size.value! : check.size;
     const rate = theirs ?? check.rate;
     lha = { brma: check.area.brma, size, rate, rent: check.rent, gap: round2(check.rent - rate), theirs: theirs !== null };
-    if (lha.gap > 0.005) {
+    if (overLha(lha.gap)) {
       const words = `${money(lha.gap)} over ${lha.theirs ? 'their' : 'the'} ${sizeWords(size)} LHA (${money(rate)})`;
       if (!showOverLha) return hide('over_lha', words, lha);
       warnings.unshift({ tone: 'red', words });
@@ -219,7 +219,7 @@ function lineFor(m: Match, lha: LhaFit | null): string {
   const size = m.reasons.find((x) => / suits /.test(x));
   const whose = lha?.theirs ? 'their' : 'the';
   // over the LHA is said by its red warning, not here
-  const money_ = lha ? (lha.gap > 0.005 ? null : Math.abs(lha.gap) < 0.5 ? `at ${whose} ${sizeWords(lha.size)} LHA`
+  const money_ = lha ? (overLha(lha.gap) ? null : Math.abs(lha.gap) < 1 ? `at ${whose} ${sizeWords(lha.size)} LHA`
     : `${money(-lha.gap)} under ${whose} ${sizeWords(lha.size)} LHA`) : m.reasons.find((x) => /within|limit|rent, on benefits|open to/.test(x));
   const parts = [area, size, money_].filter(Boolean).map((x) => brief(x!));
   return parts.length ? parts.join(' · ') : brief(m.reasons[0] ?? 'Could suit them');

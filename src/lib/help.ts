@@ -106,6 +106,7 @@ export const HELP = {
       'Strong: area, size and rent all fit. Good: a solid fit, perhaps in the borough next door. Possible: a looser fit, such as a different area or no area given, so check with the client.',
       'Anything to check shows in amber. Hover over a property for every reason.',
       'Send them on WhatsApp sends the best few in one message. A tick shows what has already been sent, and by whom.',
+      'For a client a housing officer referred, Send to (the officer) puts the same few in one WhatsApp to the officer, with the LHA the client is paid in each area and why each fits, asking whether to book viewings. Anything marked not ready is left out, and nothing goes to an officer who has left. It goes on the client\'s timeline and each property is tracked as sent.',
     ],
   },
   clientDetails: {
@@ -157,10 +158,11 @@ export const HELP = {
     title: 'Mailer',
     body: [
       'Property emails to housing officers, written by Keel so nothing goes out that should not. Copy them into your email, or open them in your email app; each send is recorded against every officer it went to.',
-      'Every property is ready to send unless it is over LHA or you marked it not ready (the suppliers see to the safety checks); Keel also needs to know its LHA area and rent. Held back lists the rest and what each needs. Nothing goes until the gov.uk LHA rates are loaded (Team settings, LHA rates), so an email never quotes built-in figures.',
+      'Every property is ready to send unless you marked it not ready (the suppliers see to the safety checks); Keel also needs to know its LHA area and rent. One over LHA can go too: it is marked red, and the email says how far over. Held back lists the rest and what each needs. Nothing goes until the gov.uk LHA rates are loaded (Team settings, LHA rates), so an email never quotes built-in figures.',
       'Alerts: one property each, only to the officers of clients they referred that it fits. Monthly digest: one borough, 5 to 8 properties at most. Anyone who had a bulk email or digest in the last 30 days is flagged and left unticked.',
       'Who can be emailed comes from the officer list on Councils: never anyone who left, is on leave, opted out, bounced or has not opted in or referred a client; a team mailbox replaces personal emails. London officers never get anything outside Greater London unless you include it, and then it is marked.',
       'Every email has the subject [Borough] | type | rent | LHA | available date, the LHA rate for the area, any safety papers recorded with their dates, up to 3 photo links, Keel\'s business details (Team settings, Business details) and a way to stop the emails. Clients are never named.',
+      'Send it on WhatsApp instead gives the same message for WhatsApp, with a link for each ticked officer who has a mobile number (a team mailbox means email only), or Pick a chat or group for a WhatsApp group of officers. Each send is recorded like an email.',
     ],
   },
   responses: {
@@ -250,10 +252,10 @@ export const HELP = {
     title: 'Ready to send?',
     body: [
       'Each property shows its BRMA, the monthly LHA rate for its size, and the gap: the rent minus that rate. Shared-kitchen units and HMO rooms also show the gap to the shared rate (SAR).',
-      'Red: the rent is above LHA. Officers cannot place a client into a shortfall, so it is not sent.',
+      'Red: the rent is at least £1 above LHA, so a client on benefits would have a shortfall to make up. It shows in red everywhere; clients only see it with Show over LHA on.',
       'Every property is ready to send as standard: the suppliers make sure their safety checks are done. Mark not ready holds one back, with your reason, until you mark it ready again.',
       'Amber: a shared-kitchen unit nobody is marked as suited to, a property outside Greater London (not offered to London councils by default), or safety papers you recorded that have run out or an EPC below E (worth a word with the supplier). Amber is a warning, not a stop.',
-      'Grey: marked not ready by hand. Red (over LHA) and grey are the only things that stop a property going out.',
+      'Grey: marked not ready by hand, the only thing that stops a property going out. Red (at least £1 over LHA) can still be sent from the Mailer, marked red; clients are only offered it with Show over LHA on.',
       'Papers and photos are optional: fill them in with Edit on the property card, under Letting details and safety papers, and the Mailer prints their dates. Who it suits: UC 35 plus, SAR-exempt, under 35 standard, couples, families. Every change goes on the property\'s history.',
     ],
   },
@@ -387,7 +389,9 @@ export const HELP = {
     title: 'Sending on WhatsApp',
     body: [
       'The chat button next to a client opens WhatsApp with the property typed in, ready to send to them. Share on a property lets you pick anyone, such as a landlord or a group.',
-      'Nothing is sent until you press send in WhatsApp. Sending to a client goes on their timeline, so you can both see who has been sent what.',
+      'Landlord, next to a client on a property, sends that client to the property\'s provider ("Salam ..."): first name, household, benefits and council only, never a surname, phone number or anything medical. It only works once the client agreed to their details going to landlords.',
+      'Once a client has moved in, their Progress card can ask them to recommend Keel: a message for them to forward to friends who need a home, with Keel\'s WhatsApp link (the phone under Invoices) and website (Business details). It counts as contact.',
+      'Nothing is sent until you press send in WhatsApp. Every send goes on the client\'s timeline, so you can both see who has been sent what.',
       'The owner sets the wording in Team settings.',
     ],
   },

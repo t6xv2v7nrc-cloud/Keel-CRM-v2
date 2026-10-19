@@ -127,6 +127,8 @@ export interface AppSettings {
   whatsappReminder: string;
   /** Wording for requests to providers, per type, plus a short chase. See lib/requests.ts for the placeholders. */
   requestTemplates: { availability: string; viewing: string; details: string; chase: string; reschedule: string; cancel: string };
+  /** What a housed client is asked to forward to friends ({first name}, {keel contact}, {website}, {my name}). */
+  whatsappRecommend: string;
   /** Wording to a client when their viewing moves or is cancelled ({first name}, {address}, {when}, {old when}, {my name}). */
   whatsappViewingMoved: string;
   whatsappViewingCancelled: string;
@@ -182,10 +184,22 @@ export interface BusinessDetails {
   fees: string;
   /** where "unsubscribe" emails go (blank: the email on invoices) */
   unsubscribeEmail: string;
+  /** Keel's website, put in the message clients forward to friends */
+  website: string;
 }
 export const DEFAULT_BUSINESS: BusinessDetails = {
-  redressScheme: '', redressNumber: '', clientMoneyProtection: '', llasNumber: '', icoNumber: '', fees: '', unsubscribeEmail: '',
+  redressScheme: '', redressNumber: '', clientMoneyProtection: '', llasNumber: '', icoNumber: '', fees: '', unsubscribeEmail: '', website: 'keellettings.com',
 };
+
+/** What a housed client is asked to forward to friends who need a home. Never mentions council incentives. */
+export const DEFAULT_RECOMMEND = [
+  'Hi {first name}, I hope you are settling in well in your new home. If you know anyone who needs a place to live, please forward them the message below. Thank you!',
+  '',
+  'Keel Lettings helps people find a home in London and the home counties, including people on Universal Credit and other benefits. Message us {keel contact}',
+  '{website}',
+  '',
+  '{my name}, Keel Lettings',
+].join('\n');
 
 export interface ResponseRules { replyHours: number; dayStart: string; dayEnd: string; watchDays: number }
 
@@ -334,6 +348,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   whatsappReminder: DEFAULT_WHATSAPP_REMINDER,
   requestTemplates: DEFAULT_REQUEST_TEMPLATES,
   whatsappViewingMoved: DEFAULT_VIEWING_MOVED,
+  whatsappRecommend: DEFAULT_RECOMMEND,
   whatsappViewingCancelled: DEFAULT_VIEWING_CANCELLED,
   requestFollowUpHours: 24,
   shareWithLandlordsByDefault: false,

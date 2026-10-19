@@ -11,6 +11,7 @@ const FIELDS: Array<{ key: keyof BusinessDetails; label: string; placeholder: st
   { key: 'icoNumber', label: 'ICO registration', placeholder: 'e.g. ZA123456' },
   { key: 'fees', label: 'Fee list', placeholder: 'A link to the fees page, or a short line' },
   { key: 'unsubscribeEmail', label: 'Unsubscribe email', placeholder: 'Blank uses the email on invoices', hint: 'Where officers write to stop property emails' },
+  { key: 'website', label: 'Website', placeholder: 'e.g. keellettings.com', hint: 'Put in the message clients forward to friends' },
 ];
 
 /** Team settings: Keel's credentials, printed at the foot of every Mailer email and on email signatures. Blank ones are left out. */

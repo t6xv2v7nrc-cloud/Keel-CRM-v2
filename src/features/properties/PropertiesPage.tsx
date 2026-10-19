@@ -15,6 +15,7 @@ import type { Strength } from '../../lib/propertyMatch';
 import { matchesForProperty } from '../../lib/matchRules';
 import type { RuledMatch } from '../../lib/matchRules';
 import { IncomeTag, RuleWarnings } from './MatchBits';
+import { LandlordShareLink } from './ShareLinks';
 import { BOROUGHS } from '../../lib/london';
 import { activeSettings } from '../../lib/settings';
 import { lhaCheck, rentShown } from '../../lib/lha';
@@ -782,6 +783,7 @@ function MatchRow({ m, p, sent, deal }: { m: RuledMatch; p: Property; sent: Sent
         </div>
         {m.warnings.length > 0 && <div className="mt-1 flex flex-wrap gap-1"><RuleWarnings warnings={m.warnings} /></div>}
       </div>
+      <LandlordShareLink applicant={a} property={p} />
       <WhatsAppLink to={a} properties={[p]} icon />
       {a.phone && (
         <a href={`tel:${a.phone}`} title={`Call ${a.full_name} (${a.phone})`} aria-label={`Call ${a.full_name}`}

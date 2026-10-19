@@ -65,8 +65,9 @@ export function PropertyChecks({ property }: { property: Property }) {
           ) : (
             <>
               <span className={`inline-flex items-center gap-1 font-medium ${overLha ? 'text-[var(--ink-muted)]' : 'text-[var(--accent-ink)]'}`}>
-                <Icon name={overLha ? 'x' : 'check'} size={13} />
-                {overLha ? 'Not sent while over LHA' : `Ready to send${c.papers.known && c.papers.complete ? `, papers recorded${c.photos ? `, ${c.photos} photos` : ''}` : ''}`}
+                <Icon name={overLha ? 'alert' : 'check'} size={13} />
+                {/* over LHA still goes from the Mailer, marked red; clients see it only with Show over LHA */}
+                {overLha ? 'Ready to send, marked over LHA' : `Ready to send${c.papers.known && c.papers.complete ? `, papers recorded${c.photos ? `, ${c.photos} photos` : ''}` : ''}`}
               </span>
               {!holding && canMark && <button type="button" onClick={() => setHolding(true)} className="text-[var(--link)] hover:underline">Mark not ready</button>}
             </>

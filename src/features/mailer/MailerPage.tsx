@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Button, Card, Empty, Icon, PageHeader, UpdateNote, useToast } from '../../components/ui';
 import { copyText } from '../../lib/clipboard';
-import { clockTime, shortDate } from '../../lib/format';
+import { clockTime, money, shortDate } from '../../lib/format';
 import { activeSettings } from '../../lib/settings';
 import { missingBusiness } from '../../lib/business';
 import { addressBox, boroughOf, byFocus, focusRank, mailingList } from '../../lib/councils';
@@ -14,6 +14,8 @@ import {
   mailerReady, mailtoFor, nominationsFrom, oldMailerBackup, sendables,
 } from '../../lib/mailer';
 import type { Sendable } from '../../lib/mailer';
+import { alertWhatsApp, digestWhatsApp, whatsappRecipients } from '../../lib/shareWhatsApp';
+import { waLink } from '../../lib/whatsapp';
 import { useApplicants, useMatchOptions, useOfficerSends, useOfficers, usePeople, useProperties, useRecordMailerSend } from '../../lib/hooks';
 import { LONDON_BOROUGHS } from '../../lib/london';
 import type { Applicant, Property } from '../../lib/types';
@@ -90,6 +92,7 @@ function AlertsView({ list, canSend }: { list: Sendable[]; canSend: boolean }) {
                   <div className="min-w-0 flex-1 basis-[240px]">
                     <div className="text-[15px] font-medium text-[var(--ink)]">{s.property.address_line}</div>
                     <div className="break-words font-mono text-[12px] text-[var(--ink-muted)]">{alertSubject(s)}</div>
+                    {s.over && <div className="mt-1"><OverChip s={s} /></div>}
                   </div>
                   <Button variant={open === s.property.id ? 'secondary' : 'primary'} className={small} disabled={!canSend}
                     onClick={() => setOpen((v) => (v === s.property.id ? null : s.property.id))} aria-expanded={open === s.property.id}>
@@ -136,6 +139,7 @@ function AlertComposer({ s }: { s: Sendable }) {
   const r = useMemo(() => alertRecipients(s, matches, officers, { includeLondon }), [s, matches, officers, includeLondon]);
   const outside = s.checks.london === false;
   const warn = outside && includeLondon ? 'Outside Greater London: going to London officers by your choice' : null;
+  const red = s.over && s.checks.lha ? `${money(s.checks.gap ?? 0)} over the ${s.checks.lha.size === 'shared' ? 'shared' : `${s.checks.lha.size} bed`} LHA of ${money(s.checks.lha.rate)}: the email says so, so the officer sees the shortfall` : null;
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-3">
       <p className="m-0 text-[13px] text-[var(--ink-muted)]">
@@ -148,8 +152,9 @@ function AlertComposer({ s }: { s: Sendable }) {
           Outside Greater London: not sent to London officers as standard{r.londonHeld ? ` (${r.londonHeld} held back)` : ''}. Include them
         </label>
       )}
-      <Composer kind="alert" to={r.list} properties={[s.property]} warn={warn}
-        subject={alertSubject(s)} body={(greeting, myName) => alertBody(s, { greeting, myName })} />
+      <Composer kind="alert" to={r.list} properties={[s.property]} warn={warn} red={red}
+        subject={alertSubject(s)} body={(greeting, myName) => alertBody(s, { greeting, myName })}
+        whatsapp={(greeting, myName) => alertWhatsApp(s, alertSubject(s), { greeting, myName })} />
     </div>
   );
 }
@@ -168,8 +173,9 @@ function DigestView({ list, canSend }: { list: Sendable[]; canSend: boolean }) {
   // open on the first borough (focus first) with something ready to send
   const [borough, setBorough] = useState(() => boroughs.find((b) => digestPicks(b, list).length > 0) ?? boroughs[0] ?? '');
   const [includeOutside, setIncludeOutside] = useState(false);
+  const [includeOver, setIncludeOver] = useState(false);
   const [dropped, setDropped] = useState<Set<string>>(new Set());
-  const picks = useMemo(() => digestPicks(borough, list, { includeOutside }), [borough, list, includeOutside]);
+  const picks = useMemo(() => digestPicks(borough, list, { includeOutside, includeOver }), [borough, list, includeOutside, includeOver]);
   const chosen = picks.filter((s) => !dropped.has(s.property.id));
   const rec = useMemo(() => digestRecipients(borough, officers, sends, { nominatedFromClients: fromClients }), [borough, officers, sends, fromClients]);
   const lastDigest = lastSendTo(rec.list.to.map((t) => t.officer), sends, 'digest');
@@ -192,6 +198,10 @@ function DigestView({ list, canSend }: { list: Sendable[]; canSend: boolean }) {
               Include properties outside Greater London
             </label>
           )}
+          <label className="flex items-center gap-2 text-[13px] text-[var(--ink-muted)]">
+            <input type="checkbox" checked={includeOver} onChange={(e) => setIncludeOver(e.target.checked)} className="h-4 w-4 accent-[var(--accent)]" />
+            Include properties over LHA (marked red)
+          </label>
           {lastDigest && <span className="text-[13px] text-[var(--ink-muted)]">Last digest to these officers: {shortDate(lastDigest)}</span>}
         </div>
         {chosen.length < DIGEST_MIN && (
@@ -210,6 +220,7 @@ function DigestView({ list, canSend }: { list: Sendable[]; canSend: boolean }) {
                     {s.property.address_line}
                     <span className="block break-words font-mono text-[12px] text-[var(--ink-muted)]">{alertSubject(s)}</span>
                     {s.checks.london === false && <span className="text-[12px]" style={{ color: 'var(--note-fg)' }}>Outside Greater London</span>}
+                    {s.over && <span className="mt-0.5 block"><OverChip s={s} /></span>}
                   </span>
                 </label>
               </li>
@@ -220,7 +231,9 @@ function DigestView({ list, canSend }: { list: Sendable[]; canSend: boolean }) {
       {chosen.length > 0 && (
         <Composer key={borough} kind="digest" to={rec.list} recent={rec.recent} sends={sends} properties={chosen.map((s) => s.property)} disabled={!canSend}
           warn={includeOutside && chosen.some((s) => s.checks.london === false) ? 'Includes properties outside Greater London, by your choice' : null}
-          subject={digestSubject(borough, chosen.length)} body={(greeting, myName) => digestBody(borough, chosen, { greeting, myName })} />
+          red={chosen.some((s) => s.over) ? `${chosen.filter((s) => s.over).length} over LHA, marked in the email with how far over` : null}
+          subject={digestSubject(borough, chosen.length, undefined, !chosen.some((s) => s.over))} body={(greeting, myName) => digestBody(borough, chosen, { greeting, myName })}
+          whatsapp={(greeting, myName) => digestWhatsApp(borough, chosen, digestSubject(borough, chosen.length, undefined, !chosen.some((s) => s.over)), { greeting, myName })} />
       )}
     </div>
   );
@@ -233,9 +246,19 @@ const lastSendTo = (officers: OfficerRecord[], sends: OfficerSend[], kind: Offic
 
 // ── The email: who, subject, body, then send and record ────────────
 
-function Composer({ kind, to, recent, sends = [], properties, subject, body, warn, disabled = false }: {
+/** "£300 over LHA" in red, never colour alone. */
+function OverChip({ s }: { s: Sendable }) {
+  return (
+    <span className="inline-flex max-w-full items-start gap-1 rounded px-1.5 py-0.5 text-[12px] font-semibold" style={{ background: 'var(--danger-soft)', color: 'var(--danger)' }}>
+      <Icon name="x" size={12} className="mt-[2px] shrink-0" />{money(s.checks.gap ?? 0)} over LHA
+    </span>
+  );
+}
+
+function Composer({ kind, to, recent, sends = [], properties, subject, body, whatsapp, warn, red, disabled = false }: {
   kind: 'alert' | 'digest'; to: ReturnType<typeof mailingList>; recent?: Set<string>; sends?: OfficerSend[]; properties: Property[];
-  subject: string; body: (greeting: string | null, myName: string | null) => string; warn?: string | null; disabled?: boolean;
+  subject: string; body: (greeting: string | null, myName: string | null) => string; whatsapp: (greeting: string | null, myName: string | null) => string;
+  warn?: string | null; red?: string | null; disabled?: boolean;
 }) {
   const { myName } = usePeople();
   const record = useRecordMailerSend();
@@ -293,6 +316,7 @@ function Composer({ kind, to, recent, sends = [], properties, subject, body, war
         )}
       </Section>
 
+      {red && <p className="m-0 rounded-md px-3 py-2 text-[13px] font-semibold" style={{ background: 'var(--danger-soft)', color: 'var(--danger)' }}>{red}</p>}
       {warn && <p className="m-0 rounded-md px-3 py-2 text-[13px] font-semibold" style={{ background: 'var(--note-bg)', color: 'var(--note-fg)' }}>{warn}</p>}
 
       <Section title="Subject">
@@ -319,7 +343,62 @@ function Composer({ kind, to, recent, sends = [], properties, subject, body, war
         <Button className={small} disabled={disabled || !chosen.length || !!sentAt || record.isPending} onClick={save}>{sentAt ? `Recorded at ${clockTime(sentAt)}` : "I've sent it"}</Button>
       </div>
       <p className="m-0 text-[12px] text-[var(--ink-muted)]">Opening it in your email records the send. If you copied it instead, press I've sent it once it has gone.</p>
+
+      <WhatsAppVersion kind={kind} to={to} off={off} subject={subject} text={whatsapp} properties={properties} disabled={disabled} />
     </Card>
+  );
+}
+
+/** The same alert or digest for WhatsApp: to each officer allowed to receive it who has a mobile (each recorded), or
+ *  to a chat or group picked in WhatsApp. Same rules as the email: the ticks above, nobody left out by the list. */
+function WhatsAppVersion({ kind, to, off, subject, text, properties, disabled }: {
+  kind: 'alert' | 'digest'; to: ReturnType<typeof mailingList>; off: Set<string>; subject: string; properties: Property[];
+  text: (greeting: string | null, myName: string | null) => string; disabled: boolean;
+}) {
+  const { myName } = usePeople();
+  const record = useRecordMailerSend();
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [done, setDone] = useState<Set<string>>(new Set());
+  const wa = useMemo(() => whatsappRecipients(to), [to]);
+  const people = wa.to.filter(({ officer }) => !off.has(String(officer.id)));
+  const group = text(null, myName);
+  const log = (who: Array<{ officer: OfficerRecord; number: string }>, key: string) => record.mutate(
+    { to: who.map(({ officer, number }) => ({ officer, address: `+${number}` })), kind, subject, properties, channel: 'whatsapp' },
+    { onSuccess: () => setDone((d) => new Set(d).add(key)), onError: (e) => toast((e as Error).message, 'danger') },
+  );
+  const link = 'inline-flex items-center gap-1.5 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-3 py-1.5 text-[14px] font-medium text-[var(--accent-ink)] hover:border-[var(--accent)]';
+
+  return (
+    <div className="flex flex-col gap-2 border-t border-[var(--line)] pt-3">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="flex items-center gap-2 text-left text-[14px] font-medium text-[var(--ink)]">
+        <Icon name="chat" size={15} />Send it on WhatsApp instead
+        <span className="ml-auto text-[13px] font-normal text-[var(--link)]">{open ? 'Hide' : `${people.length} with a mobile`}</span>
+      </button>
+      {open && (
+        <>
+          <textarea readOnly value={group} rows={10} aria-label="WhatsApp message" className={`${box} font-mono text-[13px] leading-relaxed`} />
+          <div className="flex flex-wrap gap-2">
+            {people.map(({ officer, number }) => {
+              const key = String(officer.id);
+              return (
+                <a key={key} href={disabled ? undefined : waLink(number, text(officer.name, myName))} target="_blank" rel="noreferrer" aria-disabled={disabled}
+                  onClick={() => !disabled && !done.has(key) && log([{ officer, number }], key)} className={`${link} ${disabled ? 'pointer-events-none opacity-40' : ''}`}>
+                  <Icon name={done.has(key) ? 'check' : 'chat'} size={14} />{officer.name ?? 'Officer'}
+                </a>
+              );
+            })}
+            <a href={disabled ? undefined : waLink(null, group)} target="_blank" rel="noreferrer" aria-disabled={disabled}
+              onClick={() => !disabled && !done.has('group') && log([], 'group')} className={`${link} ${disabled ? 'pointer-events-none opacity-40' : ''}`}
+              title="Opens WhatsApp to pick a chat or group">
+              <Icon name={done.has('group') ? 'check' : 'share'} size={14} />Pick a chat or group
+            </a>
+          </div>
+          {wa.left.length > 0 && <p className="m-0 text-[12px] text-[var(--ink-muted)]">Not on WhatsApp from here: {wa.left.map(({ officer, why }) => `${officer.name ?? 'Officer'} (${why.toLowerCase()})`).join(', ')}.</p>}
+          <p className="m-0 text-[12px] text-[var(--ink-muted)]">Each officer you open it for is recorded as sent to, like the email. A chat or group you pick is noted on the properties.</p>
+        </>
+      )}
+    </div>
   );
 }
 

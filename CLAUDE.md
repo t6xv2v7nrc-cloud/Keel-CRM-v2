@@ -21,14 +21,24 @@ src/
                            ("WhatsApp: ...") or "note"; calls and WhatsApp sends count as contact; no migration),
               lha.ts (LHA area, size rules and rent-vs-LHA check; rates from the database (lha_rates, 0018, loaded from the
                       gov.uk CSV with source and start date), else the built-in src/data/lha-rates.ts, marked not checked;
-                      postcode corrections in postcode_brma; `rentShown` shows "1-Bed LHA" rents as pounds),
+                      postcode corrections in postcode_brma; `rentShown` shows "1-Bed LHA" rents as pounds; `overLha`:
+                      over only when £1 or more above, so pennies over is at the LHA, used everywhere),
               whatsapp.ts (wa.me links and message wording for sending properties),
+              shareWhatsApp.ts (the other WhatsApp shares, buttons in features/properties/ShareLinks.tsx: the shown matches
+                           to the referring officer (`officerMatchesText`: client's full name, their LHA there, why each
+                           fits; not-ready left out, never to an officer who left); the Mailer's alert or digest on WhatsApp
+                           (`alertWhatsApp`, `digestWhatsApp`, `whatsappRecipients`: the mailing list's people with a mobile,
+                           not a team mailbox); a housed client asked to recommend Keel (`recommendText`, Team settings
+                           `whatsappRecommend`, `{keel contact}` from the phone, else email, on Invoices; counts as contact;
+                           never incentives); a client to a property's provider (`landlordShareText`: "Salam", first name,
+                           household, benefits, council; needs share_with_landlords; logged as shared)),
               propertyEdit.ts (editing a saved property: typed rent, bedrooms from the type, what changed in words;
                                the Edit button on each property card, features/properties/EditProperty.tsx),
               propertyChecks.ts (0019, 0025: kind of place, who it suits, safety papers; LHA gap and shared-rate gap worked
                                out, never typed; flags red over LHA, amber suits not set, outside Greater London or recorded
                                papers lapsed, grey marked not ready by hand (`not_ready_at`, `not_ready_note`); `sendBlockers`
-                               = red and grey; card and Mark not ready / Mark ready in features/properties/Checks.tsx),
+                               = grey only (over LHA is red but still sendable from the Mailer, marked red); card and Mark
+                               not ready / Mark ready in features/properties/Checks.tsx),
               matchRules.ts (Step 6, 0023: the rules on top of propertyMatch's scores; every screen matches through it:
                            LHA at the rate the client is paid (`rateOf` in clientProfile.ts) in the property's BRMA, hidden
                            when over unless `showOverLha`; shared kitchen or HMO room never to couples or families;
@@ -64,7 +74,8 @@ src/
                            through it: no left, on leave, opted out, bounced, or housing officer not opted in or nominated;
                            a shared mailbox (send_to_mailbox) replaces personal emails; list health; focus boroughs),
               mailer.ts (Step 7, 0024: the Mailer at /mailer, features/mailer/MailerPage.tsx: `sendables` (available, no
-                         `sendBlockers`, LHA area and rent known), nothing sent until `mailerReady` (gov.uk rates loaded);
+                         `sendBlockers`, LHA area and rent known; over LHA sendable, `over`, marked red with how far over,
+                         listed last, in digests only with Include over LHA), nothing sent until `mailerReady` (gov.uk rates loaded);
                          alerts: one property, to officers of nominated clients it fits (`alertRecipients`); monthly digest:
                          one borough, `digestPicks` 5 to 8, `digestRecipients` flags a bulk send in the last 30 days;
                          recipients only via `mailingList`; out-of-London never to London officers unless included;
@@ -139,15 +150,18 @@ supabase/checks/live-vs-repo.sql  (read-only: which migrations the live database
   London switches (personal settings set the default). Needed for matching (Profile): postcode area, age band, who is
   moving in, UC, benefit cap, PIP or LCWRA (`matchingGaps`).
 - Properties are ready to send by default: the suppliers see to their safety checks. Missing papers or photos never hold
-  one back (recorded ones that have lapsed show amber); only over LHA or Ridwan's Mark not ready (0025, with a reason,
-  logged) does. Do not make papers or photos block again unless he says.
+  one back (recorded ones that have lapsed show amber); only Ridwan's Mark not ready (0025, with a reason, logged) does.
+  Do not make papers or photos block again unless he says. Over LHA (£1 or more, `overLha`) is hidden from clients
+  unless Show over LHA, but Ridwan can send it from the Mailer: it shows red and the message says how far over.
 - PIP exempts a client from every cap and the shared rate, whatever else is recorded (`benefitCapOf`, `sharedRateExempt`
   in search.ts, the one rule everywhere): no benefit cap, no UC-only limit, the 1 bed rate at any age (age not needed).
   LCWRA lifts the benefit cap and the UC-only limit, not the shared rate. PIP clients are still held to LHA (Step 6).
 - Short lists, not endless ones: each property shows only its best few clients (`bestFew`), one line each. No kanban.
 - Nothing scrolls sideways, on a phone especially.
 - Properties go to clients, and requests go to providers, as WhatsApp links (wa.me) the person sends by hand; every
-  send is logged. Providers are greeted "Salam {name}".
+  send is logged. Providers are greeted "Salam {name}". The same goes for the other shares (shareWhatsApp.ts): matches
+  to a client's referring officer, Mailer alerts and digests on WhatsApp (recorded like an email), a housed client asked
+  to recommend Keel, and a client to a property's provider (first name, household, benefits only, once they agreed).
 - The page for fees, incentives, potential income and invoices is called "Finances" (Ridwan renamed it from "Receivables",
   which had replaced "Money"); /receivables and /money still land there. Never call it "Money".
 - Invoices to providers or landlords name the client by first name only; a council incentive claim carries the full name.

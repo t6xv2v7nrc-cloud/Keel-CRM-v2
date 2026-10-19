@@ -729,10 +729,22 @@ export function useLogOfficerSends() {
 export function useRecordMailerSend() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ to, kind, subject, properties }: { to: Array<{ officer: OfficerRecord; address: string }>; kind: 'alert' | 'digest'; subject: string; properties: Property[] }) => {
-      if (!to.length) return;
+    mutationFn: async ({ to, kind, subject, properties, channel = 'email' }: {
+      to: Array<{ officer: OfficerRecord; address: string }>; kind: 'alert' | 'digest'; subject: string; properties: Property[];
+      /** on WhatsApp, `to` holds numbers; with nobody in it, it went to a chat or group picked in WhatsApp */
+      channel?: 'email' | 'whatsapp';
+    }) => {
       const ids = properties.map((p) => p.id).filter((id) => !isLocalProperty(id));
-      const rows = to.map(({ officer, address }) => ({ officer_id: String(officer.id), kind, address, note: subject, subject, property_ids: ids }));
+      const wa = channel === 'whatsapp';
+      if (!to.length) {
+        if (wa && ids.length) {
+          await supabase.from('activities').insert(ids.map((id) => ({
+            entity_type: 'property', entity_id: id, kind: 'sent', body: `${kind === 'alert' ? 'Alert' : 'In a digest'} shared on WhatsApp (a chat or group): ${subject}`,
+          })));
+        }
+        return;
+      }
+      const rows = to.map(({ officer, address }) => ({ officer_id: String(officer.id), kind, address, note: wa ? `WhatsApp: ${subject}` : subject, subject, property_ids: ids }));
       let res = await supabase.from('officer_sends').insert(rows);
       if (res.error && isMissingColumn(res.error)) res = await supabase.from('officer_sends').insert(rows.map(({ subject: _s, property_ids: _p, ...r }) => r));
       if (res.error) throw missingTable(res.error) ? new Error(COUNCILS_UPDATE) : res.error;
@@ -741,16 +753,32 @@ export function useRecordMailerSend() {
       const whom = to.length === 1 ? who(to[0].officer) : `${to.length} officers (${n} ${n === 1 ? 'address' : 'addresses'})`;
       if (ids.length) {
         await supabase.from('activities').insert(ids.map((id) => ({
-          entity_type: 'property', entity_id: id, kind: 'sent', body: `${kind === 'alert' ? 'Alert' : 'In a digest'} to ${whom}: ${subject}`,
+          entity_type: 'property', entity_id: id, kind: 'sent', body: `${kind === 'alert' ? 'Alert' : 'In a digest'} to ${whom}${wa ? ' on WhatsApp' : ''}: ${subject}`,
         })));
       }
-      await officerActivity(to.length === 1 ? to[0].officer : null, `${kind === 'alert' ? 'Property alert' : 'Monthly digest'} sent to ${whom}: ${subject}`, 'sent');
+      await officerActivity(to.length === 1 ? to[0].officer : null, `${kind === 'alert' ? 'Property alert' : 'Monthly digest'} sent to ${whom}${wa ? ' on WhatsApp' : ''}: ${subject}`, 'sent');
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['officer_sends'] });
       qc.invalidateQueries({ queryKey: ['officers'] });
       qc.invalidateQueries({ queryKey: ['activities'] });
     },
+  });
+}
+
+/** Properties recommended for a client went to their officer on WhatsApp: noted on the client, and tracked as sent. */
+export function useLogOfficerMatches() {
+  const qc = useQueryClient();
+  const track = useAddDeals();
+  return useMutation({
+    mutationFn: async ({ applicant, properties, officer }: { applicant: Pick<Applicant, 'id'>; properties: Property[]; officer: string }) => {
+      await supabase.from('activities').insert({
+        entity_type: 'applicant', entity_id: applicant.id, kind: 'progress',
+        body: `Sent ${properties.length === 1 ? shortAddress(properties[0].address_line) : `${properties.length} matching properties`} to ${officer} on WhatsApp${properties.length > 1 ? `: ${properties.map((p) => shortAddress(p.address_line)).join('; ')}` : ''}`,
+      });
+      await track.mutateAsync({ applicantId: applicant.id, properties, status: 'sent', quiet: true }).catch(() => undefined);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['activities'] }),
   });
 }
 

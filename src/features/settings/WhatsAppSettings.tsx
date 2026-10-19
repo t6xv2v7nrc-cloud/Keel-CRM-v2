@@ -1,9 +1,10 @@
 import { Card, CardHeader } from '../../components/ui';
 import { usePeople } from '../../lib/hooks';
 import { useState } from 'react';
-import { DEFAULT_VIEWING_CANCELLED, DEFAULT_VIEWING_MOVED, DEFAULT_WHATSAPP_MESSAGE, DEFAULT_WHATSAPP_REMINDER } from '../../lib/settings';
+import { DEFAULT_RECOMMEND, DEFAULT_VIEWING_CANCELLED, DEFAULT_VIEWING_MOVED, DEFAULT_WHATSAPP_MESSAGE, DEFAULT_WHATSAPP_REMINDER } from '../../lib/settings';
 import type { AppSettings } from '../../lib/settings';
 import { clientMessage, viewingMessage } from '../../lib/whatsapp';
+import { recommendText } from '../../lib/shareWhatsApp';
 
 type ViewingKey = 'whatsappReminder' | 'whatsappViewingMoved' | 'whatsappViewingCancelled';
 const VIEWING_KINDS: Array<[ViewingKey, string, string]> = [
@@ -24,7 +25,15 @@ const PLACEHOLDERS: Array<[string, string]> = [
   ['{my name}', 'whoever sends it (their name under My settings)'],
 ];
 
-/** Team settings: the wording used when a property is sent to a client on WhatsApp. */
+const RECOMMEND_PLACEHOLDERS: Array<[string, string]> = [
+  ['{first name}', "the client's first name"],
+  ['{keel contact}', 'how to reach Keel: "on WhatsApp" and a link to the phone under Invoices, else "by email" and the email there'],
+  ['{website}', 'the website under Business details'],
+  ['{my name}', 'whoever sends it'],
+];
+
+/** Team settings: the wording used when a property is sent to a client on WhatsApp, viewing messages, and the
+ *  message a housed client is asked to forward to friends. */
 export function WhatsAppSettings({ draft, set }: { draft: AppSettings; set: <K extends keyof AppSettings>(k: K, v: AppSettings[K]) => void }) {
   const { myName } = usePeople();
   const [viewingKind, setViewingKind] = useState<ViewingKey>('whatsappReminder');
@@ -83,6 +92,27 @@ export function WhatsAppSettings({ draft, set }: { draft: AppSettings; set: <K e
           </div>
           <div className="whitespace-pre-wrap self-start rounded-lg rounded-tr-none bg-[var(--accent-soft)] p-3 text-[14px] leading-relaxed text-[var(--ink)]">
             {viewingMessage(draft[viewingKind], { clientName: 'Sam Taylor', address: 'Ballards Lane, North Finchley N12 0DA', when: 'Thursday 2 October, 2pm', oldWhen: 'Wednesday 1 October, 11am', myName: myName ?? 'Ridwan' })}
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 border-t border-[var(--line)] pt-5 md:col-span-2 md:grid md:grid-cols-2 md:gap-5">
+          <div className="flex flex-col gap-2">
+            <label htmlFor="wa-recommend" className="text-[15px] font-medium text-[var(--ink)]">Asking a client to recommend Keel</label>
+            <textarea id="wa-recommend" rows={7} value={draft.whatsappRecommend} onChange={(e) => set('whatsappRecommend', e.target.value)}
+              className="w-full rounded-md border border-[var(--line-strong)] bg-[var(--surface)] p-3 text-[14px] text-[var(--ink)] outline-none focus:border-[var(--accent)]" />
+            <ul className="m-0 flex list-none flex-col gap-1 p-0 text-[13px] text-[var(--ink-muted)]">
+              {RECOMMEND_PLACEHOLDERS.map(([k, v]) => <li key={k}><code className="font-mono text-[var(--ink)]">{k}</code> {v}</li>)}
+            </ul>
+            <p className="m-0 text-[13px] text-[var(--ink-muted)]">
+              Sent from a housed client's Progress card, for them to forward to friends. Keep council incentives out of it: it goes to the public.
+            </p>
+            {draft.whatsappRecommend !== DEFAULT_RECOMMEND && (
+              <button type="button" onClick={() => set('whatsappRecommend', DEFAULT_RECOMMEND)} className="self-start text-[13px] text-[var(--link)] hover:underline">
+                Use the standard wording
+              </button>
+            )}
+          </div>
+          <div className="whitespace-pre-wrap self-start rounded-lg rounded-tr-none bg-[var(--accent-soft)] p-3 text-[14px] leading-relaxed text-[var(--ink)] [overflow-wrap:anywhere]">
+            {recommendText({ full_name: 'Sam Taylor' }, myName ?? 'Ridwan', draft)}
           </div>
         </div>
       </div>

@@ -19,7 +19,7 @@ import { readAgeText, readHouseholdText, readNotes } from './readNotes';
 import type { Suggestion } from './readNotes';
 import { clientNeeds, matchesForApplicant } from './propertyMatch';
 import type { PropertyLike } from './propertyMatch';
-import { lhaAreaFor, lhaCheck, rateFor, sizeWords } from './lha';
+import { lhaAreaFor, lhaCheck, overLha, rateFor, sizeWords } from './lha';
 import type { LhaSize, PropertyForLha } from './lha';
 import { boroughOf, focusRank } from './councils';
 import { inGreaterLondon } from './propertyChecks';
@@ -235,7 +235,7 @@ export function profileOf(a: Applicant, opts: { properties?: Array<PropertyLike 
     const place = byArea.get(brma) ?? { brma, rate, fits: 0, best: null, focus: false };
     const borough = boroughOf({ borough: p.borough ?? null });
     if (borough && focusRank(borough) === 0) place.focus = true;
-    if (rent !== null && rate !== null && rent <= rate + 0.005) {
+    if (rent !== null && rate !== null && !overLha(rent - rate)) {
       place.fits += 1;
       if (!place.best || rent < place.best.rent) place.best = { address: p.address_line, rent };
     }

@@ -13,6 +13,7 @@ import {
 } from '../../lib/progress';
 import { OUTCOMES, outcomeBack, outcomeStep } from '../../lib/viewings';
 import { LostReasonSelect, OfficerReply, OutcomeBackRow } from './Responses';
+import { RecommendKeelLink } from '../properties/ShareLinks';
 import { reminderMessage, waLink, waNumber } from '../../lib/whatsapp';
 import { useFold } from '../../lib/collapse';
 import { openViewingChange } from './ViewingChange';
@@ -136,6 +137,13 @@ export function ProgressCard({ applicant }: { applicant: Applicant }) {
       </CardHeader>
       {fold.open && <div className="flex flex-col gap-4 p-5">
         <StageStrip stage={applicant.stage} />
+
+        {isPlaced(applicant.stage) && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px] text-[var(--ink-muted)]">
+            <span className="min-w-0 flex-1 basis-[200px]">Settled in? Friends of happy clients are the best referrals.</span>
+            <RecommendKeelLink applicant={applicant} />
+          </div>
+        )}
 
         <OfficerReply applicant={applicant} />
 

@@ -33,7 +33,8 @@ check('a compliant, in-date property under LHA has no flags', ok.flags.length ==
 check('the LHA line names the BRMA, the rate and the gap', lhaLine(ok) === `Outer North London · 1 bed LHA £${oneBed.toLocaleString('en-GB')} · £${Math.abs(1100 - oneBed)} under`, String(lhaLine(ok)));
 const over = checksFor(P({ rent_pcm: oneBed + 36 }), today);
 check('over LHA is red, in pounds', over.flags[0]?.tone === 'red' && over.flags[0].words === '£36 over LHA', JSON.stringify(over.flags));
-check('over LHA stops it being sent', sendBlockers(over).some((b) => b.startsWith('£36 over LHA')));
+check('over LHA is red but does not stop a send (Ridwan\'s call)', sendBlockers(over).length === 0);
+check('pence over: no red flag', !checksFor(P({ rent_pcm: oneBed + 0.5 }), today).flags.some((f) => f.key === 'over_lha') && checksFor(P({ rent_pcm: oneBed + 1 }), today).flags.some((f) => f.key === 'over_lha'));
 check('exactly at LHA is not red', checksFor(P({ rent_pcm: oneBed }), today).flags.length === 0);
 check('a "1-Bed LHA" rent is at LHA, not red', checksFor(P({ rent_pcm: null, rent_text: '1-Bed LHA' }), today).flags.length === 0);
 

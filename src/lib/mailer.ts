@@ -1,9 +1,10 @@
 // The Mailer (Step 7 of the update brief): property alerts and borough digests to housing officers, written and
 // checked by Keel, so a bad property or a bad address cannot go out by accident.
 //
-//   What goes   every available property not held back (over LHA, or marked not ready by hand: `sendBlockers`; the
-//               suppliers see to the safety checks), with a known LHA area and rent, and only once the LHA rates are
-//               the gov.uk ones: an email to a council never quotes built-in figures.
+//   What goes   every available property not marked not ready by hand (`sendBlockers`; the suppliers see to the
+//               safety checks), with a known LHA area and rent, and only once the LHA rates are the gov.uk ones: an
+//               email to a council never quotes built-in figures. One over LHA can go too (Ridwan's call): it is
+//               marked red, the email says how far over, and a digest only takes it when included by hand.
 //   Alerts      one property each, only to the officers of nominated clients it fits (the matching rules).
 //   Digests     one borough a month, 5 to 8 sendable properties at most; anyone who had a bulk email or digest in
 //               the last 30 days is flagged and left unticked.
@@ -19,7 +20,7 @@ import type { MailingList, OfficerRecord, OfficerSend } from './councils';
 import { boroughOf, bulkSendsIn30, focusRank, mailingList, recordFor } from './councils';
 import { checksFor, floorWords, BILLS_LABEL, sendBlockers } from './propertyChecks';
 import type { Checks } from './propertyChecks';
-import { lhaVerified, sizeWords } from './lha';
+import { lhaVerified, overLha, sizeWords } from './lha';
 import type { RuledMatch } from './matchRules';
 import { fromHousingOfficer } from './money';
 import { officersFrom } from './officers';
@@ -40,6 +41,8 @@ export interface Sendable {
   borough: string | null;
   /** "[Harrow]" in the subject: its borough, else its area or LHA area */
   place: string;
+  /** the rent is at least £1 over the LHA for its size there (sent marked red) */
+  over: boolean;
 }
 
 /** Whether the Mailer can send at all: only with the gov.uk LHA rates loaded. */
@@ -62,8 +65,8 @@ export function sendables(properties: Property[], today = todayIso()): Sendable[
     else if (checks.lha.rent === null) blockers.push('Rent not known as a monthly figure');
     const borough = boroughOfProperty(property);
     const place = borough ?? (property.area && !/^london$/i.test(property.area) ? property.area : null) ?? canonicalBorough(property.borough) ?? checks.lha?.area.brma ?? 'Outside London';
-    return { property, checks, blockers, borough, place };
-  });
+    return { property, checks, blockers, borough, place, over: overLha(checks.gap) };
+  }).sort((x, y) => Number(x.over) - Number(y.over));
 }
 
 /** "1 bed flat", "Studio, shared kitchen", "HMO room" */
@@ -102,10 +105,11 @@ export function complianceLine(p: Property): string {
   return parts.filter(Boolean).join(' · ');
 }
 
-const gapWords = (gap: number | null) => (gap === null ? '' : Math.abs(gap) < 0.5 ? ', at the LHA' : gap < 0 ? `, ${money(-gap)} under the LHA` : `, ${money(gap)} over the LHA`);
+const gapWords = (gap: number | null) => (gap === null ? '' : Math.abs(gap) < 1 ? ', at the LHA' : gap < 0 ? `, ${money(-gap)} under the LHA` : `, ${money(gap)} over the LHA`);
 const photosOf = (p: Property) => (p.photo_urls ?? []).map((x) => x.trim()).filter(Boolean).slice(0, 3);
 
-function propertyLines(s: Sendable, today: string): string[] {
+/** A property as the Mailer writes it: address, type and rent, the LHA line, availability, safety papers. */
+export function propertyLines(s: Sendable, today: string): string[] {
   const p = s.property;
   const c = s.checks;
   const rent = c.lha?.rent ?? p.rent_pcm;
@@ -145,14 +149,16 @@ export function alertBody(s: Sendable, opts: { greeting?: string | null; myName?
   ].join('\n');
 }
 
-/** "[Harrow] | 6 properties within LHA | October 2026" */
-export const digestSubject = (borough: string, n: number, today = todayIso()) =>
-  `[${borough}] | ${n} ${n === 1 ? 'property' : 'properties'} within LHA | ${monthName(today.slice(0, 7))}`;
+/** "[Harrow] | 6 properties within LHA | October 2026" ("6 properties" when some are over LHA) */
+export const digestSubject = (borough: string, n: number, today = todayIso(), allWithin = true) =>
+  `[${borough}] | ${n} ${n === 1 ? 'property' : 'properties'}${allWithin ? ' within LHA' : ''} | ${monthName(today.slice(0, 7))}`;
 
 /** A month's properties in and around one borough, plain text. */
 export function digestBody(borough: string, items: Sendable[], opts: { greeting?: string | null; myName?: string | null; today?: string } = {}): string {
   const today = opts.today ?? todayIso();
-  const lines: string[] = [hello(opts.greeting), '', `Our available properties in and around ${borough} this month, each within the LHA for its area:`];
+  const lines: string[] = [hello(opts.greeting), '', items.some((s) => s.over)
+    ? `Our available properties in and around ${borough} this month, each with its rent against the LHA for its area:`
+    : `Our available properties in and around ${borough} this month, each within the LHA for its area:`];
   items.forEach((s, i) => {
     const [address, ...rest] = propertyLines(s, today);
     const photos = photosOf(s.property);
@@ -215,11 +221,12 @@ export function alertRecipients(s: Sendable, matches: RuledMatch[], officers: Of
 }
 
 /** Up to 8 sendable properties for a borough's digest: in the borough first, then next door; most under the LHA first.
- *  A London borough's digest leaves out anything outside Greater London unless it is included by hand. */
-export function digestPicks(borough: string, list: Sendable[], opts: { includeOutside?: boolean } = {}): Sendable[] {
+ *  A London borough's digest leaves out anything outside Greater London, and any digest anything over LHA, unless
+ *  included by hand (then over-LHA ones come after the rest). */
+export function digestPicks(borough: string, list: Sendable[], opts: { includeOutside?: boolean; includeOver?: boolean } = {}): Sendable[] {
   const london = LONDON_BOROUGHS.has(borough);
-  const ok = list.filter((s) => s.blockers.length === 0 && !(london && !opts.includeOutside && s.checks.london === false));
-  const byValue = (x: Sendable, y: Sendable) => (x.checks.gap ?? 0) - (y.checks.gap ?? 0) || x.property.address_line.localeCompare(y.property.address_line);
+  const ok = list.filter((s) => s.blockers.length === 0 && !(london && !opts.includeOutside && s.checks.london === false) && (opts.includeOver || !s.over));
+  const byValue = (x: Sendable, y: Sendable) => Number(x.over) - Number(y.over) || (x.checks.gap ?? 0) - (y.checks.gap ?? 0) || x.property.address_line.localeCompare(y.property.address_line);
   const own = ok.filter((s) => s.borough === borough).sort(byValue);
   const near = ok.filter((s) => s.borough && s.borough !== borough && areNeighbours(borough, s.borough)).sort(byValue);
   const rest = opts.includeOutside ? ok.filter((s) => s.checks.london === false).sort(byValue) : [];

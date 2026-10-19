@@ -11,6 +11,7 @@ import {
 import { bestFew, brief } from '../../lib/propertyMatch';
 import { hiddenForApplicant, matchesForApplicant } from '../../lib/matchRules';
 import { HiddenNote, IncomeTag, RuleWarnings } from '../properties/MatchBits';
+import { OfficerMatchesLink } from '../properties/ShareLinks';
 import { activeSettings } from '../../lib/settings';
 import { money, shortDate, timeAgo } from '../../lib/format';
 import { effectiveTier, isActive, isFresh, isIced, isUrgent } from '../../lib/search';
@@ -298,6 +299,7 @@ function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
           <WhatsAppLink to={applicant} properties={best.map((x) => x.property)}
             label={best.length === 1 ? 'Send it on WhatsApp' : `Send the best ${best.length} on WhatsApp`} />
         )}
+        {best.length > 0 && <OfficerMatchesLink applicant={applicant} items={best} />}
       </CardHeader>
       {fold.open && (<>
       {mapOpen && available.length > 0 && (
