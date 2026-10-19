@@ -1,29 +1,33 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Button, Card, Empty, Icon, PageHeader, UpdateNote, useToast } from '../../components/ui';
 import { copyText } from '../../lib/clipboard';
 import { clockTime, money, shortDate } from '../../lib/format';
+import { todayIso } from '../../lib/calls';
+import { saveFile } from '../../lib/files';
 import { activeSettings } from '../../lib/settings';
 import { missingBusiness } from '../../lib/business';
 import { addressBox, boroughOf, byFocus, focusRank, mailingList } from '../../lib/councils';
-import type { OfficerRecord, OfficerSend } from '../../lib/councils';
+import type { OfficerRecord, OfficerSend, SendKind } from '../../lib/councils';
 import { matchesForProperty } from '../../lib/matchRules';
 import {
   alertBody, alertRecipients, alertSubject, DIGEST_MAX, DIGEST_MIN, digestBody, digestBoroughs, digestPicks, digestRecipients, digestSubject,
-  mailerReady, mailtoFor, nominationsFrom, oldMailerBackup, sendables,
+  fullList, fullListBody, fullListCsv, mailerReady, mailtoFor, nominationsFrom, oldMailerBackup, sendables,
 } from '../../lib/mailer';
 import type { Sendable } from '../../lib/mailer';
-import { alertWhatsApp, digestWhatsApp, whatsappRecipients } from '../../lib/shareWhatsApp';
+import { alertWhatsApp, digestWhatsApp, fullListWhatsApp, whatsappRecipients } from '../../lib/shareWhatsApp';
 import { waLink } from '../../lib/whatsapp';
 import { useApplicants, useMatchOptions, useOfficerSends, useOfficers, usePeople, useProperties, useRecordMailerSend } from '../../lib/hooks';
 import { LONDON_BOROUGHS } from '../../lib/london';
 import type { Applicant, Property } from '../../lib/types';
 
 const small = 'min-h-0 px-3 py-1.5 text-[13px]';
+// "On leave until 20 Nov 2026" reads "on leave until 20 Nov 2026" mid-sentence: only the first letter drops
+const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 const box = 'w-full min-w-0 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-3 py-2 text-[14px] text-[var(--ink)] outline-none focus:border-[var(--accent)]';
-type Tab = 'alerts' | 'digest' | 'who' | 'old';
-const TABS: Array<[Tab, string]> = [['alerts', 'Alerts'], ['digest', 'Monthly digest'], ['who', 'Who can be emailed'], ['old', 'Old Keel Mailer']];
+type Tab = 'alerts' | 'digest' | 'all' | 'who' | 'old';
+const TABS: Array<[Tab, string]> = [['alerts', 'Alerts'], ['digest', 'Monthly digest'], ['all', 'All properties'], ['who', 'Who can be emailed'], ['old', 'Old Keel Mailer']];
 
 /** The Mailer (Step 7): property alerts and borough digests to housing officers, that only ever carry what passes the checks. */
 export function MailerPage() {
@@ -64,6 +68,7 @@ export function MailerPage() {
 
       {tab === 'alerts' && <AlertsView list={list} canSend={ready.ok} />}
       {tab === 'digest' && <DigestView list={list} canSend={ready.ok} />}
+      {tab === 'all' && <FullListView list={list} canSend={ready.ok} />}
       {tab === 'who' && <WhoView />}
       {tab === 'old' && <OldMailerView list={list} canSend={ready.ok} />}
     </div>
@@ -239,6 +244,115 @@ function DigestView({ list, canSend }: { list: Sendable[]; canSend: boolean }) {
   );
 }
 
+// ── The full list: every property ready to send, at once ───────────
+
+function FullListView({ list, canSend }: { list: Sendable[]; canSend: boolean }) {
+  const { officers } = useOfficers();
+  const sends = useOfficerSends();
+  const { data: applicants = [] } = useApplicants();
+  const { toast } = useToast();
+  const fromClients = useMemo(() => nominationsFrom(applicants), [applicants]);
+  const boroughs = useMemo(() => [...new Set(list.filter((s) => s.blockers.length === 0 && s.borough).map((s) => s.borough!))]
+    .sort((a, b) => focusRank(a) - focusRank(b) || a.localeCompare(b)), [list]);
+  const [borough, setBorough] = useState('');
+  const [includeOver, setIncludeOver] = useState(false);
+  const [includeOutside, setIncludeOutside] = useState(false);
+  const [dropped, setDropped] = useState<Set<string>>(new Set());
+  const [choosing, setChoosing] = useState(false);
+  const all = useMemo(() => fullList(list, { borough: borough || null, includeOver, includeOutside }), [list, borough, includeOver, includeOutside]);
+  const groups = all.groups.map((g) => ({ ...g, items: g.items.filter((s) => !dropped.has(s.property.id)) })).filter((g) => g.items.length > 0);
+  const chosen = groups.flatMap((g) => g.items);
+  const rec = useMemo(() => digestRecipients(borough || null, officers, sends, { nominatedFromClients: fromClients }), [borough, officers, sends, fromClients]);
+  const lastFull = lastSendTo(rec.list.to.map((t) => t.officer), sends, 'bulk');
+  const subject = digestSubject(borough || 'All areas', chosen.length, undefined, !chosen.some((s) => s.over));
+  const over = chosen.filter((s) => s.over).length;
+  const outside = chosen.filter((s) => s.checks.london === false).length;
+  const toLondon = rec.list.to.some(({ officer }) => LONDON_BOROUGHS.has(boroughOf(officer) ?? ''));
+  const areas = (n: number) => `${n} ${n === 1 ? 'area' : 'areas'}`;
+  const save = () => {
+    saveFile(`keel-properties-${borough ? `${borough.toLowerCase().replace(/[^a-z]+/g, '-')}-` : ''}${todayIso()}.csv`, fullListCsv(chosen), 'text/csv;charset=utf-8');
+    toast('Spreadsheet saved', 'success');
+  };
+  const pick = (id: string, on: boolean) => setDropped((d) => { const n = new Set(d); if (on) n.delete(id); else n.add(id); return n; });
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card className="flex flex-col gap-3 p-4 sm:p-5">
+        <p className="m-0 text-[14px] text-[var(--ink-muted)]">
+          Every property ready to send, by area: as one email, one WhatsApp or a spreadsheet. Anything marked not ready stays out.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-[14px] text-[var(--ink)]">Area
+            <select value={borough} onChange={(e) => { setBorough(e.target.value); setDropped(new Set()); }}
+              className="h-10 max-w-full rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]">
+              <option value="">All areas</option>
+              {boroughs.map((b) => <option key={b} value={b}>{focusRank(b) === 0 ? '★ ' : ''}{b}</option>)}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-[13px] text-[var(--ink-muted)]">
+            <input type="checkbox" checked={includeOver} onChange={(e) => setIncludeOver(e.target.checked)} className="h-4 w-4 accent-[var(--accent)]" />
+            Include properties over LHA (marked red){all.leftOver ? `: ${all.leftOver} left out` : ''}
+          </label>
+          {!borough && (
+            <label className="flex items-center gap-2 text-[13px] text-[var(--ink-muted)]">
+              <input type="checkbox" checked={includeOutside} onChange={(e) => setIncludeOutside(e.target.checked)} className="h-4 w-4 accent-[var(--accent)]" />
+              Include properties outside Greater London{all.leftOutside ? `: ${all.leftOutside} left out` : ''}
+            </label>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span className="text-[14px] text-[var(--ink)]">
+            <strong>{chosen.length}</strong> {chosen.length === 1 ? 'property' : 'properties'} in {areas(groups.length)}{dropped.size ? `, ${dropped.size} taken out` : ''}
+          </span>
+          {all.items.length > 0 && (
+            <button type="button" onClick={() => setChoosing((v) => !v)} aria-expanded={choosing} className="text-[14px] text-[var(--link)] hover:underline">
+              {choosing ? 'Hide the list' : 'Choose which go'}
+            </button>
+          )}
+          {lastFull && <span className="text-[13px] text-[var(--ink-muted)]">Last full list to these officers: {shortDate(lastFull)}</span>}
+          <Button className={`${small} sm:ml-auto`} disabled={!canSend || !chosen.length} onClick={save}><Icon name="download" size={14} />Save as a spreadsheet</Button>
+        </div>
+        {choosing && (
+          <div className="flex flex-col gap-3">
+            {all.groups.map((g) => (
+              <div key={g.place} className="flex flex-col gap-1">
+                <div className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-muted)]">{g.place} ({g.items.length})</div>
+                <ul className="m-0 flex list-none flex-col gap-1 p-0">
+                  {g.items.map((s) => (
+                    <li key={s.property.id}>
+                      <label className="flex items-start gap-2 text-[14px] text-[var(--ink)]">
+                        <input type="checkbox" checked={!dropped.has(s.property.id)} onChange={(e) => pick(s.property.id, e.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-[var(--accent)]" />
+                        <span className="min-w-0">
+                          {s.property.address_line}
+                          <span className="block break-words font-mono text-[12px] text-[var(--ink-muted)]">{alertSubject(s)}</span>
+                          {s.checks.london === false && <span className="text-[12px]" style={{ color: 'var(--note-fg)' }}>Outside Greater London</span>}
+                          {s.over && <span className="mt-0.5 block"><OverChip s={s} /></span>}
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
+        {chosen.length === 0 && (
+          <p className="m-0 rounded-md px-3 py-2 text-[13px]" style={{ background: 'var(--note-bg)', color: 'var(--note-fg)' }}>
+            Nothing ready to send{borough ? ` in ${borough}` : ''}{all.leftOver + all.leftOutside ? ': tick a box above to include the ones left out' : ''}.
+          </p>
+        )}
+      </Card>
+      {chosen.length > 0 && (
+        <Composer key={borough || 'all'} kind="bulk" to={rec.list} recent={rec.recent} sends={sends} properties={chosen.map((s) => s.property)} disabled={!canSend}
+          warn={outside && toLondon ? `Includes ${outside} outside Greater London, by your choice: London officers do not get these as standard` : null}
+          red={over ? `${over} over LHA, marked in the email with how far over` : null}
+          subject={subject} body={(greeting, myName) => fullListBody(groups, { borough: borough || null, greeting, myName })}
+          whatsapp={(greeting, myName) => fullListWhatsApp(groups, subject, { borough: borough || null, greeting, myName })} />
+      )}
+    </div>
+  );
+}
+
 const lastSendTo = (officers: OfficerRecord[], sends: OfficerSend[], kind: OfficerSend['kind']) => {
   const ids = new Set(officers.map((o) => String(o.id)));
   return sends.filter((x) => x.kind === kind && ids.has(x.officer_id)).map((x) => x.sent_at).sort().pop() ?? null;
@@ -256,15 +370,24 @@ function OverChip({ s }: { s: Sendable }) {
 }
 
 function Composer({ kind, to, recent, sends = [], properties, subject, body, whatsapp, warn, red, disabled = false }: {
-  kind: 'alert' | 'digest'; to: ReturnType<typeof mailingList>; recent?: Set<string>; sends?: OfficerSend[]; properties: Property[];
+  kind: SendKind; to: ReturnType<typeof mailingList>; recent?: Set<string>; sends?: OfficerSend[]; properties: Property[];
   subject: string; body: (greeting: string | null, myName: string | null) => string; whatsapp: (greeting: string | null, myName: string | null) => string;
   warn?: string | null; red?: string | null; disabled?: boolean;
 }) {
   const { myName } = usePeople();
   const record = useRecordMailerSend();
   const { toast } = useToast();
-  // anyone who had a bulk email or digest in the last 30 days starts unticked
+  // anyone who had a bulk email or digest in the last 30 days starts unticked, including once the sends log arrives
+  // after the list (a tick put back by hand stays)
   const [off, setOff] = useState<Set<string>>(() => new Set(recent ?? []));
+  const flagged = useRef(new Set(recent ?? []));
+  const recentKey = [...(recent ?? [])].sort().join();
+  useEffect(() => {
+    const fresh = [...(recent ?? [])].filter((id) => !flagged.current.has(id));
+    if (!fresh.length) return;
+    fresh.forEach((id) => flagged.current.add(id));
+    setOff((d) => new Set([...d, ...fresh]));
+  }, [recentKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const [sentAt, setSentAt] = useState<string | null>(null);
   const chosen = to.to.filter((t) => !off.has(String(t.officer.id)));
   const addresses = [...new Map(chosen.map((t) => [t.address.toLowerCase(), t.address])).values()];
@@ -279,7 +402,7 @@ function Composer({ kind, to, recent, sends = [], properties, subject, body, wha
   const save = () => {
     if (sentAt) return;
     record.mutate({ to: chosen, kind, subject, properties }, {
-      onSuccess: () => { setSentAt(new Date().toISOString()); toast(`Recorded: ${kind === 'alert' ? 'alert' : 'digest'} to ${chosen.length} ${chosen.length === 1 ? 'officer' : 'officers'}`, 'success'); },
+      onSuccess: () => { setSentAt(new Date().toISOString()); toast(`Recorded: ${kind === 'alert' ? 'alert' : kind === 'digest' ? 'digest' : 'full list'} to ${chosen.length} ${chosen.length === 1 ? 'officer' : 'officers'}`, 'success'); },
       onError: (e) => toast((e as Error).message, 'danger'),
     });
   };
@@ -312,7 +435,7 @@ function Composer({ kind, to, recent, sends = [], properties, subject, body, wha
           </ul>
         )}
         {to.left.length > 0 && (
-          <p className="m-0 text-[12px] text-[var(--ink-muted)]">Left out by the rules: {to.left.map(({ officer, why }) => `${officer.name ?? 'Officer'} (${why.toLowerCase()})`).join(', ')}.</p>
+          <p className="m-0 text-[12px] text-[var(--ink-muted)]">Left out by the rules: {to.left.map(({ officer, why }) => `${officer.name ?? 'Officer'} (${lower(why)})`).join(', ')}.</p>
         )}
       </Section>
 
@@ -326,7 +449,7 @@ function Composer({ kind, to, recent, sends = [], properties, subject, body, wha
         </div>
       </Section>
       <Section title="Email">
-        <textarea readOnly value={text} rows={kind === 'digest' ? 18 : 14} aria-label="Email" className={`${box} font-mono text-[13px] leading-relaxed`} />
+        <textarea readOnly value={text} rows={kind === 'alert' ? 14 : 18} aria-label="Email" className={`${box} font-mono text-[13px] leading-relaxed`} />
       </Section>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -352,7 +475,7 @@ function Composer({ kind, to, recent, sends = [], properties, subject, body, wha
 /** The same alert or digest for WhatsApp: to each officer allowed to receive it who has a mobile (each recorded), or
  *  to a chat or group picked in WhatsApp. Same rules as the email: the ticks above, nobody left out by the list. */
 function WhatsAppVersion({ kind, to, off, subject, text, properties, disabled }: {
-  kind: 'alert' | 'digest'; to: ReturnType<typeof mailingList>; off: Set<string>; subject: string; properties: Property[];
+  kind: SendKind; to: ReturnType<typeof mailingList>; off: Set<string>; subject: string; properties: Property[];
   text: (greeting: string | null, myName: string | null) => string; disabled: boolean;
 }) {
   const { myName } = usePeople();
@@ -368,6 +491,13 @@ function WhatsAppVersion({ kind, to, off, subject, text, properties, disabled }:
     { onSuccess: () => setDone((d) => new Set(d).add(key)), onError: (e) => toast((e as Error).message, 'danger') },
   );
   const link = 'inline-flex items-center gap-1.5 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-3 py-1.5 text-[14px] font-medium text-[var(--accent-ink)] hover:border-[var(--accent)]';
+  // copied to paste into a chat or group: noted on the properties like Pick a chat or group
+  const copy = async () => {
+    const ok = await copyText(group);
+    if (!ok) { toast('Could not copy. Press and hold to copy instead.', 'danger'); return; }
+    toast('WhatsApp message copied', 'success');
+    if (!disabled && !done.has('copy')) log([], 'copy');
+  };
 
   return (
     <div className="flex flex-col gap-2 border-t border-[var(--line)] pt-3">
@@ -393,9 +523,13 @@ function WhatsAppVersion({ kind, to, off, subject, text, properties, disabled }:
               title="Opens WhatsApp to pick a chat or group">
               <Icon name={done.has('group') ? 'check' : 'share'} size={14} />Pick a chat or group
             </a>
+            <Button className={small} onClick={copy}><Icon name={done.has('copy') ? 'check' : 'file'} size={14} />Copy the message</Button>
           </div>
-          {wa.left.length > 0 && <p className="m-0 text-[12px] text-[var(--ink-muted)]">Not on WhatsApp from here: {wa.left.map(({ officer, why }) => `${officer.name ?? 'Officer'} (${why.toLowerCase()})`).join(', ')}.</p>}
-          <p className="m-0 text-[12px] text-[var(--ink-muted)]">Each officer you open it for is recorded as sent to, like the email. A chat or group you pick is noted on the properties.</p>
+          {group.length > 3000 && (
+            <p className="m-0 text-[12px] text-[var(--ink-muted)]">A long message: if WhatsApp opens without it, copy it and paste it into the chat.</p>
+          )}
+          {wa.left.length > 0 && <p className="m-0 text-[12px] text-[var(--ink-muted)]">Not on WhatsApp from here: {wa.left.map(({ officer, why }) => `${officer.name ?? 'Officer'} (${lower(why)})`).join(', ')}.</p>}
+          <p className="m-0 text-[12px] text-[var(--ink-muted)]">Each officer you open it for is recorded as sent to, like the email. A chat or group you pick, or a copy, is noted on the properties.</p>
         </>
       )}
     </div>

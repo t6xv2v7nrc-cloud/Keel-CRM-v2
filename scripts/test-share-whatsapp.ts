@@ -1,10 +1,10 @@
 // Checks for the WhatsApp shares: matches to the referring officer, the Mailer on WhatsApp, a client recommending
 // Keel, and a client to a landlord. Run with: npx tsx scripts/test-share-whatsapp.ts
 import {
-  alertWhatsApp, digestWhatsApp, landlordShareBlocked, landlordShareText, officerMatchesText, officerWhatsApp, recommendText, whatsappRecipients,
+  alertWhatsApp, digestWhatsApp, fullListWhatsApp, landlordShareBlocked, landlordShareText, officerMatchesText, officerWhatsApp, recommendText, whatsappRecipients,
 } from '../src/lib/shareWhatsApp';
 import { matchesForApplicant } from '../src/lib/matchRules';
-import { alertSubject, digestSubject, sendables } from '../src/lib/mailer';
+import { alertSubject, digestSubject, fullList, sendables } from '../src/lib/mailer';
 import { rateFor } from '../src/lib/lha';
 import { DEFAULT_SETTINGS, setActiveSettings } from '../src/lib/settings';
 import type { AppSettings } from '../src/lib/settings';
@@ -67,6 +67,12 @@ const overAlert = alertWhatsApp(s[1], alertSubject(s[1], today), { today });
 check('over LHA: says how far over', overAlert.includes('£80 over the LHA'), overAlert);
 const digest = digestWhatsApp('Harrow', s, digestSubject('Harrow', s.length, today, false), { today });
 check('digest: each property numbered', digest.includes('*1. ') && digest.includes('*2. ') && digest.includes('in and around Harrow'), digest);
+
+const full = fullList(sendables([flat, prop({ rent_pcm: nwl + 80 }), prop({ postcode: 'HA9 6AA', borough: 'Brent', address_line: '5 High Street, Wembley HA9 6AA' })], today), { includeOver: true });
+const fullWa = fullListWhatsApp(full.groups, digestSubject('All areas', full.items.length, today, false), { greeting: 'Jo', today });
+check('full list on WhatsApp: areas in bold, numbered right through', fullWa.startsWith('*[All areas] | 3 properties |') && fullWa.includes('*Harrow (2)*') && fullWa.includes('*Brent (1)*')
+  && fullWa.includes('*3. 5 High Street, Wembley HA9 6AA*') && fullWa.includes('£80 over the LHA') && /Reply STOP/.test(fullWa), fullWa);
+check('full list on WhatsApp: never an incentive', !/incentive/i.test(fullWa));
 
 const list = {
   to: [{ officer: officer({ name: 'Ann' }), address: 'ann@x' }, { officer: officer({ name: 'Bo', send_to_mailbox: 'team@x' }), address: 'team@x' }, { officer: officer({ name: 'Cy', phone: null }), address: 'cy@x' }],

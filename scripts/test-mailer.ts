@@ -1,6 +1,7 @@
 // Checks for the Mailer: what can be sent, the wording, who it goes to. Run with: npx tsx scripts/test-mailer.ts
 import {
-  alertBody, alertRecipients, alertSubject, complianceLine, DIGEST_MAX, digestBody, digestPicks, digestRecipients, digestSubject, mailerReady, mailtoFor,
+  alertBody, alertRecipients, alertSubject, complianceLine, DIGEST_MAX, digestBody, digestPicks, digestRecipients, digestSubject, fullList, fullListBody, fullListCsv,
+  mailerReady, mailtoFor,
   oldMailerBackup, sendables,
 } from '../src/lib/mailer';
 import { credentialLines, missingBusiness, signature } from '../src/lib/business';
@@ -116,6 +117,31 @@ check('too long to open: copy instead', mailtoFor(['a@x.example'], { subject: 'S
 const backup = JSON.parse(oldMailerBackup(list, { to: [{ officer: jo, address: 'jo@harrow.example' }, { officer: boxed, address: 'housing@harrow.example' }] }));
 check('the old mailer gets only what is ready and who can be emailed', backup.keelMailer === 1 && backup.props.length === list.filter((s) => !s.blockers.length).length
   && backup.officers.map((o: { email: string }) => o.email).join() === 'jo@harrow.example,housing@harrow.example' && backup.officers[1].name === '');
+
+// the full list: every sendable property at once
+const fl = fullList(list);
+const flIds = fl.items.map((s) => s.property.id);
+check('full list: everything ready, nothing marked not ready or missing its LHA area', flIds.includes(good.id) && flIds.includes(noPapers.id) && flIds.includes(wembley.id)
+  && !flIds.includes(held.id) && !flIds.includes(nowhere.id) && !flIds.includes(let_.id), flIds.join());
+check('full list: over LHA and outside London left out until included, and counted', !flIds.includes(over.id) && !flIds.includes(watford.id) && fl.leftOver === 1 && fl.leftOutside === 1, JSON.stringify([fl.leftOver, fl.leftOutside]));
+check('full list: by area, focus boroughs first (Harrow before Brent)', fl.groups.map((g) => g.place).join() === 'Harrow,Brent', fl.groups.map((g) => g.place).join());
+const flAll = fullList(list, { includeOver: true, includeOutside: true });
+check('included: over LHA after the rest of its area, outside London last', flAll.groups.map((g) => g.place).join() === 'Harrow,Brent,Watford'
+  && flAll.groups[0].items[flAll.groups[0].items.length - 1].property.id === over.id && flAll.leftOver === 0 && flAll.leftOutside === 0, flAll.groups.map((g) => `${g.place}:${g.items.length}`).join());
+check('one borough: only its properties', fullList(list, { borough: 'Brent' }).items.map((s) => s.property.id).join() === wembley.id);
+const flBody = fullListBody(flAll.groups, { greeting: 'Jo Brennan', myName: 'Ridwan', today });
+check('full list email: area headings, numbered right through, says how far over', flBody.startsWith('Hi Jo,') && /\nHARROW \(\d\)\n/.test(flBody) && /\nBRENT \(1\)\n\n\d\. 5 High Street, Wembley/.test(flBody)
+  && /each with its rent against the LHA/.test(flBody) && flBody.includes('£80 over the LHA') && /Reply STOP/.test(flBody), flBody.slice(0, 400));
+check('full list email: never clients or incentives', !/incentive|Amira/i.test(flBody));
+check('full list within LHA says so', /each within the LHA for its area/.test(fullListBody(fl.groups, { today })));
+const csv = fullListCsv(flAll.items, today);
+const csvRows = csv.replace(/^\ufeff/, '').trim().split('\r\n');
+check('spreadsheet: a header and a row each, numbered, with the LHA', csvRows.length === flAll.items.length + 1 && csvRows[0].startsWith('Number,Area,Address')
+  && csvRows[1].startsWith('1,Harrow,') && csvRows.some((r) => r.includes('£80 over the LHA')), csvRows.slice(0, 2).join(' / '));
+check('spreadsheet: never clients, providers or incentives', !/incentive|Watermint|provider/i.test(csv));
+const everyone = digestRecipients(null, [jo, out, boxed, brent], sends, { today });
+check('the full list can go to every officer on the mailing list', everyone.list.to.map((t) => t.address).join() === 'jo@harrow.example,housing@harrow.example,bp@brent.example'
+  && everyone.recent.has(String(boxed.id)), everyone.list.to.map((t) => t.address).join());
 
 if (failed) { console.log(`\n${failed} failed`); process.exit(1); }
 console.log('\nAll mailer checks pass');

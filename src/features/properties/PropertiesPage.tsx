@@ -192,6 +192,12 @@ export function PropertiesPage() {
         {counts.available} available · {counts.under_offer} under offer · {counts.let} let
         {totalMatches > 0 && <> · <strong className="text-[var(--ink)]">{totalMatches}</strong> client matches <span className="ml-0.5 inline-flex align-middle"><Help topic="matchStrength" /></span></>}
       </>}>
+          {counts.available > 0 && (
+            <Link to="/mailer?tab=all" title="Every property ready to send, by area, as one email, one WhatsApp or a spreadsheet (the Mailer)"
+              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-4 py-2 text-[15px] font-medium text-[var(--ink)] transition-all duration-150 hover:border-[var(--accent)]">
+              <Icon name="send" size={16} />Send all properties
+            </Link>
+          )}
           {properties.length > 0 && (
             <Button onClick={() => setListsOpen((v) => !v)}>{listsOpen ? 'Hide saved lists' : 'Saved lists'}</Button>
           )}

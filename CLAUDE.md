@@ -76,6 +76,10 @@ src/
               mailer.ts (Step 7, 0024: the Mailer at /mailer, features/mailer/MailerPage.tsx: `sendables` (available, no
                          `sendBlockers`, LHA area and rent known; over LHA sendable, `over`, marked red with how far over,
                          listed last, in digests only with Include over LHA), nothing sent until `mailerReady` (gov.uk rates loaded);
+                         All properties tab (`fullList`: every sendable one, or one borough's, by area, focus first, over LHA
+                         and outside London only when ticked; `fullListBody`, `fullListWhatsApp`, `fullListCsv` spreadsheet;
+                         to the whole mailing list via `digestRecipients(null, ...)`, recorded as kind 'bulk'; linked from
+                         the Properties page's Send all properties);
                          alerts: one property, to officers of nominated clients it fits (`alertRecipients`); monthly digest:
                          one borough, `digestPicks` 5 to 8, `digestRecipients` flags a bulk send in the last 30 days;
                          recipients only via `mailingList`; out-of-London never to London officers unless included;

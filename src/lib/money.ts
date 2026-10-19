@@ -577,7 +577,7 @@ export function periods(today = todayIso()): Period[] {
 /** The day that puts a fee in a period: when it was paid, else when it falls due, else when they signed up. */
 export const periodDay = (r: Receivable) => r.paid_on ?? r.due_on ?? r.sign_up_on ?? r.created_at.slice(0, 10);
 
-const csvCell = (v: string | number | null | undefined) => {
+export const csvCell = (v: string | number | null | undefined) => {
   if (v == null) return '';
   const s = String(v);
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;

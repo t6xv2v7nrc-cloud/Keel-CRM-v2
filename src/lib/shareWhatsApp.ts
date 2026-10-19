@@ -1,7 +1,8 @@
 // WhatsApp shares beyond sending properties to clients (whatsapp.ts). Each is a wa.me link with the message typed
 // in; nothing goes until it is sent in WhatsApp, and every send is noted.
 //   officerMatchesText  the properties Keel recommends for a client, to the housing officer who referred them
-//   alertWhatsApp, digestWhatsApp  a Mailer alert or digest as a WhatsApp message, under the same rules as the email
+//   alertWhatsApp, digestWhatsApp, fullListWhatsApp  a Mailer alert, digest or full list as a WhatsApp message,
+//                       under the same rules as the email
 //   recommendText       a message a housed client forwards to friends who need a home
 //   landlordShareText   a recommended client, for one property, to its provider or landlord
 // Privacy as everywhere: to providers and landlords a first name, household and benefits only (never phone, surname
@@ -13,7 +14,7 @@ import type { MailingList, OfficerRecord } from './councils';
 import { recordFor, statusOf } from './councils';
 import type { RuledMatch } from './matchRules';
 import { availableWords, propertyLines, typeWords } from './mailer';
-import type { Sendable } from './mailer';
+import type { AreaGroup, Sendable } from './mailer';
 import { checksFor } from './propertyChecks';
 import { overLha, sizeWords } from './lha';
 import { benefitWords, firstNameOf, householdWords } from './requests';
@@ -94,6 +95,22 @@ export function digestWhatsApp(borough: string, items: Sendable[], subject: stri
     lines.push('', `*${i + 1}. ${address}*`, ...rest, ...(pics.length ? [`Photos: ${pics.join(' ')}`] : []));
   });
   return [...lines, ...footer(opts.myName)].join('\n');
+}
+
+/** The full list for WhatsApp: each area in bold, the properties numbered right through. */
+export function fullListWhatsApp(groups: AreaGroup[], subject: string, opts: { borough?: string | null; greeting?: string | null; myName?: string | null; today?: string } = {}): string {
+  const today = opts.today ?? todayIso();
+  const lines = [`*${subject}*`, '', ...(opts.greeting ? [`Hi ${first(opts.greeting)},`, ''] : []), `All our available properties${opts.borough ? ` in ${opts.borough}` : ''}, by area:`];
+  let i = 0;
+  for (const g of groups) {
+    lines.push('', `*${g.place} (${g.items.length})*`);
+    for (const s of g.items) {
+      const [address, ...rest] = propertyLines(s, today);
+      const pics = photos(s.property);
+      lines.push('', `*${++i}. ${address}*`, ...rest, ...(pics.length ? [`Photos: ${pics.join(' ')}`] : []));
+    }
+  }
+  return [...lines, '', 'Reply with the number of any property to book a viewing or to put a client forward.', ...footer(opts.myName).slice(2)].join('\n');
 }
 
 /** Who on a Mailer list can have it on WhatsApp: the same officers the email may go to (and anyone left out only for

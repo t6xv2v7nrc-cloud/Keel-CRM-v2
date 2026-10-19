@@ -726,11 +726,17 @@ export function useLogOfficerSends() {
 
 /** A Mailer email went out (an alert or a digest): one row per officer it went to, with its subject and properties (0024),
  *  their last-sent date, a line on each property's history and one on the officer's. Before 0024 the new columns are left out. */
+const SEND_WORDS: Record<SendKind, { property: string; officer: string }> = {
+  alert: { property: 'Alert', officer: 'Property alert' },
+  digest: { property: 'In a digest', officer: 'Monthly digest' },
+  bulk: { property: 'In the full list', officer: 'Full property list' },
+};
+
 export function useRecordMailerSend() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ to, kind, subject, properties, channel = 'email' }: {
-      to: Array<{ officer: OfficerRecord; address: string }>; kind: 'alert' | 'digest'; subject: string; properties: Property[];
+      to: Array<{ officer: OfficerRecord; address: string }>; kind: SendKind; subject: string; properties: Property[];
       /** on WhatsApp, `to` holds numbers; with nobody in it, it went to a chat or group picked in WhatsApp */
       channel?: 'email' | 'whatsapp';
     }) => {
@@ -739,7 +745,7 @@ export function useRecordMailerSend() {
       if (!to.length) {
         if (wa && ids.length) {
           await supabase.from('activities').insert(ids.map((id) => ({
-            entity_type: 'property', entity_id: id, kind: 'sent', body: `${kind === 'alert' ? 'Alert' : 'In a digest'} shared on WhatsApp (a chat or group): ${subject}`,
+            entity_type: 'property', entity_id: id, kind: 'sent', body: `${SEND_WORDS[kind].property} shared on WhatsApp (a chat or group): ${subject}`,
           })));
         }
         return;
@@ -753,10 +759,10 @@ export function useRecordMailerSend() {
       const whom = to.length === 1 ? who(to[0].officer) : `${to.length} officers (${n} ${n === 1 ? 'address' : 'addresses'})`;
       if (ids.length) {
         await supabase.from('activities').insert(ids.map((id) => ({
-          entity_type: 'property', entity_id: id, kind: 'sent', body: `${kind === 'alert' ? 'Alert' : 'In a digest'} to ${whom}${wa ? ' on WhatsApp' : ''}: ${subject}`,
+          entity_type: 'property', entity_id: id, kind: 'sent', body: `${SEND_WORDS[kind].property} to ${whom}${wa ? ' on WhatsApp' : ''}: ${subject}`,
         })));
       }
-      await officerActivity(to.length === 1 ? to[0].officer : null, `${kind === 'alert' ? 'Property alert' : 'Monthly digest'} sent to ${whom}${wa ? ' on WhatsApp' : ''}: ${subject}`, 'sent');
+      await officerActivity(to.length === 1 ? to[0].officer : null, `${SEND_WORDS[kind].officer} sent to ${whom}${wa ? ' on WhatsApp' : ''}: ${subject}`, 'sent');
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['officer_sends'] });

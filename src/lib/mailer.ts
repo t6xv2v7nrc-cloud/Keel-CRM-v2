@@ -8,6 +8,8 @@
 //   Alerts      one property each, only to the officers of nominated clients it fits (the matching rules).
 //   Digests     one borough a month, 5 to 8 sendable properties at most; anyone who had a bulk email or digest in
 //               the last 30 days is flagged and left unticked.
+//   Full list   every sendable property at once (or one borough's), by area, as one email, one WhatsApp or a
+//               spreadsheet; recorded as a bulk send, under the same rules as a digest.
 //   Who         only through `mailingList` (no left, on leave, opted out, bounced or not opted in; a shared mailbox
 //               replaces personal emails). London officers never get out-of-London stock unless it is included by
 //               hand, and then it is marked.
@@ -22,7 +24,7 @@ import { checksFor, floorWords, BILLS_LABEL, sendBlockers } from './propertyChec
 import type { Checks } from './propertyChecks';
 import { lhaVerified, overLha, sizeWords } from './lha';
 import type { RuledMatch } from './matchRules';
-import { fromHousingOfficer } from './money';
+import { csvCell, fromHousingOfficer } from './money';
 import { officersFrom } from './officers';
 import { areNeighbours, boroughFromDistrict, canonicalBorough, districtOf, LONDON_BOROUGHS } from './london';
 import { money, monthName, shortDate } from './format';
@@ -226,7 +228,6 @@ export function alertRecipients(s: Sendable, matches: RuledMatch[], officers: Of
 export function digestPicks(borough: string, list: Sendable[], opts: { includeOutside?: boolean; includeOver?: boolean } = {}): Sendable[] {
   const london = LONDON_BOROUGHS.has(borough);
   const ok = list.filter((s) => s.blockers.length === 0 && !(london && !opts.includeOutside && s.checks.london === false) && (opts.includeOver || !s.over));
-  const byValue = (x: Sendable, y: Sendable) => Number(x.over) - Number(y.over) || (x.checks.gap ?? 0) - (y.checks.gap ?? 0) || x.property.address_line.localeCompare(y.property.address_line);
   const own = ok.filter((s) => s.borough === borough).sort(byValue);
   const near = ok.filter((s) => s.borough && s.borough !== borough && areNeighbours(borough, s.borough)).sort(byValue);
   const rest = opts.includeOutside ? ok.filter((s) => s.checks.london === false).sort(byValue) : [];
@@ -235,12 +236,82 @@ export function digestPicks(borough: string, list: Sendable[], opts: { includeOu
 
 export interface DigestRecipients { list: MailingList; /** had a bulk email or digest in the last 30 days: this would be another */ recent: Set<string> }
 
-/** A borough's officers, through the mailing list, and who has had a bulk send in the last 30 days. */
-export function digestRecipients(borough: string, officers: OfficerRecord[], sends: OfficerSend[], opts: { today?: string; nominatedFromClients?: (o: OfficerRecord) => string | null } = {}): DigestRecipients {
+/** A borough's officers (or, with no borough, every officer), through the mailing list, and who has had a bulk send
+ *  in the last 30 days. */
+export function digestRecipients(borough: string | null, officers: OfficerRecord[], sends: OfficerSend[], opts: { today?: string; nominatedFromClients?: (o: OfficerRecord) => string | null } = {}): DigestRecipients {
   const today = opts.today ?? todayIso();
-  const list = mailingList(officers.filter((o) => boroughOf(o) === borough), { today, nominatedFromClients: opts.nominatedFromClients });
+  const list = mailingList(borough ? officers.filter((o) => boroughOf(o) === borough) : officers, { today, nominatedFromClients: opts.nominatedFromClients });
   const recent = new Set(list.to.filter(({ officer }) => bulkSendsIn30(officer, sends, today) >= 1).map(({ officer }) => String(officer.id)));
   return { list, recent };
+}
+
+// ── The full list: every sendable property at once ─────────────────
+
+export interface AreaGroup { place: string; items: Sendable[] }
+export interface FullList {
+  groups: AreaGroup[];
+  items: Sendable[];
+  /** ready to send but left out: over LHA, outside Greater London (each until included) */
+  leftOver: number;
+  leftOutside: number;
+}
+
+const byValue = (x: Sendable, y: Sendable) => Number(x.over) - Number(y.over) || (x.checks.gap ?? 0) - (y.checks.gap ?? 0) || x.property.address_line.localeCompare(y.property.address_line);
+
+/** Every property ready to send (or one borough's), by area: London boroughs first (focus boroughs first), then the
+ *  rest; most under the LHA first in each. Over LHA only when included (marked red, after the rest of its area);
+ *  outside Greater London only when included, as London officers never get it by default. */
+export function fullList(list: Sendable[], opts: { borough?: string | null; includeOver?: boolean; includeOutside?: boolean } = {}): FullList {
+  const ready = list.filter((s) => s.blockers.length === 0 && (!opts.borough || s.borough === opts.borough));
+  const outside = (s: Sendable) => s.checks.london === false;
+  const leftOver = ready.filter((s) => s.over && !opts.includeOver && (opts.includeOutside || !outside(s))).length;
+  const leftOutside = ready.filter((s) => outside(s) && !opts.includeOutside && (opts.includeOver || !s.over)).length;
+  const kept = ready.filter((s) => (opts.includeOver || !s.over) && (opts.includeOutside || !outside(s)));
+  const groups = new Map<string, Sendable[]>();
+  for (const s of kept) { const k = s.borough ?? s.place; groups.set(k, [...(groups.get(k) ?? []), s]); }
+  const rank = (g: AreaGroup) => (g.items[0].borough ? focusRank(g.place) : 3);
+  const sorted = [...groups].map(([place, items]) => ({ place, items: items.sort(byValue) }))
+    .sort((a, b) => rank(a) - rank(b) || a.place.localeCompare(b.place));
+  return { groups: sorted, items: sorted.flatMap((g) => g.items), leftOver, leftOutside };
+}
+
+/** The full list as one plain-text email, numbered right through so an officer can reply "number 7". */
+export function fullListBody(groups: AreaGroup[], opts: { borough?: string | null; greeting?: string | null; myName?: string | null; today?: string } = {}): string {
+  const today = opts.today ?? todayIso();
+  const items = groups.flatMap((g) => g.items);
+  const where = opts.borough ? ` in ${opts.borough}` : '';
+  const lines: string[] = [hello(opts.greeting), '', items.some((s) => s.over)
+    ? `All our available properties${where}, by area, each with its rent against the LHA for its area:`
+    : `All our available properties${where}, by area, each within the LHA for its area:`];
+  let i = 0;
+  for (const g of groups) {
+    lines.push('', `${g.place.toUpperCase()} (${g.items.length})`);
+    for (const s of g.items) {
+      const [address, ...rest] = propertyLines(s, today);
+      const photos = photosOf(s.property);
+      lines.push('', `${++i}. ${address}`, ...rest.map((x) => `   ${x}`), ...(photos.length ? [`   Photos: ${photos.join(' ')}`] : []));
+    }
+  }
+  lines.push('', 'Reply to this email with the number of any property to book a viewing or to put a client forward.', ...footer(opts.myName));
+  return lines.join('\n');
+}
+
+/** The full list as a spreadsheet: what an email would say, a row each. Never clients, providers or incentives. */
+export function fullListCsv(items: Sendable[], today = todayIso()): string {
+  const rows: Array<Array<string | number | null>> = [
+    ['Number', 'Area', 'Address', 'Postcode', 'Type', 'Rent pcm', 'Bills included', 'LHA area', 'LHA rate pcm', 'Against the LHA', 'Available', 'Floor', 'Furnished', 'Safety', 'Photos'],
+    ...items.map((s, i) => {
+      const p = s.property, c = s.checks;
+      const rent = c.lha?.rent ?? p.rent_pcm;
+      return [
+        i + 1, s.place, p.address_line, p.postcode ?? '', typeWords(p, c), rent != null ? rent.toFixed(2) : '',
+        (p.bills_included ?? []).map((b) => BILLS_LABEL[b as keyof typeof BILLS_LABEL] ?? b).join(', '),
+        c.lha?.area.brma ?? '', c.lha ? c.lha.rate.toFixed(2) : '', gapWords(c.gap).replace(/^, /, ''),
+        availableWords(p, today).replace(/^available /, ''), floorWords(p.floor, p.lift) ?? '', p.furnished ?? '', complianceLine(p), photosOf(p).join(' '),
+      ];
+    }),
+  ];
+  return `\ufeff${rows.map((r) => r.map(csvCell).join(',')).join('\r\n')}\r\n`;
 }
 
 /** Boroughs to offer a digest for: focus first, then the wish-list, then any with officers on the list. */
