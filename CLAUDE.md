@@ -93,6 +93,19 @@ src/
                          property_ids, last_sent_at, property and officer history); `oldMailerBackup` for the separate
                          Keel Mailer's Restore box), business.ts (Team settings `business`: redress, CMP, LLAS, ICO, fees,
                          unsubscribe email; blank ones left out; `signature` also signs the officer outcome email),
+              outlook.ts (each person's work Outlook through Microsoft Graph, from the browser: MSAL sign-in in Microsoft's
+                      window (popup; full page in the home-screen app), delegated User.Read, Mail.Read, Mail.Send, kept on
+                      the device; app IDs in Team settings `outlook` (not secrets); `sendFromOutlook` (several in Bcc, sender
+                      in To), `inboxSince`, `addressesSince`; outlook-redirect.html + src/outlookRedirect.ts is the page
+                      Microsoft returns to; `setOutlookTestDouble` is for the harness only),
+              outlookMail.ts (sorting Outlook mail: only officers on the list, officers named on clients or .gov.uk
+                      addresses come in, never anything else (`sortEmail`): reply about a client (their officer naming
+                      them, or a client named in the subject) to the timeline (activity kind "email"), nomination to the
+                      Bin (dated from arrival), other waits on the Bin (file, send to the Bin, ignore); `officerAddresses`
+                      gathers council officers from sent and received headers to add, not opted in;
+                      0026 `outlook_messages` claims each email once; UI in features/outlook/Outlook.tsx: Send from
+                      Outlook (always asks first), Your Outlook (My settings), Outlook (Team settings, with Entra steps),
+                      Officer emails from Outlook (Bin), Officers from your Outlook (Councils), checked every 5 minutes),
               clipboard.ts (copy with a fallback for older phones), files.ts (save a file, share sheet on phones),
               duplicates.ts (clients entered twice: same phone, email or name; a contact on more than 3 clients is shared,
                              not a duplicate; merging is the `merge_applicants` database function, 0014),
@@ -180,6 +193,10 @@ supabase/checks/live-vs-repo.sql  (read-only: which migrations the live database
 - The page for fees, incentives, potential income and invoices is called "Finances" (Ridwan renamed it from "Receivables",
   which had replaced "Money"); /receivables and /money still land there. Never call it "Money".
 - Invoices to providers or landlords name the client by first name only; a council incentive claim carries the full name.
+- Outlook (each person's own work Outlook, connected under My settings): Send from Outlook always asks before sending and
+  records the send like the email link; only officer and council emails are ever read in, nothing else from the mailbox
+  is kept; officers added from Outlook are not opted in, so `mailingList` never emails them in bulk until they opt in or
+  refer a client. Claude never signs in to anyone's Microsoft account.
 - Two people use Keel: Ridwan (owner) and a co-worker. Ridwan invites people from the Supabase dashboard; Claude never
   creates accounts or enters passwords.
 - Contacts was removed on request; do not bring it back unasked. Housing officers live on each client (officer_*) and,
@@ -286,7 +303,7 @@ Never commit `.env.local`. Never expose the service role key or Anthropic key to
   applicants; backs up deals and applicants, fills nothing in), then 0023 (postcode_area, age_band, benefit_cap on
   applicants for matching; backs up applicants), then 0024 (photo_urls on properties, property_ids and subject on
   officer_sends, for the Mailer; backs up both), then 0025 (not_ready_at and not_ready_note on properties: ready by
-  default; backs up properties).
+  default; backs up properties), then 0026 (outlook_messages: each Outlook email Keel has filed, once; a new table only).
 - Check every migration runs, twice, on a scratch Postgres before committing one:
   `npm i --no-save @electric-sql/pglite && node scripts/check-migrations.mjs` (it also tests the merge and invoice numbers).
 
@@ -317,7 +334,7 @@ Page containers are `p-4 sm:p-6`; a fixed width (`w-[220px]`) needs `max-w-full`
 full screen from the home screen (manifest `display: standalone`); icons are in `public/` (apple-touch-icon 180, 192,
 512 and a maskable 512). In the home-screen app, sign in with a password: an email link opens in Safari instead.
 `public/sw.js` (registered in `main.tsx`, production only) keeps `/assets/` on the device and fetches the page
-network first (3 seconds, then the kept copy); it never touches Supabase, `/api` or other sites. Bump `CACHE` if its
+network first (3 seconds, then the kept copy); it never touches Supabase, `/api`, other sites or the Outlook sign-in page (/outlook-redirect.html). Bump `CACHE` if its
 rules change.
 
 ## Pitfalls

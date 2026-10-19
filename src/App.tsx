@@ -25,6 +25,7 @@ import { useEnsureProfile, useLhaDatabase, usePeople, useSettings } from './lib/
 import { setActiveSettings } from './lib/settings';
 import { setLhaFromDatabase, setPostcodeBrma } from './lib/lha';
 import { ThemeToggle } from './components/ThemeToggle';
+import { OutlookAutoSync } from './features/outlook/Outlook';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
@@ -150,6 +151,8 @@ function Shell() {
         </div>
       </header>
 
+      {/* officers' emails come in from a connected Outlook while Keel is open */}
+      <OutlookAutoSync />
       <main className="flex-1" key={ratesKey}>
         <Routes>
           <Route path="/" element={<DashboardPage />} />

@@ -17,6 +17,7 @@ import { FocusBoroughs } from './FocusBoroughs';
 import { WhatsAppSettings } from './WhatsAppSettings';
 import { ProvidersTab } from './ProvidersTab';
 import { RequestTemplates } from './RequestTemplates';
+import { OutlookConnectCard, OutlookTeamCard } from '../outlook/Outlook';
 import { isActive } from '../../lib/search';
 import { addDays, isoDay } from '../../lib/calls';
 import { money } from '../../lib/format';
@@ -135,6 +136,7 @@ function MySettingsTab({ draft, set, name, setName, teamReady, email }: {
   return (
     <>
       <WhoNote icon="user">These only change Keel for you. Your co-worker has their own.</WhoNote>
+      <OutlookConnectCard />
       <Card fold="settings.you" startsFolded>
         <CardHeader icon="user" title="You" help="mySettings" />
         <div className="flex flex-col gap-5 p-5">
@@ -278,6 +280,7 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
       <MoneySettings draft={draft} set={set} />
       <InvoiceSettingsCard draft={draft} set={set} />
       <BusinessDetailsCard draft={draft} set={set} />
+      <OutlookTeamCard draft={draft} set={set} />
 
       <Card fold="settings.progress" startsFolded>
         <CardHeader icon="flag" title="Client progress" help="progress" />

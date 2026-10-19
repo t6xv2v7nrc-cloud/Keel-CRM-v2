@@ -105,8 +105,12 @@ export function officerName(a: Applicant): string | null {
 
 /** Where the officer works, from their email: tdcruz@westminster.gov.uk is Westminster; royalgreenwich.gov.uk is Greenwich. */
 export function officerOrg(a: Applicant): string | null {
-  const email = [a.officer_email, a.officer_name].find((x) => x && EMAIL.test(x));
-  const domain = email?.split('@')[1]?.toLowerCase().trim();
+  return orgOfEmail([a.officer_email, a.officer_name].find((x) => x && EMAIL.test(x)) ?? null);
+}
+
+/** The organisation an email address belongs to, as a borough where it is one: jo@harrow.gov.uk is Harrow. */
+export function orgOfEmail(email: string | null | undefined): string | null {
+  const domain = email?.split('@')[1]?.toLowerCase().trim().replace(/[>)\]]+$/, '');
   if (!domain) return null;
   const label = domain.replace(/\.(gov|org|nhs|co|ac|police)\.uk$/, '').replace(/\.(com|org|net|uk|co)$/, '').split('.').pop() ?? '';
   const squash = (s: string) => s.toLowerCase().replace(/[^a-z]/g, '');

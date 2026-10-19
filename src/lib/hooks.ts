@@ -20,7 +20,7 @@ import type { EditableProperty } from './propertyEdit';
 import type { Channel } from './contacts';
 import type { ReceivableDraft } from './money';
 import { tableFromRows } from './lha';
-import { STATUS_WORDS } from './councils';
+import { boroughOf, recordFor, STATUS_WORDS } from './councils';
 import { FEE_TYPE_WORDS, INVOICER_WORDS, ROUTE_WORDS } from './placements';
 import type { Placement } from './placements';
 import type { CouncilScheme, OfficerRecord, OfficerSend, OfficerStatus, SendKind } from './councils';
@@ -29,6 +29,12 @@ import { MOVED_IN_ELSEWHERE, outcomeForMove, reasonCode } from './viewings';
 import type { ViewingOutcome } from './types';
 import type { RuleOptions } from './matchRules';
 import type { ApplicantStage } from '../types/extraction';
+import { addressesSince, connectOutlook, disconnectOutlook, inboxSince, messageByInternetId, outlookAccount, outlookConfigured, OutlookNeedsSignIn, sendFromOutlook } from './outlook';
+import { binText, officerAddresses, officerRowFor, snippetOf, sortEmail, timelineWords } from './outlookMail';
+import type { FoundAddress, GraphMessage, MailAddress } from './outlookMail';
+import { orgOfEmail } from './search';
+import { extractFromText } from './extract';
+import { runMatching } from './matching';
 
 // ── Applicants ──────────────────────────────────────────────────────
 export function useApplicants() {
@@ -1830,5 +1836,216 @@ export function useSetBillTo() {
       qc.invalidateQueries({ queryKey: ['receivables'] });
       qc.invalidateQueries({ queryKey: ['activities'] });
     },
+  });
+}
+
+// ── Outlook (outlook.ts reads and sends; outlookMail.ts sorts) ─────
+
+export const OUTLOOK_UPDATE = 'Bringing officer emails in needs a one-off database update: run 0026_outlook.sql in the Supabase SQL Editor.';
+
+/** Whether Outlook is set up for the team, who is connected on this device, and connecting or disconnecting. */
+export function useOutlook() {
+  const { settings } = useSettings();
+  const app = settings.outlook;
+  const configured = outlookConfigured(app);
+  const qc = useQueryClient();
+  const key = ['outlook', app.clientId, app.tenantId];
+  const q = useQuery({ queryKey: key, enabled: configured, staleTime: Infinity, retry: false, queryFn: () => outlookAccount(app) });
+  const connect = useMutation({ mutationFn: () => connectOutlook(app), onSuccess: (acc) => { if (acc) qc.setQueryData(key, acc); } });
+  const disconnect = useMutation({ mutationFn: () => disconnectOutlook(app), onSuccess: () => qc.setQueryData(key, null) });
+  return { app, configured, account: configured ? q.data ?? null : null, checking: configured && q.isLoading, error: q.error as Error | null, connect, disconnect };
+}
+
+/** Send one email from the connected person's Outlook. */
+export function useSendFromOutlook() {
+  const { app } = useOutlook();
+  return useMutation({ mutationFn: (m: { to: string[]; bcc?: string[]; subject: string; body: string }) => sendFromOutlook(app, m) });
+}
+
+export interface OutlookMessageRow {
+  message_id: string; mailbox: string | null; from_address: string; from_name: string | null; subject: string | null; received_at: string;
+  snippet: string | null; handled: 'pending' | 'reply' | 'bin' | 'ignored'; applicant_id: string | null; inbox_item_id: string | null;
+}
+
+/** Officer emails waiting to be filed, and whether the table exists yet (0026). */
+export function useOutlookMessages() {
+  const q = useQuery({
+    queryKey: ['outlook_messages'],
+    queryFn: async (): Promise<{ pending: OutlookMessageRow[]; ready: boolean }> => {
+      const { data, error } = await supabase.from('outlook_messages').select('*').eq('handled', 'pending').order('received_at', { ascending: false }).limit(100);
+      if (error) { if (missingTable(error)) return { pending: [], ready: false }; throw error; }
+      return { pending: (data ?? []) as OutlookMessageRow[], ready: true };
+    },
+  });
+  return { pending: q.data?.pending ?? [], ready: q.data?.ready ?? true, loading: q.isLoading };
+}
+
+export interface OutlookCheck { at: string; replies: number; bin: number; waiting: number; error: string | null }
+const checkKey = (email: string) => `keel.outlook.check.${email.toLowerCase()}`;
+const cursorKey = (email: string) => `keel.outlook.syncedTo.${email.toLowerCase()}`;
+/** The last check of this person's Outlook on this device. */
+export function lastOutlookCheck(email: string | null | undefined): OutlookCheck | null {
+  if (!email) return null;
+  try { return JSON.parse(localStorage.getItem(checkKey(email)) ?? 'null') as OutlookCheck | null; } catch { return null; }
+}
+
+/** A nomination email, as a Bin item to review: read like a pasted enquiry, with the sender as the officer. */
+async function emailToBin(m: GraphMessage, from: MailAddress, council: string | null): Promise<string> {
+  const who = from.name ?? from.address;
+  const extraction = extractFromText(binText(m, from), `Email from ${who}${council ? ` (${council})` : ''}`);
+  extraction.applicant = {
+    ...extraction.applicant,
+    officer_name: extraction.applicant?.officer_name ?? from.name ?? undefined,
+    officer_email: extraction.applicant?.officer_email ?? from.address,
+    council: extraction.applicant?.council ?? council ?? undefined,
+  };
+  const matches = await runMatching(extraction);
+  const { data, error } = await supabase.from('inbox_items').insert({
+    image_path: '', source_hint: `Outlook: email from ${who}`, status: 'review', detected_type: extraction.doc_type,
+    raw_text: extraction.transcription, extraction, matches,
+    // dated from when the email arrived, as every Bin item is dated from when it got in touch
+    created_at: m.receivedDateTime ?? new Date().toISOString(),
+  }).select('id').single();
+  if (error) throw error;
+  return (data as { id: string }).id;
+}
+
+// one check at a time on this device: the automatic one and a press of Check now share it
+let outlookCheck: Promise<OutlookCheck> | null = null;
+
+/** Check this person's inbox for officer emails since the last check (a week back the first time). Each email is
+ *  claimed in outlook_messages before anything is done with it, so two devices never file the same one twice. */
+export function useOutlookSync() {
+  const { app, account } = useOutlook();
+  const applicantsQ = useApplicants();
+  const { officers, loading: officersLoading } = useOfficers();
+  const qc = useQueryClient();
+  const ready = !!account && applicantsQ.isSuccess && !officersLoading;
+
+  const check = async (): Promise<OutlookCheck> => {
+    if (!account) throw new OutlookNeedsSignIn();
+    const applicants = applicantsQ.data ?? [];
+    const probe = await supabase.from('outlook_messages').select('message_id').limit(1);
+    if (probe.error) throw missingTable(probe.error) ? new Error(OUTLOOK_UPDATE) : probe.error;
+    const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
+    let since = weekAgo;
+    try { since = localStorage.getItem(cursorKey(account.email)) ?? weekAgo; } catch { /* a week back */ }
+    const mail = await inboxSince(app, since, 200);
+    const tally: OutlookCheck = { at: new Date().toISOString(), replies: 0, bin: 0, waiting: 0, error: null };
+    // what is worth filing, and which of those Keel already has (from this device or another)
+    const worth = mail.map((m) => ({ m, id: (m.internetMessageId || m.id).trim(), sorted: sortEmail(m, { applicants, officers, own: [account.email] }) }))
+      .filter((x) => x.sorted.kind !== 'ignore');
+    const seen = new Set<string>();
+    for (let i = 0; i < worth.length; i += 50) {
+      const { data } = await supabase.from('outlook_messages').select('message_id').in('message_id', worth.slice(i, i + 50).map((x) => x.id));
+      for (const r of (data ?? []) as Array<{ message_id: string }>) seen.add(r.message_id);
+    }
+    for (const { m, id, sorted } of worth) {
+      if (sorted.kind === 'ignore' || seen.has(id)) continue;
+      seen.add(id);
+      const claim = await supabase.from('outlook_messages').insert({
+        message_id: id, mailbox: account.email, from_address: sorted.from.address, from_name: sorted.from.name, subject: m.subject ?? null,
+        received_at: m.receivedDateTime ?? new Date().toISOString(), snippet: sorted.kind === 'other' ? snippetOf(m) : null, handled: 'pending',
+      });
+      if (claim.error) { if (claim.error.code === '23505') continue; throw claim.error; }
+      const done = (patch: Partial<OutlookMessageRow>) => supabase.from('outlook_messages').update({ ...patch, handled_at: new Date().toISOString() }).eq('message_id', id);
+      if (sorted.kind === 'reply') {
+        const council = (sorted.officer ? boroughOf(sorted.officer) : null) ?? orgOfEmail(sorted.from.address);
+        await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: sorted.applicant.id, kind: 'email', body: timelineWords(m, sorted.from, council) });
+        await done({ handled: 'reply', applicant_id: sorted.applicant.id });
+        tally.replies += 1;
+      } else if (sorted.kind === 'nomination') {
+        const item = await emailToBin(m, sorted.from, sorted.council);
+        await done({ handled: 'bin', inbox_item_id: item });
+        tally.bin += 1;
+      } else {
+        tally.waiting += 1;
+      }
+    }
+    const latest = mail.reduce((x, m) => (m.receivedDateTime && m.receivedDateTime > x ? m.receivedDateTime : x), since);
+    try { localStorage.setItem(cursorKey(account.email), latest); } catch { /* checked again next time */ }
+    return tally;
+  };
+
+  const run = useMutation({
+    mutationFn: (): Promise<OutlookCheck> => {
+      outlookCheck ??= check().finally(() => { outlookCheck = null; });
+      return outlookCheck;
+    },
+    onSettled: (tally, err) => {
+      if (account) {
+        const record: OutlookCheck = tally ?? { at: new Date().toISOString(), replies: 0, bin: 0, waiting: 0, error: (err as Error | null)?.message ?? 'Could not check Outlook' };
+        try { localStorage.setItem(checkKey(account.email), JSON.stringify(record)); } catch { /* fine */ }
+      }
+      qc.invalidateQueries({ queryKey: ['outlook_messages'] });
+      if (tally?.replies) qc.invalidateQueries({ queryKey: ['activities'] });
+      if (tally?.bin) qc.invalidateQueries({ queryKey: ['inbox'] });
+    },
+  });
+  return { ...run, ready, account };
+}
+
+/** File a waiting officer email: on a client's timeline, to the Bin, or ignored. */
+export function useFileOutlookMessage() {
+  const { app, account } = useOutlook();
+  const { officers } = useOfficers();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ row, to, applicant }: { row: OutlookMessageRow; to: 'client' | 'bin' | 'ignore'; applicant?: Applicant }) => {
+      const done = (patch: Partial<OutlookMessageRow>) => supabase.from('outlook_messages').update({ ...patch, handled_at: new Date().toISOString() }).eq('message_id', row.message_id);
+      const from: MailAddress = { name: row.from_name, address: row.from_address };
+      const m: GraphMessage = { id: row.message_id, subject: row.subject, bodyPreview: row.snippet, receivedDateTime: row.received_at };
+      const listed = recordFor({ email: row.from_address, phone: null }, officers);
+      const council = (listed ? boroughOf(listed) : null) ?? orgOfEmail(from.address);
+      if (to === 'client' && applicant) {
+        await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: applicant.id, kind: 'email', body: timelineWords(m, from, council) });
+        await done({ handled: 'reply', applicant_id: applicant.id });
+      } else if (to === 'bin') {
+        // the whole email when Outlook is connected, else the preview kept here
+        const full = account ? await messageByInternetId(app, row.message_id).catch(() => null) : null;
+        const item = await emailToBin(full ?? m, from, council);
+        await done({ handled: 'bin', inbox_item_id: item });
+      } else {
+        await done({ handled: 'ignored' });
+      }
+    },
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ['outlook_messages'] });
+      if (v.to === 'client') qc.invalidateQueries({ queryKey: ['activities'] });
+      if (v.to === 'bin') qc.invalidateQueries({ queryKey: ['inbox'] });
+    },
+  });
+}
+
+/** Look through the last 12 months of Outlook for council officers not on the list yet (addresses and dates only). */
+export function useFindOutlookOfficers() {
+  const { app, account } = useOutlook();
+  const { officers } = useOfficers();
+  return useMutation({
+    mutationFn: async (): Promise<FoundAddress[]> => {
+      if (!account) throw new OutlookNeedsSignIn();
+      const since = new Date(Date.now() - 365 * 86_400_000).toISOString();
+      const { sent, received } = await addressesSince(app, since);
+      return officerAddresses(sent, received, officers, [account.email]);
+    },
+  });
+}
+
+/** Add officers found in Outlook to the list in one go: housing officers, not opted in (so never emailed in bulk until
+ *  they opt in or refer a client). Noted once, naming them. */
+export function useAddOutlookOfficers() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (found: FoundAddress[]) => {
+      if (!found.length) return;
+      const rows = found.map(officerRowFor);
+      let res = await supabase.from('officers').insert(rows);
+      // HELM may have left the id without a default: make them
+      if (res.error && /null value in column "id"/i.test(res.error.message ?? '')) res = await supabase.from('officers').insert(rows.map((r) => ({ ...r, id: crypto.randomUUID() })));
+      if (res.error) throw isMissingColumn(res.error) ? new Error(COUNCILS_UPDATE) : res.error;
+      const names = found.map((f) => f.name ?? f.address);
+      await officerActivity(null, `Added ${found.length} ${found.length === 1 ? 'officer' : 'officers'} from Outlook to the officer list: ${names.slice(0, 12).join(', ')}${names.length > 12 ? ` and ${names.length - 12} more` : ''}`, 'created');
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['officers'] }); qc.invalidateQueries({ queryKey: ['activities'] }); },
   });
 }

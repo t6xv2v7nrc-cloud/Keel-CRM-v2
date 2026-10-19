@@ -18,6 +18,7 @@ import {
 import type { Sendable } from '../../lib/mailer';
 import { alertWhatsApp, digestWhatsApp, fullListWhatsApp, whatsappRecipients } from '../../lib/shareWhatsApp';
 import { waLink } from '../../lib/whatsapp';
+import { OutlookSendButton } from '../outlook/Outlook';
 import { useApplicants, useMatchOptions, useOfficerSends, useOfficers, usePeople, useProperties, useRecordMailerSend } from '../../lib/hooks';
 import { LONDON_BOROUGHS } from '../../lib/london';
 import type { Applicant, Property } from '../../lib/types';
@@ -472,11 +473,13 @@ function Composer({ kind, to, recent, sends = [], properties, subject, body, wha
         ) : (
           <span className="text-[13px] text-[var(--ink-muted)]">Too long to open in one go: copy the addresses, subject and email instead.</span>
         )}
+        <OutlookSendButton to={addresses} subject={subject} body={text} disabled={disabled || !chosen.length || !!sentAt}
+          what={`${kind === 'alert' ? 'this alert' : kind === 'digest' ? 'this digest' : 'the full list'} to ${chosen.length} ${chosen.length === 1 ? 'officer' : 'officers'}`} onSent={save} />
         <Button className={small} disabled={!addresses.length} onClick={() => copy(addresses.length > 1 ? 'Addresses for the Bcc box' : 'Address', addressBox({ to: chosen }))}>Copy addresses</Button>
         <Button className={small} onClick={() => copy('Email', text)}>Copy the email</Button>
         <Button className={small} disabled={disabled || !chosen.length || !!sentAt || record.isPending} onClick={save}>{sentAt ? `Recorded at ${clockTime(sentAt)}` : "I've sent it"}</Button>
       </div>
-      <p className="m-0 text-[12px] text-[var(--ink-muted)]">Opening it in your email records the send. If you copied it instead, press I've sent it once it has gone.</p>
+      <p className="m-0 text-[12px] text-[var(--ink-muted)]">Sending from Outlook, or opening it in your email, records the send. If you copied it instead, press I've sent it once it has gone.</p>
 
       <WhatsAppVersion kind={kind} to={to} off={off} subject={subject} text={whatsapp} properties={properties} disabled={disabled} />
     </Card>

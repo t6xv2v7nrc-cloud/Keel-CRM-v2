@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import type { Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -21,4 +22,13 @@ function inlineTouchIcon(): Plugin {
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), inlineTouchIcon()],
+  build: {
+    rollupOptions: {
+      // the app, and the page Microsoft sends an Outlook sign-in back to
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        outlook: fileURLToPath(new URL('./outlook-redirect.html', import.meta.url)),
+      },
+    },
+  },
 });

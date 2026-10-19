@@ -5,9 +5,9 @@
 // - The page itself always comes from the network, so a new version shows straight away. If the
 //   network is slow (3 seconds) or gone, the copy kept from last time is used instead.
 // - Client data is never kept here: Supabase, /api and anything on another site go straight to the
-//   network, untouched.
+//   network, untouched. So does the page Microsoft sends an Outlook sign-in back to.
 
-const CACHE = 'keel-shell-v1';
+const CACHE = 'keel-shell-v2';
 const PAGE = '/index.html';
 const SLOW_MS = 3000;
 
@@ -64,6 +64,8 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/.netlify/')) return;
+  // the Outlook sign-in's return page: never kept as the app, never swapped for it
+  if (url.pathname === '/outlook-redirect.html') return;
   if (request.mode === 'navigate') event.respondWith(page(request));
   else if (url.pathname.startsWith('/assets/')) event.respondWith(asset(request));
 });

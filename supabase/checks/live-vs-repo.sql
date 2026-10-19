@@ -38,7 +38,8 @@ with expect(migration, kind, name) as (values
   ('0022', 'column', 'deals.viewing_outcome'), ('0022', 'column', 'deals.outcome_sent_to_officer_at'), ('0022', 'column', 'applicants.officer_replied_at'),
   ('0023', 'column', 'applicants.postcode_area'), ('0023', 'column', 'applicants.age_band'), ('0023', 'column', 'applicants.benefit_cap'),
   ('0024', 'column', 'properties.photo_urls'), ('0024', 'column', 'officer_sends.property_ids'), ('0024', 'column', 'officer_sends.subject'),
-  ('0025', 'column', 'properties.not_ready_at'), ('0025', 'column', 'properties.not_ready_note')
+  ('0025', 'column', 'properties.not_ready_at'), ('0025', 'column', 'properties.not_ready_note'),
+  ('0026', 'table', 'outlook_messages')
 ), found as (
   select e.migration, e.kind, e.name, case e.kind
     when 'table' then exists (select 1 from information_schema.tables t
@@ -52,7 +53,7 @@ with expect(migration, kind, name) as (values
 ), known(name) as (values
   ('applicants'), ('properties'), ('contacts'), ('placements'), ('inbox_items'), ('activities'), ('calls'), ('settings'),
   ('profiles'), ('deals'), ('providers'), ('requests'), ('receivables'), ('lha_rates'), ('postcode_brma'),
-  ('officers'), ('officer_sends'), ('council_schemes')
+  ('officers'), ('officer_sends'), ('council_schemes'), ('outlook_messages')
 )
 select migration as item,
   case when bool_and(kind = 'data') then 'cannot tell (only tidies data)'

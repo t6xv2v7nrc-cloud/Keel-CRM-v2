@@ -7,6 +7,7 @@ import { shortAddress } from '../../lib/progress';
 import { caseworkAddress, dueWords, mailtoLink, outcomeEmail, responsesDue } from '../../lib/viewings';
 import type { DueItem } from '../../lib/viewings';
 import type { Applicant } from '../../lib/types';
+import { OutlookSendButton } from '../outlook/Outlook';
 
 const small = 'min-h-0 px-3 py-1.5 text-[13px]';
 const linkButton = 'inline-flex items-center gap-1.5 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-3 py-1.5 text-[15px] font-medium hover:border-[var(--accent)]';
@@ -69,17 +70,19 @@ function Row({ item }: { item: DueItem }) {
   } else {
     const deal = item.deal;
     const to = caseworkAddress(a, officers);
+    const mail = outcomeEmail(a, deal, myName);
     const mark = (how: 'email' | 'other') => sent.mutate({ deal, sent: true, how, officer }, {
       onSuccess: () => toast(`Recorded: ${officer} told how ${shortAddress(deal.address)} went`, 'success'), onError: fail,
     });
     action = (
       <span className="flex flex-wrap gap-1.5">
         {to.address && (
-          <a href={mailtoLink(to.address, outcomeEmail(a, deal, myName))} onClick={() => mark('email')} title={to.note ?? undefined}
+          <a href={mailtoLink(to.address, mail)} onClick={() => mark('email')} title={to.note ?? undefined}
             className={`${linkButton} text-[var(--accent-ink)]`}>
             <Icon name="mail" size={14} />Email {firstOf(officer)}
           </a>
         )}
+        {to.address && <OutlookSendButton to={[to.address]} subject={mail.subject} body={mail.body} what={`how the viewing went to ${officer}`} onSent={() => mark('email')} disabled={sent.isPending} />}
         <Button className={small} disabled={sent.isPending} onClick={() => mark('other')}>{to.address ? 'Told them' : 'Told them another way'}</Button>
       </span>
     );

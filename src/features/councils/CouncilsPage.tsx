@@ -13,6 +13,7 @@ import {
 import type { HealthKey, OfficerRecord, OfficerSend, OfficerStatus, RouteType } from '../../lib/councils';
 import { useApplicants, useLogOfficerSends, useOfficerSends, useOfficers, useSaveOfficer, useSetOfficerStatus } from '../../lib/hooks';
 import { SchemesView } from './Schemes';
+import { OutlookImport } from '../outlook/Outlook';
 
 const small = 'min-h-0 px-3 py-1.5 text-[13px]';
 const box = 'h-10 w-full min-w-0 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-3 text-[15px] text-[var(--ink)] outline-none focus:border-[var(--accent)]';
@@ -96,6 +97,7 @@ function OfficersView() {
   if (!ready) return <Empty icon="users" title="No officer list yet">The officers table is missing from the database.</Empty>;
   return (
     <div className="flex flex-col gap-4">
+      <OutlookImport />
       {!sendStatus && <UpdateNote title="Send status (opted out, left, bounces) needs a one-off database update." file="0020_council_contacts.sql">
         Until then nobody can be marked, and no mailing list can be copied from here.</UpdateNote>}
 

@@ -253,13 +253,23 @@ await fresh25.exec(`update properties set not_ready_at = now(), not_ready_note =
 const b25 = (await fresh25.query(`select count(*)::int as n from keel_backup.properties_before_0025`)).rows[0].n;
 check('properties are backed up first', b25 === 1, String(b25));
 
+// 0026: emails brought in from Outlook, each once
+const fresh26 = await freshDb({ upTo: '0025' });
+for (let i = 0; i < 2; i++) await fresh26.exec(readFileSync(dir + '0026_outlook.sql', 'utf8'));
+await fresh26.exec(`insert into outlook_messages (message_id, from_address, received_at, handled) values ('<a@x>', 'jo@harrow.gov.uk', now(), 'reply')`);
+let dup26 = 0, bad26 = 0;
+try { await fresh26.exec(`insert into outlook_messages (message_id, from_address, received_at) values ('<a@x>', 'jo@harrow.gov.uk', now())`); } catch { dup26++; }
+try { await fresh26.exec(`insert into outlook_messages (message_id, from_address, received_at, handled) values ('<b@x>', 'jo@harrow.gov.uk', now(), 'sent')`); } catch { bad26++; }
+const rls26 = (await fresh26.query(`select relrowsecurity as on from pg_class where relname = 'outlook_messages'`)).rows[0];
+check('outlook messages: each email once, only known outcomes, row level security on', dup26 === 1 && bad26 === 1 && rls26?.on === true, JSON.stringify({ dup26, bad26, rls26 }));
+
 // The read-only check of a live database against these files
 const liveCheck = readFileSync(new URL('../supabase/checks/live-vs-repo.sql', import.meta.url).pathname, 'utf8');
 const status = async (d) => Object.fromEntries((await d.query(liveCheck)).rows.map((r) => [r.item, [r.status, r.detail]]));
 const full = await status(db);
 const numbered = Object.keys(full).filter((k) => /^\d{4}$/.test(k));
 check('live check: every migration reads as done on a database that has had them all (data-only ones cannot be told)',
-  numbered.length === 25 && numbered.every((k) => full[k][0] === 'done' || (['0003', '0016'].includes(k) && full[k][0].startsWith('cannot tell'))), JSON.stringify(full));
+  numbered.length === 26 && numbered.every((k) => full[k][0] === 'done' || (['0003', '0016'].includes(k) && full[k][0].startsWith('cannot tell'))), JSON.stringify(full));
 const behind = await freshDb();
 await behind.exec(`alter table properties drop column lha_area; drop table postcode_brma;
   create table eod_reports (id uuid primary key, report_date date, data jsonb);`);

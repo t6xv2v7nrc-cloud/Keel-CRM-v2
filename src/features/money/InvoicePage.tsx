@@ -10,6 +10,7 @@ import { defaultBillTo, invoiceEmail, invoiceFor, invoiceMessage, missingDetails
 import { KIND_LABEL } from '../../lib/money';
 import { waLink } from '../../lib/whatsapp';
 import { FinancesNeedsUpdate, MoneyNeedsUpdate } from './Money';
+import { OutlookSendButton } from '../outlook/Outlook';
 
 const small = 'min-h-0 px-3 py-1.5 text-[13px]';
 const linkButton = 'inline-flex items-center gap-1.5 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-3 py-1.5 text-[13px] font-medium text-[var(--ink)] hover:border-[var(--accent)]';
@@ -106,6 +107,7 @@ export function InvoicePage() {
                     <Icon name="mail" size={14} />Email it
                   </a>
                 )}
+                {mail && email && <OutlookSendButton to={[email]} subject={mail.subject} body={mail.body} what={`this invoice to ${email}`} onSent={() => sent('by email')} />}
                 {billDirty && (
                   <Button className={small} disabled={saveBillTo.isPending} onClick={() => saveBillTo.mutate({ r, billTo }, {
                     onSuccess: () => toast('Saved who the invoice is to', 'success'), onError: (e) => toast((e as Error).message, 'danger'),

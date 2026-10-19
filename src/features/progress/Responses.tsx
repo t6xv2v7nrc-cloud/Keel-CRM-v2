@@ -8,6 +8,7 @@ import {
 } from '../../lib/viewings';
 import { activeSettings } from '../../lib/settings';
 import type { Applicant, Deal } from '../../lib/types';
+import { OutlookSendButton } from '../outlook/Outlook';
 
 const small = 'min-h-0 px-3 py-1.5 text-[13px]';
 const officerOf = (a: Pick<Applicant, 'officer_name'>) => a.officer_name?.trim() || 'the officer';
@@ -151,6 +152,7 @@ export function OutcomeBackRow({ applicant, deal, showAddress = false, compact =
           <Icon name="mail" size={14} />Email {firstOf(officer)}
         </a>
       )}
+      {to.address && <OutlookSendButton to={[to.address]} subject={email.subject} body={email.body} what={`how the viewing went to ${officer}`} onSent={() => mark('email')} disabled={sent.isPending} />}
       <Button className={small} disabled={sent.isPending} onClick={() => mark('other')}>Told them another way</Button>
     </div>
   );

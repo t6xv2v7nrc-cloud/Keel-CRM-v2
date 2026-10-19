@@ -387,6 +387,16 @@ export const HELP = {
       'Letting fee they pay Keel: a set amount, a percentage of a month\'s rent, or weeks of rent (say 1 week\'s rent). When their fee is due counts from sign up, or from when the client\'s first month\'s rent is paid if they only pay after it.',
     ],
   },
+  outlook: {
+    title: 'Outlook',
+    body: [
+      'Connect your work Outlook under Settings, My settings: you sign in with Microsoft in Microsoft\'s own window, and Keel never sees your password. Each of you connects your own; it stays connected on that device until you disconnect.',
+      'Send from Outlook: the Mailer, officer replies and outcomes, and invoices get a Send from Outlook button. It asks first, then sends from your mailbox (kept in your Sent Items) and records the send, just like the email links. Several officers go in Bcc with you in To.',
+      'Officer emails come in by themselves while Keel is open (every 5 minutes, or Check Outlook now): only emails from officers on the list, officers named on clients, or council (.gov.uk) addresses, never anything else in your mailbox. One about a client (from their officer, or naming them) goes on that client\'s timeline. A nomination goes to the Bin to review, dated from when it arrived. Any other officer email waits on the Bin for you to send to the Bin, file on a client, or ignore.',
+      'Officers from your Outlook (Councils): finds the council officers you emailed, or who emailed you, over the last year (addresses and dates only) and adds the ones you tick to the officer list. They are added as not opted in, so they are never sent property emails until they opt in or refer a client.',
+      'The owner sets Outlook up once in Team settings, Outlook, by registering Keel in Microsoft Entra (the steps are on that card).',
+    ],
+  },
   whatsapp: {
     title: 'Sending on WhatsApp',
     body: [

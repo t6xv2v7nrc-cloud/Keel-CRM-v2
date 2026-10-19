@@ -168,6 +168,8 @@ export interface AppSettings {
   responses: ResponseRules;
   /** Keel's credentials for the Mailer's footer and email signatures. Blank ones are left out (placeholders until joined). */
   business: BusinessDetails;
+  /** Keel's app in Microsoft Entra, for connecting Outlook (not secrets: the app ID and the organisation's directory ID) */
+  outlook: { clientId: string; tenantId: string };
   /** The month's goal on Weekly numbers (Ridwan's October target: 6 to 8 placements, at least 4 with an incentive). */
   monthlyGoal: MonthlyGoal;
 }
@@ -368,6 +370,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   wishlistBoroughs: ['Sutton', 'Kingston upon Thames'],
   responses: { replyHours: 4, dayStart: '09:00', dayEnd: '17:30', watchDays: 14 },
   business: DEFAULT_BUSINESS,
+  outlook: { clientId: '', tenantId: '' },
   monthlyGoal: { placementsMin: 6, placementsMax: 8, withIncentive: 4 },
 };
 
