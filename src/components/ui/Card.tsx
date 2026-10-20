@@ -1,4 +1,4 @@
-import { Children, createContext, isValidElement, useContext } from 'react';
+import { Children, createContext, isValidElement, useContext, useMemo, useState } from 'react';
 import type { HTMLAttributes, ReactNode } from 'react';
 import { Icon } from './Icon';
 import type { IconName } from './Icon';
@@ -30,10 +30,14 @@ export function Card({ className = '', fold, startsFolded, ...rest }: CardProps)
 
 function FoldingCard({ fold, startsFolded = false, className = '', children, ...rest }: Omit<CardProps, 'fold'> & { fold: string }) {
   const f = useFold(fold, !startsFolded);
-  const shown = f.open ? children : Children.toArray(children).filter((c) => isValidElement(c) && c.type === CardHeader);
+  // opened from its header (not on arriving at the page): what was folded away rises into place
+  const [unfolded, setUnfolded] = useState(false);
+  const { open, toggle } = f;
+  const value = useMemo(() => ({ open, toggle: () => { setUnfolded(!open); toggle(); } }), [open, toggle]);
+  const shown = open ? children : Children.toArray(children).filter((c) => isValidElement(c) && c.type === CardHeader);
   return (
-    <FoldContext.Provider value={f}>
-      <div className={`${cardClass} ${className}`} {...rest}>{shown}</div>
+    <FoldContext.Provider value={value}>
+      <div className={`${cardClass} ${open && unfolded ? 'keel-unfolded' : ''} ${className}`} {...rest}>{shown}</div>
     </FoldContext.Provider>
   );
 }
@@ -69,7 +73,12 @@ export function CardHeader({
   return (
     <div className={`flex flex-wrap items-center gap-x-2.5 gap-y-2 px-5 py-3 ${toggle && !isOpen ? '' : 'border-b border-[var(--line)]'}`}>
       {toggle ? (
-        <button type="button" onClick={toggle} aria-expanded={isOpen} title={isOpen ? `Fold ${title} away` : `Open ${title}`}
+        <button type="button" aria-expanded={isOpen} title={isOpen ? `Fold ${title} away` : `Open ${title}`}
+          onClick={(e) => {
+            // a card folded by its own useFold (the client page): what opens rises into place too
+            if (onToggle && !isOpen) e.currentTarget.closest('.rounded-lg')?.classList.add('keel-unfolded');
+            toggle();
+          }}
           className="-my-1 -ml-1.5 flex min-h-[36px] items-center gap-2.5 rounded-md px-1.5 text-left hover:bg-[var(--surface-2)]">
           <Icon name="chevronDown" size={16} className={`shrink-0 text-[var(--ink-muted)] transition-transform ${isOpen ? '' : '-rotate-90'}`} />
           {heading}

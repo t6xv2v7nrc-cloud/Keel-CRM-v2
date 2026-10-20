@@ -57,7 +57,7 @@ export function HousingOfficersBox({ applicants, onClose }: { applicants: Applic
         </button>
       </CardHeader>
       {officers.length === 0 ? (
-        <Empty icon="users" title="No housing officers yet">When a client's details name their housing officer, they are collected here.</Empty>
+        <Empty icon="users" title="No housing officers yet">When a client's details name their housing officer, they are collected here. The full officer list, with who may be emailed, is on <Link to="/councils" className="text-[var(--link)] hover:underline">Councils</Link>.</Empty>
       ) : (
         <div className="flex flex-col gap-3 p-4">
           <div className="flex flex-wrap items-center gap-2">

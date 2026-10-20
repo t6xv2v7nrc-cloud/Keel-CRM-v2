@@ -42,7 +42,7 @@ export function OutlookSendButton({ to, subject, body, what, onSent, disabled = 
     });
   };
   return (
-    <Button variant="primary" className={`${small} ${className}`} disabled={disabled || !to.length || send.isPending} onClick={go}>
+    <Button busy={send.isPending} variant="primary" className={`${small} ${className}`} disabled={disabled || !to.length || send.isPending} onClick={go}>
       <Icon name="send" size={14} />{send.isPending ? 'Sending…' : 'Send from Outlook'}
     </Button>
   );
@@ -57,7 +57,7 @@ export function OutlookTeamCard({ draft, set }: { draft: AppSettings; set: <K ex
   const ok = !!o.clientId.trim() && !!o.tenantId.trim();
   const uri = redirectUri();
   return (
-    <Card fold="settings.outlook" startsFolded>
+    <Card id="outlook" fold="settings.outlook" startsFolded className="scroll-mt-28">
       <CardHeader icon="mail" title="Outlook" sub={ok ? 'Set up' : 'Not set up'} help="outlook" />
       <div className="flex flex-col gap-4 p-5">
         <p className="m-0 text-[15px] text-[var(--ink-muted)]">
@@ -108,7 +108,7 @@ export function OutlookConnectCard() {
   const [check, setCheck] = useState(() => lastOutlookCheck(account?.email));
   useEffect(() => setCheck(lastOutlookCheck(account?.email)), [account?.email, sync.isSuccess, sync.isError]);
   return (
-    <Card fold="settings.myoutlook">
+    <Card id="myoutlook" fold="settings.myoutlook" className="scroll-mt-28">
       <CardHeader icon="mail" title="Your Outlook" sub={account ? `Connected: ${account.email}` : configured ? 'Not connected' : 'Not set up yet'} help="outlook" />
       <div className="flex flex-col gap-3 p-5 text-[15px]">
         {!configured ? (
@@ -118,11 +118,11 @@ export function OutlookConnectCard() {
             <p className="m-0 text-[var(--ink)]">Connected as <strong>{account.email}</strong> on this device.</p>
             <p className="m-0 text-[13px] text-[var(--ink-muted)]">{checkWords(check)}</p>
             <div className="flex flex-wrap gap-2">
-              <Button className={small} disabled={!sync.ready || sync.isPending} onClick={() => sync.mutate(undefined, {
+              <Button busy={sync.isPending} className={small} disabled={!sync.ready || sync.isPending} onClick={() => sync.mutate(undefined, {
                 onSuccess: (t) => toast(t.replies + t.bin + t.waiting ? 'Outlook checked' : 'Nothing new from officers', 'success'),
                 onError: (e) => toast((e as Error).message, 'danger'),
               })}>{sync.isPending ? 'Checking…' : 'Check Outlook now'}</Button>
-              <Button variant="ghost" className={small} disabled={disconnect.isPending} onClick={() => {
+              <Button busy={disconnect.isPending} variant="ghost" className={small} disabled={disconnect.isPending} onClick={() => {
                 if (window.confirm('Disconnect Outlook on this device? Your mail stays as it is; you can connect again any time.')) disconnect.mutate(undefined, { onSuccess: () => toast('Outlook disconnected on this device', 'success') });
               }}>Disconnect on this device</Button>
             </div>
@@ -135,7 +135,7 @@ export function OutlookConnectCard() {
               <li>Add the council officers you email to the officer list.</li>
             </ul>
             <p className="m-0 text-[13px] text-[var(--ink-muted)]">You sign in with Microsoft in Microsoft's window. Keel only reads emails from officers and councils, never the rest of your mail.</p>
-            <div><Button variant="primary" className={small} disabled={checking || connect.isPending} onClick={() => connect.mutate(undefined, {
+            <div><Button busy={connect.isPending} variant="primary" className={small} disabled={checking || connect.isPending} onClick={() => connect.mutate(undefined, {
               onSuccess: (a) => { if (a) toast(`Outlook connected: ${a.email}`, 'success'); },
               onError: (e) => toast(/popup|cancel|user_cancelled/i.test((e as Error).message) ? 'Sign-in closed before it finished. Try again, and allow the Microsoft window.' : (e as Error).message, 'danger'),
             })}><Icon name="mail" size={14} />{connect.isPending ? 'Signing in…' : 'Connect Outlook'}</Button></div>
@@ -182,7 +182,7 @@ export function OutlookInbox() {
     <Card fold="bin.outlook">
       <CardHeader icon="mail" title="Officer emails from Outlook" help="outlook" sub={pending.length ? `${pending.length} waiting` : account ? 'Nothing waiting' : 'Not connected'}>
         {account && ready && (
-          <Button className={small} disabled={!sync.ready || sync.isPending} onClick={() => sync.mutate(undefined, { onError: (e) => toast((e as Error).message, 'danger') })}>
+          <Button busy={sync.isPending} className={small} disabled={!sync.ready || sync.isPending} onClick={() => sync.mutate(undefined, { onError: (e) => toast((e as Error).message, 'danger') })}>
             {sync.isPending ? 'Checking…' : 'Check Outlook now'}
           </Button>
         )}
@@ -228,15 +228,15 @@ function WaitingEmail({ row }: { row: OutlookMessageRow }) {
       {row.subject && <div className="text-[14px] text-[var(--ink)]">{row.subject}</div>}
       {row.snippet && <div className="text-[13px] text-[var(--ink-muted)] [overflow-wrap:anywhere]">{row.snippet}</div>}
       <div className="flex flex-wrap items-center gap-2 pt-1">
-        <Button className={small} disabled={file.isPending} onClick={() => act('bin')}>Send to the Bin</Button>
+        <Button busy={file.isPending} className={small} disabled={file.isPending} onClick={() => act('bin')}>Send to the Bin</Button>
         {!picking ? (
-          <Button className={small} disabled={file.isPending} onClick={() => setPicking(true)}>File on a client</Button>
+          <Button busy={file.isPending} className={small} disabled={file.isPending} onClick={() => setPicking(true)}>File on a client</Button>
         ) : (
           <span className="flex min-w-0 flex-1 basis-[260px] flex-wrap items-center gap-2">
             <input list={`clients-${row.message_id}`} value={name} onChange={(e) => setName(e.target.value)} placeholder="Type the client's name" aria-label="Client to file it on"
               className="h-9 min-w-0 flex-1 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2.5 text-[14px] text-[var(--ink)] outline-none focus:border-[var(--accent)]" />
             <datalist id={`clients-${row.message_id}`}>{applicants.map((a) => <option key={a.id} value={a.full_name} />)}</datalist>
-            <Button className={small} disabled={!client || file.isPending} onClick={() => client && act('client', client)}>{client ? `File on ${client.full_name.split(' ')[0]}` : 'File'}</Button>
+            <Button busy={file.isPending} className={small} disabled={!client || file.isPending} onClick={() => client && act('client', client)}>{client ? `File on ${client.full_name.split(' ')[0]}` : 'File'}</Button>
           </span>
         )}
         <button type="button" disabled={file.isPending} onClick={() => act('ignore')} className="text-[13px] text-[var(--ink-muted)] hover:text-[var(--ink)]">Ignore</button>
@@ -267,7 +267,7 @@ export function OutlookImport() {
         ) : (
           <>
             <p className="m-0 text-[14px] text-[var(--ink-muted)]">Looks at who you emailed at councils, and who emailed you, over the last 12 months (addresses and dates only). Anyone already on the list is left out.</p>
-            <div><Button className={small} disabled={find.isPending} onClick={() => { setOff(new Set()); find.mutate(undefined, { onError: (e) => toast((e as Error).message, 'danger') }); }}>
+            <div><Button busy={find.isPending} className={small} disabled={find.isPending} onClick={() => { setOff(new Set()); find.mutate(undefined, { onError: (e) => toast((e as Error).message, 'danger') }); }}>
               {find.isPending ? 'Looking…' : find.isSuccess ? 'Look again' : 'Look through my Outlook'}
             </Button></div>
           </>
@@ -292,7 +292,7 @@ export function OutlookImport() {
               ))}
             </ul>
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="primary" className={small} disabled={!chosen.length || add.isPending} onClick={() => add.mutate(chosen, {
+              <Button busy={add.isPending} variant="primary" className={small} disabled={!chosen.length || add.isPending} onClick={() => add.mutate(chosen, {
                 onSuccess: () => { toast(`Added ${chosen.length} to the officer list`, 'success'); find.reset(); },
                 onError: (e) => toast((e as Error).message, 'danger'),
               })}>{add.isPending ? 'Adding…' : `Add ${chosen.length} to the officer list`}</Button>

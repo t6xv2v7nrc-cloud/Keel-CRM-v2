@@ -35,7 +35,7 @@ export function ShareClient({ applicant, onClose }: { applicant: Applicant; onCl
       ) : !agreed && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md bg-[var(--note-bg)] px-3 py-2 text-[14px] text-[var(--note-fg)]">
           <span className="min-w-0 flex-1 basis-[220px]">{first} has not agreed to their details going to landlords yet. Ask them first.</span>
-          <Button className="min-h-0 px-3 py-1.5 text-[13px]" disabled={triage.isPending}
+          <Button busy={triage.isPending} className="min-h-0 px-3 py-1.5 text-[13px]" disabled={triage.isPending}
             onClick={() => triage.mutate({ applicant, patch: { share_with_landlords: true }, note: 'Agreed their details can be sent to landlords' }, {
               onSuccess: () => toast(`Recorded: ${first} agreed`, 'success'),
               onError: (e) => toast((e as Error).message, 'danger'),

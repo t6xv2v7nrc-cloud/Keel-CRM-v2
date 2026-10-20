@@ -30,8 +30,8 @@ export function StageBadge({ stage }: { stage: ApplicantStage }) {
 export function NewBadge() {
   return (
     <span title="Got in touch in the last 7 days"
-      className="inline-flex items-center rounded bg-[var(--accent)] px-1.5 py-0.5 text-[12px] font-semibold text-[var(--on-accent)]">
-      New
+      className="inline-flex items-center gap-1 rounded bg-[var(--accent)] px-1.5 py-0.5 text-[12px] font-semibold text-[var(--on-accent)]">
+      <span aria-hidden className="keel-ping h-1.5 w-1.5 rounded-full bg-current" />New
     </span>
   );
 }

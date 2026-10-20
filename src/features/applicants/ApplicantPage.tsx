@@ -1,9 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import {
-  Avatar, Button, Card, CardHeader, Empty, Help, IceBadge, Icon, NewBadge, StageBadge, TierBadge, UrgentChip, useToast,
-} from '../../components/ui';
+import { Avatar, Button, Card, CardHeader, Empty, Help, IceBadge, Icon, NewBadge, PageSkeleton, StageBadge, TierBadge, UrgentChip, useToast } from '../../components/ui';
 import {
   sentKey, useActivities, useApplicant, useApplicants, useAssign, useCalls, useDeals, useDeleteApplicant, usePeople, useProperties, useProviders, useRequests,
   useMatchOptions, useSaveSettings, useSentOnWhatsApp, useSettings,
@@ -39,6 +37,7 @@ import { openCard, useFold } from '../../lib/collapse';
 import { CLIENT_CARDS, cardOrder, isStandardOrder, moveCard } from '../../lib/clientLayout';
 import type { ClientCard } from '../../lib/clientLayout';
 import { clientAreas, placeKey } from '../../lib/geo';
+import { Tip } from '../guide/Guide';
 
 export function ApplicantPage() {
   const { id } = useParams<{ id: string }>();
@@ -61,7 +60,7 @@ export function ApplicantPage() {
     setTimeout(() => document.getElementById('details')?.scrollIntoView({ block: 'start' }), 50);
   }, [loaded, hash]);
 
-  if (isLoading) return <div className="grid min-h-[50vh] place-items-center text-[var(--ink-muted)]">Loading…</div>;
+  if (isLoading) return <PageSkeleton />;
   if (!applicant) return <div className="grid min-h-[50vh] place-items-center text-[var(--ink-muted)]">Client not found.</div>;
 
   const mine = calls.filter((c) => c.applicant_id === applicant.id);
@@ -102,12 +101,13 @@ export function ApplicantPage() {
           <Button className="min-h-0 px-3 py-1.5 text-[13px]" onClick={() => setArranging((v) => !v)} aria-expanded={arranging}>
             <Icon name="layers" size={14} />{arranging ? 'Done arranging' : 'Arrange'}
           </Button>
-          <Button variant="danger" className="min-h-0 px-3 py-1.5 text-[13px]" onClick={handleDelete} disabled={deleteApplicant.isPending}>
+          <Button busy={deleteApplicant.isPending} variant="danger" className="min-h-0 px-3 py-1.5 text-[13px]" onClick={handleDelete} disabled={deleteApplicant.isPending}>
             <Icon name="trash" size={14} />{deleteApplicant.isPending ? 'Deleting…' : 'Delete'}
           </Button>
         </div>
       </div>
 
+      <Tip id="client" />
       {arranging && <ArrangePanel order={cards} onChange={arrange} onDone={() => setArranging(false)} />}
 
       <HeroCard applicant={applicant} />
@@ -319,8 +319,8 @@ function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
         </div>
       )}
       {available.length === 0 ? (
-        <Empty icon="building" title="No properties saved yet">
-          <Link to="/properties" className="text-[var(--link)] hover:underline">Paste your list on the Properties tab</Link> to see what suits this client.
+        <Empty icon="building" title="No properties saved yet" action={<Link to="/properties" className="inline-flex min-h-[40px] items-center gap-2 rounded-md bg-[var(--accent)] px-4 text-[15px] font-medium text-[var(--on-accent)] hover:bg-[var(--accent-strong)]"><Icon name="plus" size={16} />Paste a property list</Link>}>
+          Paste a supplier's list on Properties and Keel shows here which ones suit this client, best first.
         </Empty>
       ) : pinned && matches.length === 0 ? (
         <div className="pb-2" />

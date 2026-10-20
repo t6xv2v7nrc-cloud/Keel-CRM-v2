@@ -106,6 +106,21 @@ src/
                       0026 `outlook_messages` claims each email once; UI in features/outlook/Outlook.tsx: Send from
                       Outlook (always asks first), Your Outlook (My settings), Outlook (Team settings, with Entra steps),
                       Officer emails from Outlook (Bin), Officers from your Outlook (Councils), checked every 5 minutes),
+              notifications.ts (what needs someone, by Home's rules: Bin to review, replies and outcomes owed to officers,
+                      viewings in the next 3 hours, next steps due, overdue money, officers' emails, back from ice; ids
+                      stay the same while it is the same thing; first names and short addresses only; `pushPlan` picks
+                      what goes to phones: new things once each, a viewing within the hour, more than 3 as one, and a
+                      morning summary on working days 8:30 to 11 London time); the bell, panel and pop-ups are
+                      features/notifications/Notifications.tsx (read state per person per device),
+              push.ts (notifications on this device: Web Push via sw.js; turn on per device in My settings
+                      (features/notifications/PushCard.tsx); on iPhone only from the Home Screen; 0027 push_subscriptions;
+                      server side netlify/functions/push-key.ts (public key; the key pair is made once into push_keys,
+                      which no policy opens), push-test.ts, and push-send.ts every 10 minutes (TZ London, the same rules
+                      as the bell, each sent once via push_log; the first run only notes what is already there)),
+              guide.ts (in-product guidance: Getting started on Home (steps tick themselves from what Keel holds; owner
+                      steps say so; put away per device, back from the account menu), What's new (`WHATS_NEW`, newest
+                      first, ids never reused; card on Home while unseen, page at /whats-new), `TIPS` (one per page, Got
+                      it per device); UI in features/guide/Guide.tsx; add a What's new entry for anything Ridwan would notice),
               clipboard.ts (copy with a fallback for older phones), files.ts (save a file, share sheet on phones),
               duplicates.ts (clients entered twice: same phone, email or name; a contact on more than 3 clients is shared,
                              not a duplicate; merging is the `merge_applicants` database function, 0014),
@@ -123,8 +138,11 @@ src/
                        within LHA (target 100%), first replies and outcomes on time, list health; the month's goal from
                        Team settings `monthlyGoal` (6 to 8 placements, 4 with an incentive); read-only, no migration),
               help.ts (words behind the "?" help buttons)
-  components/ ui primitives on tokens (Button, StageBadge, Card, Field, Toast, Icon,
-              Visuals: avatars, page headers, stat tiles, SVG charts, UpdateNote for "run this migration")
+  components/ ui primitives on tokens (Button (lifts on hover, `busy` spinner; every button gives a little on press,
+              index.css), StageBadge, Card, Field, Toast (icon, slide in, close, countdown bar), Icon,
+              Visuals: avatars, page headers, stat tiles (numbers count up), PageSkeleton, Empty (with `action`),
+              SVG charts, UpdateNote for "run this migration"). Motion tokens (--ease-*, --dur-*) and keel-* animations
+              in index.css (keel-page, keel-stagger, keel-rise, keel-pop, keel-skeleton, keel-ping); all off with reduced motion
   features/   councils/ (the Councils page at /councils: officers with one-click opted out / left, list health, schemes)
               dashboard/ bin/ pipeline/ (with the Housing officers and Possible duplicates boxes) calls/ applicants/ properties/ settings/ map/ (Leaflet, lazy-loaded) progress/ requests/ (request sheet, Awaiting providers) money/ (the Finances page at /finances: Owed, Potential, Calendar, Paid; invoice page at /finances/invoice/:id;
               client card, Home summary)
@@ -182,6 +200,10 @@ supabase/checks/live-vs-repo.sql  (read-only: which migrations the live database
   LCWRA lifts the benefit cap and the UC-only limit, not the shared rate. PIP clients are still held to LHA (Step 6).
 - Short lists, not endless ones: each property shows only its best few clients (`bestFew`), one line each. No kanban.
 - Nothing scrolls sideways, on a phone especially.
+- Keel should feel alive but quiet: things rise into place, buttons give and spin while busy, toasts slide in; nothing
+  flashes or loops except a soft ping on New and unread. Notifications (the bell, pop-ups, push) are worked out from the
+  data by notifications.ts, never typed in, and carry first names only. New features get a What's new entry, and a page's
+  first-time tip if it needs one; empty pages say what to do next.
 - Cards fold away: `<Card fold="page.name">` (startsFolded for Settings, which reads as a list of sections) folds from its
   CardHeader, remembered per device (collapse.ts); a link to a Settings card (#targets) opens it. Property cards fold too
   (Cards: Open or Folded on the Properties page, remembered; folded on a phone, their buttons wait), the Mailer folds a
@@ -303,7 +325,8 @@ Never commit `.env.local`. Never expose the service role key or Anthropic key to
   applicants; backs up deals and applicants, fills nothing in), then 0023 (postcode_area, age_band, benefit_cap on
   applicants for matching; backs up applicants), then 0024 (photo_urls on properties, property_ids and subject on
   officer_sends, for the Mailer; backs up both), then 0025 (not_ready_at and not_ready_note on properties: ready by
-  default; backs up properties), then 0026 (outlook_messages: each Outlook email Keel has filed, once; a new table only).
+  default; backs up properties), then 0026 (outlook_messages: each Outlook email Keel has filed, once; a new table only),
+  then 0027 (push_subscriptions, push_keys, push_log for notifications on devices; new tables only).
 - Check every migration runs, twice, on a scratch Postgres before committing one:
   `npm i --no-save @electric-sql/pglite && node scripts/check-migrations.mjs` (it also tests the merge and invoice numbers).
 
@@ -334,7 +357,8 @@ Page containers are `p-4 sm:p-6`; a fixed width (`w-[220px]`) needs `max-w-full`
 full screen from the home screen (manifest `display: standalone`); icons are in `public/` (apple-touch-icon 180, 192,
 512 and a maskable 512). In the home-screen app, sign in with a password: an email link opens in Safari instead.
 `public/sw.js` (registered in `main.tsx`, production only) keeps `/assets/` on the device and fetches the page
-network first (3 seconds, then the kept copy); it never touches Supabase, `/api`, other sites or the Outlook sign-in page (/outlook-redirect.html). Bump `CACHE` if its
+network first (3 seconds, then the kept copy); it never touches Supabase, `/api`, other sites or the Outlook sign-in page (/outlook-redirect.html).
+It also shows push notifications and opens Keel at the right page when one is tapped. Bump `CACHE` if its
 rules change.
 
 ## Pitfalls

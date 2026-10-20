@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Button, Card, Help, Icon, NewBadge, PageHeader, TierBadge, UrgentChip, useToast } from '../../components/ui';
+import { Button, Card, Help, Icon, NewBadge, PageHeader, PageSkeleton, TierBadge, UrgentChip, useToast } from '../../components/ui';
 import {
   NeedsDatabaseUpdate, PROPERTY_STATUS_LABEL, sentKey, useAddProperties, useApplicants, useDeleteProperties, useProperties,
   useDeals, useMatchOptions, useProviders, useRequests, useSentOnWhatsApp, useSetPropertyProvider, useSetPropertyStatus,
@@ -32,6 +32,7 @@ import { bedsOfType, TYPE_OPTIONS } from '../../lib/propertyEdit';
 import { EditProperty } from './EditProperty';
 import { FlagChip, PropertyChecks } from './Checks';
 import { checksFor } from '../../lib/propertyChecks';
+import { Tip } from '../guide/Guide';
 
 const normAddr = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -175,7 +176,7 @@ export function PropertiesPage() {
     setSelected(new Set());
   };
 
-  if (isLoading) return <div className="grid min-h-[50vh] place-items-center text-[var(--ink-muted)]">Loading…</div>;
+  if (isLoading) return <PageSkeleton />;
 
   const showPaste = pasteOpen || properties.length === 0;
   const card = (p: Property) => (
@@ -216,6 +217,7 @@ export function PropertiesPage() {
           )}
           {!showPaste && <Button variant="primary" onClick={() => setPasteOpen(true)}><Icon name="plus" size={16} />Paste properties</Button>}
       </PageHeader>
+      <Tip id="properties" />
 
       {needsUpdate && (
         <div role="alert" className="rounded-md border border-[var(--line-strong)] bg-[var(--note-bg)] p-4 text-[15px] text-[var(--note-fg)]">
@@ -359,7 +361,7 @@ export function PropertiesPage() {
           {view === 'map' ? (
             <MapView properties={rows} matches={matches} applicants={applicants} renderCard={card} />
           ) : (
-            <div className="flex flex-col gap-4">
+            <div className="keel-stagger flex flex-col gap-4">
               {rows.map((p) => <div key={p.id}>{card(p)}</div>)}
               {rows.length === 0 && <p className="m-0 text-[15px] text-[var(--ink-muted)]">No properties in this view.</p>}
             </div>
@@ -433,7 +435,7 @@ function SavedLists({ properties, onClose, onMove, moving }: {
                   Move to your account
                 </Button>
               )}
-              <Button variant="danger" className="min-h-0 px-3 py-1.5 text-[13px]" disabled={del.isPending}
+              <Button busy={del.isPending} variant="danger" className="min-h-0 px-3 py-1.5 text-[13px]" disabled={del.isPending}
                 onClick={() => purge(ps, ps[0].source_tag ? `the list from ${ps[0].source_tag}` : 'this list')}>
                 Purge this list
               </Button>
@@ -649,7 +651,7 @@ function PasteImport({ existing, applicants, canClose, onClose, onAdded, onNeeds
             </span>
             <Button onClick={() => setDrafts(null)}>Back</Button>
             {blocked && <Button onClick={saveOnDevice} disabled={chosen.length === 0}>Save on this device for now</Button>}
-            <Button variant="primary" onClick={save} disabled={chosen.length === 0 || add.isPending}>
+            <Button busy={add.isPending} variant="primary" onClick={save} disabled={chosen.length === 0 || add.isPending}>
               {add.isPending ? 'Saving…' : `Save ${plural(chosen.length, 'property', 'properties')}`}
             </Button>
           </div>

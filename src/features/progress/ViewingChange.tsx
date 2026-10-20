@@ -152,7 +152,7 @@ function ViewingChangeSheet({ dealId, onClose }: { dealId: string; onClose: () =
           {!done ? (
             <>
               <Button onClick={onClose}>Keep it as it is</Button>
-              <Button variant="primary" disabled={move.isPending || (mode === 'move' && !when)} onClick={save}>
+              <Button busy={move.isPending} variant="primary" disabled={move.isPending || (mode === 'move' && !when)} onClick={save}>
                 {mode === 'move' ? 'Save the new time' : 'Cancel the viewing'}
               </Button>
             </>

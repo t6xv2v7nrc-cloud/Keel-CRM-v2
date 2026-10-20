@@ -83,8 +83,8 @@ function SchemeCard({ s }: { s: CouncilScheme }) {
           </dl>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          {!s.registered && <Button className={small} disabled={save.isPending} onClick={() => quick({ registered: true, registered_on: todayIso() }, `Registered with ${s.council}`)}>Mark as registered</Button>}
-          <Button className={small} disabled={save.isPending || s.last_contact === todayIso()} onClick={() => quick({ last_contact: todayIso() }, `${s.council}: contacted today`)}>Contacted today</Button>
+          {!s.registered && <Button busy={save.isPending} className={small} disabled={save.isPending} onClick={() => quick({ registered: true, registered_on: todayIso() }, `Registered with ${s.council}`)}>Mark as registered</Button>}
+          <Button busy={save.isPending} className={small} disabled={save.isPending || s.last_contact === todayIso()} onClick={() => quick({ last_contact: todayIso() }, `${s.council}: contacted today`)}>Contacted today</Button>
           {s.route_mailbox && (
             <Button className={small} onClick={async () => { const ok = await copyText(s.route_mailbox!); toast(ok ? 'Mailbox copied' : 'Could not copy', ok ? 'success' : 'danger'); }}>
               <Icon name="mail" size={14} />Copy mailbox
@@ -148,7 +148,7 @@ function SchemeEditor({ scheme, council, onDone }: { scheme: CouncilScheme | nul
         <Field label="Notes" wide><input value={f.notes} onChange={(e) => set('notes')(e.target.value)} className={box} /></Field>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="primary" className={small} disabled={!f.council.trim() || !mailboxOk || save.isPending} onClick={go}>{save.isPending ? 'Saving…' : scheme ? 'Save changes' : 'Add the scheme'}</Button>
+        <Button busy={save.isPending} variant="primary" className={small} disabled={!f.council.trim() || !mailboxOk || save.isPending} onClick={go}>{save.isPending ? 'Saving…' : scheme ? 'Save changes' : 'Add the scheme'}</Button>
         <Button className={small} onClick={onDone}>Cancel</Button>
       </div>
     </div>

@@ -111,13 +111,13 @@ export function MoneyRow({ r, client, provider, showClient = true }: { r: Receiv
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {signing && (
-          <Button className={small} disabled={save.isPending} onClick={signedUp} title="The client has signed up today, so this falls due">Signed up</Button>
+          <Button busy={save.isPending} className={small} disabled={save.isPending} onClick={signedUp} title="The client has signed up today, so this falls due">Signed up</Button>
         )}
         {waiting && !signing && (
-          <Button className={small} disabled={save.isPending} onClick={rentIn} title="The client's first month's rent has been paid, so the fee falls due">First rent paid</Button>
+          <Button busy={save.isPending} className={small} disabled={save.isPending} onClick={rentIn} title="The client's first month's rent has been paid, so the fee falls due">First rent paid</Button>
         )}
         {isOpen(r) && r.kind === 'incentive' && r.status === 'to_claim' && (
-          <Button className={small} disabled={save.isPending} onClick={() => set('submitted', { claim_submitted_on: todayIso() }, 'claim submitted')}>Claim submitted</Button>
+          <Button busy={save.isPending} className={small} disabled={save.isPending} onClick={() => set('submitted', { claim_submitted_on: todayIso() }, 'claim submitted')}>Claim submitted</Button>
         )}
         {isOpen(r) && !waiting && !signing && r.status !== 'to_claim' && (chase ? (
           <a href={chase} target="_blank" rel="noreferrer" onClick={() => set('chased')} title={`Chase ${r.payer} on WhatsApp`}
@@ -125,10 +125,10 @@ export function MoneyRow({ r, client, provider, showClient = true }: { r: Receiv
             <Icon name="chat" size={14} /> Chase
           </a>
         ) : (
-          <Button className={small} disabled={save.isPending} onClick={() => set('chased')}>Chased</Button>
+          <Button busy={save.isPending} className={small} disabled={save.isPending} onClick={() => set('chased')}>Chased</Button>
         ))}
         {isOpen(r) && (
-          <Button variant="primary" className={small} disabled={save.isPending} onClick={() => set('paid', { paid_on: todayIso() })}><Icon name="check" size={14} />Paid</Button>
+          <Button busy={save.isPending} variant="primary" className={small} disabled={save.isPending} onClick={() => set('paid', { paid_on: todayIso() })}><Icon name="check" size={14} />Paid</Button>
         )}
         <Link to={`/finances/invoice/${r.id}`} title={r.invoice_number ? `Open invoice ${r.invoice_number}` : 'Raise an invoice for this'}
           className="inline-flex items-center gap-1.5 rounded-md border border-[var(--line-strong)] px-3 py-1.5 text-[13px] font-medium text-[var(--ink)] hover:border-[var(--accent)]">
@@ -353,7 +353,7 @@ export function ReceivableForm({ initial, was = null, council, onDone }: { initi
         )}
         <span className={was ? '' : 'mr-auto'} />
         <Button className={small} onClick={onDone}>Cancel</Button>
-        <Button variant="primary" className={small} disabled={save.isPending || !d.payer.trim()} onClick={submit}>
+        <Button busy={save.isPending} variant="primary" className={small} disabled={save.isPending || !d.payer.trim()} onClick={submit}>
           {save.isPending ? 'Saving…' : was ? 'Save changes' : `Add ${KIND_LABEL[d.kind].toLowerCase()}`}
         </Button>
       </div>

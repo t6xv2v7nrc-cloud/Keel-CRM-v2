@@ -411,7 +411,7 @@ function AddDeal({ applicant, tracked, onDone }: { applicant: Applicant; tracked
         <option value="sent">Sent to them</option>
         <option value="interested">They are interested</option>
       </select>
-      <Button variant="primary" className="min-h-0 px-3 py-2 text-[13px]" disabled={!chosen || add.isPending}
+      <Button busy={add.isPending} variant="primary" className="min-h-0 px-3 py-2 text-[13px]" disabled={!chosen || add.isPending}
         onClick={() => chosen && add.mutate({ applicantId: applicant.id, properties: [chosen], status }, {
           onSuccess: () => { toast(`Tracking ${short(chosen.address_line)} for ${first(applicant.full_name)}`, 'success'); onDone(); },
           onError: (e) => toast((e as Error).message, 'danger'),

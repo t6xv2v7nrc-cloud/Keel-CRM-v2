@@ -178,7 +178,7 @@ function AwaitingRow({ request, overdue, provider, clients }: { request: Provide
         <div className="flex flex-wrap items-center gap-2 rounded-lg bg-[var(--surface-2)] p-3 text-[14px]">
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why? e.g. let already, no UC" aria-label="Why they said no"
             className="h-9 min-w-[200px] flex-1 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[14px] text-[var(--ink)]" />
-          <Button className="min-h-0 px-3 py-1.5 text-[13px]" disabled={update.isPending} onClick={decline}>Mark as declined</Button>
+          <Button busy={update.isPending} className="min-h-0 px-3 py-1.5 text-[13px]" disabled={update.isPending} onClick={decline}>Mark as declined</Button>
           <Button variant="ghost" className="min-h-0 px-3 py-1.5 text-[13px]" onClick={() => setMode(null)}>Cancel</Button>
         </div>
       )}

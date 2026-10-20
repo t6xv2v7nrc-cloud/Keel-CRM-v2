@@ -14,6 +14,7 @@ import type { HealthKey, OfficerRecord, OfficerSend, OfficerStatus, RouteType } 
 import { useApplicants, useLogOfficerSends, useOfficerSends, useOfficers, useSaveOfficer, useSetOfficerStatus } from '../../lib/hooks';
 import { SchemesView } from './Schemes';
 import { OutlookImport } from '../outlook/Outlook';
+import { Tip } from '../guide/Guide';
 
 const small = 'min-h-0 px-3 py-1.5 text-[13px]';
 const box = 'h-10 w-full min-w-0 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-3 text-[15px] text-[var(--ink)] outline-none focus:border-[var(--accent)]';
@@ -27,6 +28,7 @@ export function CouncilsPage() {
   return (
     <div className="mx-auto flex max-w-[1100px] flex-col gap-5 p-4 pb-24 sm:p-6">
       <PageHeader icon="users" title="Councils" help="councils" sub="Who may be emailed, and each council's scheme" />
+      <Tip id="councils" />
       <div role="tablist" aria-label="Councils" className="flex w-full rounded-lg border border-[var(--line)] bg-[var(--paper-2)] p-1 sm:w-fit">
         {([['officers', 'Officers'], ['schemes', 'Schemes']] as const).map(([k, label]) => (
           <button key={k} role="tab" type="button" aria-selected={tab === k} onClick={() => setParams(k === 'officers' ? {} : { tab: k }, { replace: true })}
@@ -134,7 +136,7 @@ function OfficersView() {
           <Button variant="primary" className={small} disabled={!sendStatus || !list.to.length} onClick={copy}>
             <Icon name="mail" size={14} />Copy the mailing list ({list.addresses.length})
           </Button>
-          <Button className={small} disabled={!sendStatus || !list.to.length || logSends.isPending} onClick={record}>
+          <Button busy={logSends.isPending} className={small} disabled={!sendStatus || !list.to.length || logSends.isPending} onClick={record}>
             <Icon name="send" size={14} />Record a bulk email to them
           </Button>
         </div>
@@ -223,9 +225,9 @@ function OfficerRow({ o, sends, nominatedFromClients, canMark }: { o: OfficerRec
         </div>
         {canMark && (
           <div className="flex flex-wrap items-center gap-1.5">
-            {status !== 'opted_out' && <Button className={small} disabled={setStatus.isPending} onClick={() => mark('opted_out')}>Mark as opted out</Button>}
-            {status !== 'left' && <Button className={small} disabled={setStatus.isPending} onClick={() => mark('left')}>Mark as left</Button>}
-            {status !== 'active' && <Button className={small} disabled={setStatus.isPending} onClick={() => mark('active')}>Back to active</Button>}
+            {status !== 'opted_out' && <Button busy={setStatus.isPending} className={small} disabled={setStatus.isPending} onClick={() => mark('opted_out')}>Mark as opted out</Button>}
+            {status !== 'left' && <Button busy={setStatus.isPending} className={small} disabled={setStatus.isPending} onClick={() => mark('left')}>Mark as left</Button>}
+            {status !== 'active' && <Button busy={setStatus.isPending} className={small} disabled={setStatus.isPending} onClick={() => mark('active')}>Back to active</Button>}
             <Button className={small} aria-expanded={editing} onClick={() => setEditing((v) => !v)}><Icon name="pencil" size={14} />More</Button>
           </div>
         )}
@@ -277,8 +279,8 @@ function OfficerEditor({ officer, onDone }: { officer: OfficerRecord | null; onD
             <span className="text-[13px] font-medium text-[var(--ink-muted)]">On leave until</span>
             <input type="date" value={leave} min={todayIso()} onChange={(e) => setLeave(e.target.value)} className={`${box} w-auto`} />
           </label>
-          <Button className={small} disabled={!leave || setStatus.isPending} onClick={() => status('on_leave', leave)}>Mark as on leave</Button>
-          <Button className={small} disabled={setStatus.isPending} onClick={() => status('bounced')}>Mark as bounced</Button>
+          <Button busy={setStatus.isPending} className={small} disabled={!leave || setStatus.isPending} onClick={() => status('on_leave', leave)}>Mark as on leave</Button>
+          <Button busy={setStatus.isPending} className={small} disabled={setStatus.isPending} onClick={() => status('bounced')}>Mark as bounced</Button>
         </div>
       )}
       <div className="grid gap-3 sm:grid-cols-2">
@@ -303,7 +305,7 @@ function OfficerEditor({ officer, onDone }: { officer: OfficerRecord | null; onD
         <Field label="Notes" wide><input value={f.notes} onChange={(e) => set('notes')(e.target.value)} className={box} /></Field>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="primary" className={small} disabled={!valid || save.isPending} onClick={go}>{save.isPending ? 'Saving…' : officer ? 'Save changes' : 'Add to the list'}</Button>
+        <Button busy={save.isPending} variant="primary" className={small} disabled={!valid || save.isPending} onClick={go}>{save.isPending ? 'Saving…' : officer ? 'Save changes' : 'Add to the list'}</Button>
         <Button className={small} onClick={onDone}>Cancel</Button>
         {officer && sendAddress(officer) && <span className="text-[12px] text-[var(--ink-muted)]">Mail goes to {sendAddress({ email: f.email, send_to_mailbox: f.send_to_mailbox }) ?? 'nobody'}.</span>}
       </div>

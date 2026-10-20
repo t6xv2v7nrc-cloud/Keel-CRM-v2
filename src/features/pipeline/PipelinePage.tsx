@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApplicants, useCalls, useDeals, useLastContacts, useMoveStage, useDeleteApplicant, usePeople, useProviders, useRequests } from '../../lib/hooks';
 import { CHANNEL_LABEL } from '../../lib/contacts';
 import type { LastContact } from '../../lib/contacts';
-import { Avatar, Button, Card, Help, IceBadge, Icon, NewBadge, PageHeader, TierBadge, UrgentChip, useToast } from '../../components/ui';
+import { Avatar, Button, Card, Help, IceBadge, Icon, NewBadge, PageHeader, PageSkeleton, TierBadge, UrgentChip, useToast } from '../../components/ui';
 import { HousingOfficersBox } from './Officers';
 import { DuplicatesBox } from './Duplicates';
 import { openGroups } from '../../lib/duplicates';
@@ -23,6 +23,7 @@ import {
   filtersToParams, hasOfficer, householdOf, isActive, isFresh, isIced, isUrgent, officerName, officerOrg, parseQuery, previewText, searchText, sortApplicants,
 } from '../../lib/search';
 import type { BenefitKey, PipelineFilters, SortKey } from '../../lib/search';
+import { Tip } from '../guide/Guide';
 
 const STAGE_LABEL: Record<ApplicantStage, string> = {
   lead: 'Lead', referred: 'Referred', viewing: 'Viewing', offer: 'Offer',
@@ -236,7 +237,7 @@ export function PipelinePage() {
     });
   };
 
-  if (isLoading) return <div className="grid min-h-[50vh] place-items-center text-[var(--ink-muted)]">Loading…</div>;
+  if (isLoading) return <PageSkeleton />;
 
   return (
     <div className="mx-auto flex max-w-[1240px] flex-col gap-4 p-4 pb-24 sm:p-6 sm:pb-24">
@@ -250,6 +251,7 @@ export function PipelinePage() {
           <Icon name="users" size={16} />Housing officers
         </Button>
       </PageHeader>
+      <Tip id="pipeline" />
 
       {dupesOpen && <DuplicatesBox groups={dupes} onClose={() => setDupesOpen(false)} onChange={() => setDupesSeen((n) => n + 1)} />}
 

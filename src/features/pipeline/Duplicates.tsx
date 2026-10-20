@@ -70,10 +70,10 @@ function GroupCard({ g, ready, onChange }: { g: DuplicateGroup; ready: boolean; 
         ))}
       </fieldset>
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="primary" className={small} disabled={!ready || merge.isPending} onClick={go}>
+        <Button busy={merge.isPending} variant="primary" className={small} disabled={!ready || merge.isPending} onClick={go}>
           {merge.isPending ? 'Merging…' : `Merge into ${first(kept.full_name)}`}
         </Button>
-        <Button className={small} disabled={merge.isPending} onClick={() => { dismissGroup(groupId(g)); onChange(); }}>Not the same person</Button>
+        <Button busy={merge.isPending} className={small} disabled={merge.isPending} onClick={() => { dismissGroup(groupId(g)); onChange(); }}>Not the same person</Button>
       </div>
     </div>
   );

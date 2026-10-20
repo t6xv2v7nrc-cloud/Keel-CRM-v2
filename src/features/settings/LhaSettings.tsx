@@ -71,7 +71,7 @@ export function LhaSettings({ draft, set }: { draft: AppSettings; set: <K extend
   const typed = district.trim() ? lookupPostcode(district) : null;
 
   return (
-    <Card fold="settings.lha" startsFolded>
+    <Card id="lha" fold="settings.lha" startsFolded className="scroll-mt-28">
       <CardHeader icon="pound" title="LHA rates" sub={`${table.year} · ${names.length} areas`} help="lha" />
       <div className="flex flex-col gap-5 p-5">
         {/* Which rates, and where they came from */}
@@ -277,10 +277,10 @@ function GovImport() {
             <p className="m-0 text-[13px]" style={{ color: 'var(--note-fg)' }}>Left out for a missing size: {f.incomplete.join(', ')}.</p>
           )}
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="primary" disabled={!urlOk || !from || load.isPending} onClick={go}>
+            <Button busy={load.isPending} variant="primary" disabled={!urlOk || !from || load.isPending} onClick={go}>
               {load.isPending ? 'Loading…' : `Load ${count} areas${from ? `, applying from ${shortDate(from)}` : ''}`}
             </Button>
-            <Button disabled={load.isPending} onClick={reset}>Cancel</Button>
+            <Button busy={load.isPending} disabled={load.isPending} onClick={reset}>Cancel</Button>
             {(!urlOk || !from) && <span className="text-[13px] text-[var(--ink-muted)]">Add the gov.uk page and the date first.</span>}
           </div>
         </div>

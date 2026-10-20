@@ -111,7 +111,7 @@ export function ThisWeek({ applicants }: { applicants: Applicant[] }) {
                 <Link to="/pipeline?progress=cold" className="font-medium hover:underline">{cold.length} {cold.length === 1 ? 'lead has' : 'leads have'} gone cold</Link>
                 <span className="text-[var(--ink-muted)]">: nothing for {activeSettings().coldAfterDays}+ days</span>
               </span>
-              <Button className="min-h-0 px-3 py-1.5 text-[13px]" disabled={markCold.isPending} onClick={moveColdToLost}>
+              <Button busy={markCold.isPending} className="min-h-0 px-3 py-1.5 text-[13px]" disabled={markCold.isPending} onClick={moveColdToLost}>
                 {markCold.isPending ? 'Moving…' : 'Move them to Lost'}
               </Button>
             </div>

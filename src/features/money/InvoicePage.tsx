@@ -91,7 +91,7 @@ export function InvoicePage() {
           </label>
           <div className="flex flex-wrap items-center gap-2">
             {!raised ? (
-              <Button variant="primary" disabled={!full || r.amount == null || raise.isPending} onClick={onRaise}>
+              <Button busy={raise.isPending} variant="primary" disabled={!full || r.amount == null || raise.isPending} onClick={onRaise}>
                 <Icon name="file" size={16} />{raise.isPending ? 'Raising…' : 'Raise invoice'}
               </Button>
             ) : (
@@ -109,7 +109,7 @@ export function InvoicePage() {
                 )}
                 {mail && email && <OutlookSendButton to={[email]} subject={mail.subject} body={mail.body} what={`this invoice to ${email}`} onSent={() => sent('by email')} />}
                 {billDirty && (
-                  <Button className={small} disabled={saveBillTo.isPending} onClick={() => saveBillTo.mutate({ r, billTo }, {
+                  <Button busy={saveBillTo.isPending} className={small} disabled={saveBillTo.isPending} onClick={() => saveBillTo.mutate({ r, billTo }, {
                     onSuccess: () => toast('Saved who the invoice is to', 'success'), onError: (e) => toast((e as Error).message, 'danger'),
                   })}>Save bill to</Button>
                 )}

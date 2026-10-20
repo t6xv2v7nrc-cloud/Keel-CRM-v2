@@ -20,6 +20,7 @@ import { WaitingOnUs } from './WaitingOnUs';
 import { LongerTargets, WeeklyTargets } from './Targets';
 import { AwaitingProviders } from '../requests/AwaitingProviders';
 import { MoneyOwedSummary } from '../money/Money';
+import { GettingStarted, WhatsNewCard } from '../guide/Guide';
 
 const FUNNEL: Array<{ stage: ApplicantStage; label: string }> = [
   { stage: 'lead', label: 'Lead' }, { stage: 'referred', label: 'Referred' }, { stage: 'viewing', label: 'Viewing' },
@@ -83,7 +84,7 @@ export function DashboardPage() {
   const funnelMax = Math.max(1, ...FUNNEL.map((f) => byStage(f.stage)));
 
   return (
-    <div className="mx-auto flex max-w-[1120px] flex-col gap-6 p-4 pb-24 sm:p-6 sm:pb-24">
+    <div className="keel-stagger mx-auto flex max-w-[1120px] flex-col gap-6 p-4 pb-24 sm:p-6 sm:pb-24">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="m-0 text-[13px] font-medium uppercase tracking-wider text-[var(--ink-muted)]">
@@ -107,6 +108,9 @@ export function DashboardPage() {
           <Button variant="primary" onClick={() => navigate('/bin')}><Icon name="inbox" size={16} />Paste a screenshot</Button>
         </div>
       </header>
+
+      <GettingStarted />
+      <WhatsNewCard />
 
       <MorningSummary applicants={applicants} />
 
@@ -199,7 +203,9 @@ export function DashboardPage() {
       <Card fold="home.activity">
         <CardHeader icon="clock" title="Recent activity" />
         {recent.length === 0 ? (
-          <Empty icon="inbox" title="Nothing yet">Paste a screenshot or a website enquiry into the Bin to begin.</Empty>
+          <Empty icon="inbox" title="Nothing yet" action={<Button variant="primary" onClick={() => navigate('/bin')}><Icon name="inbox" size={16} />Open the Bin</Button>}>
+            Paste a screenshot or a website enquiry into the Bin to begin: Keel reads it and files the client.
+          </Empty>
         ) : (
           <ul className="m-0 grid list-none gap-x-6 p-2 md:grid-cols-2">
             {recent.map((act) => {

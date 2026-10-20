@@ -71,7 +71,7 @@ export function OfficerReply({ applicant }: { applicant: Applicant }) {
               : 'No first reply recorded.'}
         </span>
         {!r.repliedAt && (
-          <Button variant="primary" className={small} disabled={reply.isPending}
+          <Button busy={reply.isPending} variant="primary" className={small} disabled={reply.isPending}
             onClick={() => save({ officer_replied_at: new Date().toISOString() }, `First reply to ${officer} recorded`)}>
             I've replied to {firstOf(officer)}
           </Button>
@@ -91,7 +91,7 @@ export function OfficerReply({ applicant }: { applicant: Applicant }) {
             <input type="datetime-local" value={replied} onChange={(e) => setReplied(e.target.value)}
               className="h-9 rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[14px] text-[var(--ink)]" />
           </label>
-          <Button variant="primary" className={small} disabled={!arrived || reply.isPending}
+          <Button busy={reply.isPending} variant="primary" className={small} disabled={!arrived || reply.isPending}
             onClick={() => {
               const patch: { officer_replied_at?: string | null; nominated_at?: string | null } = {};
               const a = new Date(arrived).toISOString();
@@ -153,7 +153,7 @@ export function OutcomeBackRow({ applicant, deal, showAddress = false, compact =
         </a>
       )}
       {to.address && <OutlookSendButton to={[to.address]} subject={email.subject} body={email.body} what={`how the viewing went to ${officer}`} onSent={() => mark('email')} disabled={sent.isPending} />}
-      <Button className={small} disabled={sent.isPending} onClick={() => mark('other')}>Told them another way</Button>
+      <Button busy={sent.isPending} className={small} disabled={sent.isPending} onClick={() => mark('other')}>Told them another way</Button>
     </div>
   );
 }

@@ -6,8 +6,10 @@
 //   network is slow (3 seconds) or gone, the copy kept from last time is used instead.
 // - Client data is never kept here: Supabase, /api and anything on another site go straight to the
 //   network, untouched. So does the page Microsoft sends an Outlook sign-in back to.
+// - Notifications sent by Keel (push, turned on in Settings, My settings) are shown here, and a tap on one opens
+//   Keel at the right page.
 
-const CACHE = 'keel-shell-v2';
+const CACHE = 'keel-shell-v3';
 const PAGE = '/index.html';
 const SLOW_MS = 3000;
 
@@ -68,4 +70,35 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname === '/outlook-redirect.html') return;
   if (request.mode === 'navigate') event.respondWith(page(request));
   else if (url.pathname.startsWith('/assets/')) event.respondWith(asset(request));
+});
+
+// ── Notifications (push) ────────────────────────────────────────────
+
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data ? event.data.text() : '' }; }
+  event.waitUntil(self.registration.showNotification(data.title || 'Keel', {
+    body: data.body || '',
+    tag: data.tag || undefined,
+    renotify: !!data.tag,
+    data: { url: data.url || '/' },
+    icon: '/icon-192.png',
+    badge: '/favicon-32.png',
+  }));
+});
+
+// a tap opens Keel at the page it is about: the open window if there is one, else a new one
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = new URL((event.notification.data && event.notification.data.url) || '/', self.location.origin).href;
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const w of windows) {
+      if (new URL(w.url).origin !== self.location.origin) continue;
+      await w.focus();
+      if ('navigate' in w) await w.navigate(url).catch(() => {});
+      return;
+    }
+    await self.clients.openWindow(url);
+  })());
 });

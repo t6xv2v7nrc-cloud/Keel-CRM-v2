@@ -14,6 +14,7 @@ import type { Provider, Receivable, ReceivableKind } from '../../lib/types';
 import { FinancesNeedsUpdate, MoneyNeedsUpdate, MoneyRow, ReceivableForm } from './Money';
 import { PotentialList } from './Potential';
 import { MoneyCalendar } from './Calendar';
+import { Tip } from '../guide/Guide';
 
 const select = 'min-h-[40px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]';
 
@@ -74,6 +75,7 @@ export function MoneyPage() {
         sub={ready ? <>{money(t.owed)} owed{t.overdueCount > 0 && <> · <strong className="text-[var(--note-fg)]">{money(t.overdue)} overdue</strong></>}{pt.total + t.signing > 0 && <> · {money(pt.total + t.signing)} potential</>}</> : undefined}>
         {ready && <Button variant="primary" onClick={() => setAddOpen((v) => !v)}><Icon name="plus" size={16} />Add a fee or incentive</Button>}
       </PageHeader>
+      <Tip id="finances" />
 
       {!ready && <MoneyNeedsUpdate />}
       {ready && !full && <FinancesNeedsUpdate />}

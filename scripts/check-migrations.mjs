@@ -263,13 +263,27 @@ try { await fresh26.exec(`insert into outlook_messages (message_id, from_address
 const rls26 = (await fresh26.query(`select relrowsecurity as on from pg_class where relname = 'outlook_messages'`)).rows[0];
 check('outlook messages: each email once, only known outcomes, row level security on', dup26 === 1 && bad26 === 1 && rls26?.on === true, JSON.stringify({ dup26, bad26, rls26 }));
 
+// 0027: push notifications: one row per device, keys and log for the server only
+const fresh27 = await freshDb({ upTo: '0026' });
+for (let i = 0; i < 2; i++) await fresh27.exec(readFileSync(dir + '0027_push.sql', 'utf8'));
+await fresh27.exec(`insert into auth.users (id) values ('abababab-abab-abab-abab-abababababab')`);
+await fresh27.exec(`insert into push_subscriptions (user_id, endpoint, p256dh, auth) values ('abababab-abab-abab-abab-abababababab', 'https://push.example/1', 'k', 'a')`);
+let dup27 = 0, two27 = 0;
+try { await fresh27.exec(`insert into push_subscriptions (user_id, endpoint, p256dh, auth) values ('abababab-abab-abab-abab-abababababab', 'https://push.example/1', 'k', 'a')`); } catch { dup27++; }
+await fresh27.exec(`insert into push_keys (public_key, private_key) values ('pub', 'priv')`);
+try { await fresh27.exec(`insert into push_keys (id, public_key, private_key) values (2, 'pub', 'priv')`); } catch { two27++; }
+const rls27 = (await fresh27.query(`select count(*)::int as n from pg_class where relname in ('push_subscriptions', 'push_keys', 'push_log') and relrowsecurity`)).rows[0].n;
+const pol27 = (await fresh27.query(`select count(*)::int as n from pg_policies where tablename in ('push_keys', 'push_log')`)).rows[0].n;
+check('push: one row per device, one set of keys, RLS on all three, no policy opens the keys or the log', dup27 === 1 && two27 === 1 && rls27 === 3 && pol27 === 0,
+  JSON.stringify({ dup27, two27, rls27, pol27 }));
+
 // The read-only check of a live database against these files
 const liveCheck = readFileSync(new URL('../supabase/checks/live-vs-repo.sql', import.meta.url).pathname, 'utf8');
 const status = async (d) => Object.fromEntries((await d.query(liveCheck)).rows.map((r) => [r.item, [r.status, r.detail]]));
 const full = await status(db);
 const numbered = Object.keys(full).filter((k) => /^\d{4}$/.test(k));
 check('live check: every migration reads as done on a database that has had them all (data-only ones cannot be told)',
-  numbered.length === 26 && numbered.every((k) => full[k][0] === 'done' || (['0003', '0016'].includes(k) && full[k][0].startsWith('cannot tell'))), JSON.stringify(full));
+  numbered.length === 27 && numbered.every((k) => full[k][0] === 'done' || (['0003', '0016'].includes(k) && full[k][0].startsWith('cannot tell'))), JSON.stringify(full));
 const behind = await freshDb();
 await behind.exec(`alter table properties drop column lha_area; drop table postcode_brma;
   create table eod_reports (id uuid primary key, report_date date, data jsonb);`);

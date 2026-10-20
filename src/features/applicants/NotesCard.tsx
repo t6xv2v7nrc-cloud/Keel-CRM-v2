@@ -67,7 +67,7 @@ export function NotesCard({ applicant, activities, calls }: { applicant: Applica
             aria-label="Note"
             className="w-full rounded-md border border-[var(--line-strong)] bg-[var(--surface)] p-3 text-[15px] text-[var(--ink)] outline-none focus:border-[var(--accent)]" />
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="primary" className="min-h-0 px-4 py-2 text-[14px]" disabled={!text.trim() || add.isPending} onClick={save}>
+            <Button busy={add.isPending} variant="primary" className="min-h-0 px-4 py-2 text-[14px]" disabled={!text.trim() || add.isPending} onClick={save}>
               {add.isPending ? 'Saving…' : channel === 'note' ? 'Save note' : `Save ${CHANNEL_LABEL[channel].toLowerCase()} note`}
             </Button>
             <span className="text-[12px] text-[var(--ink-muted)]">Dated and signed with your name. Both of you can see it.</span>

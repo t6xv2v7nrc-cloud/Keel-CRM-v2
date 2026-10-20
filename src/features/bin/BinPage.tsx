@@ -15,6 +15,7 @@ import { defaultChoice, withMessageNotes } from './defaults';
 import type { CardState } from './defaults';
 import { supabase } from '../../lib/supabase';
 import { OutlookInbox } from '../outlook/Outlook';
+import { Tip } from '../guide/Guide';
 
 type Stage = 'idle' | 'staging' | 'processing';
 
@@ -199,6 +200,7 @@ export function BinPage() {
   return (
     <div className="mx-auto flex max-w-[1000px] flex-col gap-6 p-4 pb-24 sm:p-6 sm:pb-24">
       <PageHeader icon="inbox" title="The Bin" help="bin" sub="Paste a screenshot anywhere with Ctrl/Cmd+V. It gets read, classified and matched to your records." />
+      <Tip id="bin" />
       <OutlookInbox />
 
       {/* Capture zone */}

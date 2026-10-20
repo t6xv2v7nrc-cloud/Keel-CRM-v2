@@ -47,6 +47,64 @@ h1, h2, h3 { font-family: var(--font-display); }
   outline-offset: 2px;
 }
 
+/* ── Motion ──────────────────────────────────────────────────────
+   Quiet and quick: things rise into place, buttons give under a press, folded cards open out.
+   With reduced motion asked for (below), all of it is switched off. */
+@keyframes keel-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes keel-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes keel-pop { from { opacity: 0; transform: translateY(-4px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes keel-toast-in { from { opacity: 0; transform: translateY(14px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes keel-toast-out { to { opacity: 0; transform: translateY(8px) scale(0.98); } }
+@keyframes keel-slide-in { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+@keyframes keel-countdown { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@keyframes keel-shimmer { from { background-position: -320px 0; } to { background-position: 320px 0; } }
+@keyframes keel-ping { 0% { transform: scale(1); opacity: 0.55; } 80%, 100% { transform: scale(2.2); opacity: 0; } }
+@keyframes keel-bump { 0% { transform: scale(1); } 40% { transform: scale(1.25); } 100% { transform: scale(1); } }
+@keyframes keel-ring { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(14deg); } 40% { transform: rotate(-12deg); } 60% { transform: rotate(7deg); } 80% { transform: rotate(-4deg); } }
+@keyframes keel-spin { to { transform: rotate(360deg); } }
+@keyframes keel-check { from { stroke-dashoffset: 24; } to { stroke-dashoffset: 0; } }
+
+@layer base {
+  /* every button gives a little under a press, and colours ease rather than snap */
+  button, summary, a[role='button'] {
+    transition: transform var(--dur-fast) var(--ease-out), background-color var(--dur) ease, border-color var(--dur) ease,
+      color var(--dur) ease, box-shadow var(--dur) ease, opacity var(--dur) ease;
+  }
+  button:not(:disabled):active, a[role='button']:active { transform: scale(0.97); }
+}
+
+/* a page eases in; cards and rows in a .keel-stagger list rise one after another */
+.keel-page { animation: keel-fade var(--dur-slow) var(--ease-out) both; }
+.keel-rise { animation: keel-rise var(--dur-slow) var(--ease-out) both; }
+.keel-pop { animation: keel-pop var(--dur) var(--ease-out) both; transform-origin: top right; }
+.keel-stagger > * { animation: keel-rise var(--dur-slow) var(--ease-out) both; }
+.keel-stagger > *:nth-child(2) { animation-delay: 40ms; }
+.keel-stagger > *:nth-child(3) { animation-delay: 80ms; }
+.keel-stagger > *:nth-child(4) { animation-delay: 120ms; }
+.keel-stagger > *:nth-child(5) { animation-delay: 160ms; }
+.keel-stagger > *:nth-child(6) { animation-delay: 200ms; }
+.keel-stagger > *:nth-child(n+7) { animation-delay: 240ms; }
+/* a card opened from its header: what was folded away rises into place */
+.keel-unfolded > :not(:first-child) { animation: keel-rise var(--dur-slow) var(--ease-out) both; }
+
+/* loading: soft shimmering bars where the content will be */
+.keel-skeleton {
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--paper-2) 0%, var(--surface-2) 50%, var(--paper-2) 100%);
+  background-size: 640px 100%;
+  animation: keel-shimmer 1.3s linear infinite;
+}
+
+/* a live dot: a soft ring goes out from it now and then */
+.keel-ping { position: relative; }
+.keel-ping::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; background: currentColor;
+  animation: keel-ping 2.4s var(--ease-out) infinite;
+}
+.keel-bump { animation: keel-bump 420ms var(--ease-spring); }
+.keel-ring { animation: keel-ring 900ms ease-in-out; transform-origin: 50% 15%; }
+.keel-spin { animation: keel-spin 0.8s linear infinite; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

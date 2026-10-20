@@ -1,6 +1,7 @@
 // Visual building blocks: avatars, page headers, stat tiles and small SVG
 // charts. Plain SVG on the design tokens, so every chart follows the theme.
 
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Icon } from './Icon';
 import type { IconName } from './Icon';
@@ -56,18 +57,56 @@ export function PageHeader({ icon, title, sub, help, children }: {
 
 // ── Stat tile ──────────────────────────────────────────────────────
 
+/** A number that counts up to its value the first time it shows (straight to it with reduced motion). */
+export function CountUp({ value, format = (n) => n.toLocaleString('en-GB') }: { value: number; format?: (n: number) => string }) {
+  const [shown, setShown] = useState(value);
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current || value <= 0) { setShown(value); return; }
+    started.current = true;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { setShown(value); return; }
+    const t0 = performance.now(), ms = 650;
+    let raf = 0;
+    const step = (t: number) => {
+      const p = Math.min(1, (t - t0) / ms);
+      setShown(Math.round(value * (1 - Math.pow(1 - p, 3))));
+      if (p < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+  return <>{format(shown)}</>;
+}
+
+/** Where a page will be, while it loads: soft shimmering bars, not a word. */
+export function PageSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div className="mx-auto flex max-w-[1100px] flex-col gap-5 p-4 sm:p-6" aria-busy="true" aria-label="Loading">
+      <div className="flex items-center gap-3">
+        <div className="keel-skeleton h-12 w-12 rounded-xl" />
+        <div className="flex flex-1 flex-col gap-2"><div className="keel-skeleton h-6 w-48 max-w-full" /><div className="keel-skeleton h-4 w-72 max-w-full" /></div>
+      </div>
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="flex flex-col gap-2.5 rounded-lg border border-[var(--line)] bg-[var(--surface)] p-5" style={{ opacity: 1 - i * 0.18 }}>
+          <div className="keel-skeleton h-5 w-2/5" /><div className="keel-skeleton h-4 w-4/5" /><div className="keel-skeleton h-4 w-3/5" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function StatTile({ icon, label, value, hint, accent = false, children }: {
   icon: IconName; label: string; value: ReactNode; hint?: ReactNode; accent?: boolean; children?: ReactNode;
 }) {
   return (
-    <div className="flex h-full flex-col gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] p-4 shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-pop)]">
+    <div className="flex h-full flex-col gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] p-4 shadow-[var(--shadow-card)] transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)]">
       <div className="flex items-center justify-between gap-2">
         <span className="text-[13px] font-medium text-[var(--ink-muted)]">{label}</span>
         <span className={`grid h-8 w-8 place-items-center rounded-lg ${accent ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'bg-[var(--paper-2)] text-[var(--ink-muted)]'}`}>
           <Icon name={icon} size={16} />
         </span>
       </div>
-      <div className="font-[var(--font-display)] text-[30px] font-bold leading-none text-[var(--ink)]">{value}</div>
+      <div className="font-[var(--font-display)] text-[30px] font-bold leading-none text-[var(--ink)]">{typeof value === 'number' ? <CountUp value={value} /> : value}</div>
       {hint && <div className="text-[13px] text-[var(--ink-muted)]">{hint}</div>}
       {children}
     </div>
@@ -194,12 +233,17 @@ export function Sparkline({ values, width = 120, height = 32 }: { values: number
 }
 
 /** A friendly empty state with an icon. */
-export function Empty({ icon, title, children }: { icon: IconName; title: string; children?: ReactNode }) {
+/** Nothing here yet: what this place is for, and (with `action`) the one thing to do next. */
+export function Empty({ icon, title, children, action }: { icon: IconName; title: string; children?: ReactNode; action?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
-      <span className="grid h-12 w-12 place-items-center rounded-full bg-[var(--paper-2)] text-[var(--ink-muted)]"><Icon name={icon} size={22} /></span>
-      <div className="text-[15px] font-medium text-[var(--ink)]">{title}</div>
-      {children && <div className="max-w-[420px] text-[13px] text-[var(--ink-muted)]">{children}</div>}
+    <div className="keel-rise flex flex-col items-center gap-2 px-6 py-10 text-center">
+      <span className="relative grid h-14 w-14 place-items-center rounded-full bg-[var(--accent-soft)] text-[var(--accent-ink)]">
+        <span aria-hidden className="absolute inset-[-6px] rounded-full border border-dashed border-[var(--line-strong)]" />
+        <Icon name={icon} size={24} />
+      </span>
+      <div className="mt-1 text-[16px] font-semibold text-[var(--ink)]">{title}</div>
+      {children && <div className="max-w-[440px] text-[14px] text-[var(--ink-muted)]">{children}</div>}
+      {action && <div className="mt-2 flex flex-wrap justify-center gap-2">{action}</div>}
     </div>
   );
 }

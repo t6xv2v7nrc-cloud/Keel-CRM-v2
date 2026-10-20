@@ -39,7 +39,8 @@ with expect(migration, kind, name) as (values
   ('0023', 'column', 'applicants.postcode_area'), ('0023', 'column', 'applicants.age_band'), ('0023', 'column', 'applicants.benefit_cap'),
   ('0024', 'column', 'properties.photo_urls'), ('0024', 'column', 'officer_sends.property_ids'), ('0024', 'column', 'officer_sends.subject'),
   ('0025', 'column', 'properties.not_ready_at'), ('0025', 'column', 'properties.not_ready_note'),
-  ('0026', 'table', 'outlook_messages')
+  ('0026', 'table', 'outlook_messages'),
+  ('0027', 'table', 'push_subscriptions'), ('0027', 'table', 'push_keys'), ('0027', 'table', 'push_log')
 ), found as (
   select e.migration, e.kind, e.name, case e.kind
     when 'table' then exists (select 1 from information_schema.tables t
@@ -53,7 +54,8 @@ with expect(migration, kind, name) as (values
 ), known(name) as (values
   ('applicants'), ('properties'), ('contacts'), ('placements'), ('inbox_items'), ('activities'), ('calls'), ('settings'),
   ('profiles'), ('deals'), ('providers'), ('requests'), ('receivables'), ('lha_rates'), ('postcode_brma'),
-  ('officers'), ('officer_sends'), ('council_schemes'), ('outlook_messages')
+  ('officers'), ('officer_sends'), ('council_schemes'), ('outlook_messages'),
+  ('push_subscriptions'), ('push_keys'), ('push_log')
 )
 select migration as item,
   case when bool_and(kind = 'data') then 'cannot tell (only tidies data)'

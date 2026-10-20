@@ -58,7 +58,7 @@ function Row({ item }: { item: DueItem }) {
   let action = null;
   if (item.kind === 'reply') {
     action = (
-      <Button className={small} disabled={reply.isPending}
+      <Button busy={reply.isPending} className={small} disabled={reply.isPending}
         onClick={() => reply.mutate({ applicant: a, patch: { officer_replied_at: new Date().toISOString() }, officer }, {
           onSuccess: () => toast(`First reply to ${officer} recorded`, 'success'), onError: fail,
         })}>
@@ -83,7 +83,7 @@ function Row({ item }: { item: DueItem }) {
           </a>
         )}
         {to.address && <OutlookSendButton to={[to.address]} subject={mail.subject} body={mail.body} what={`how the viewing went to ${officer}`} onSent={() => mark('email')} disabled={sent.isPending} />}
-        <Button className={small} disabled={sent.isPending} onClick={() => mark('other')}>{to.address ? 'Told them' : 'Told them another way'}</Button>
+        <Button busy={sent.isPending} className={small} disabled={sent.isPending} onClick={() => mark('other')}>{to.address ? 'Told them' : 'Told them another way'}</Button>
       </span>
     );
   }

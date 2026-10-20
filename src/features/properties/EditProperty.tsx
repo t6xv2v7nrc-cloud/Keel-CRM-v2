@@ -219,10 +219,10 @@ export function EditProperty({ p, onDone }: { p: Property; onDone: () => void })
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="primary" className="min-h-0 px-4 py-2 text-[14px]" disabled={update.isPending || !f.address_line.trim() || !linksOk} onClick={save}>
+        <Button busy={update.isPending} variant="primary" className="min-h-0 px-4 py-2 text-[14px]" disabled={update.isPending || !f.address_line.trim() || !linksOk} onClick={save}>
           {update.isPending ? 'Saving…' : 'Save changes'}
         </Button>
-        <Button className="min-h-0 px-4 py-2 text-[14px]" disabled={update.isPending} onClick={onDone}>Cancel</Button>
+        <Button busy={update.isPending} className="min-h-0 px-4 py-2 text-[14px]" disabled={update.isPending} onClick={onDone}>Cancel</Button>
         <span className="text-[12px] text-[var(--ink-muted)]">Matches and the LHA check update straight away. Status and provider are changed on the card.</span>
       </div>
     </div>

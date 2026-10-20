@@ -62,7 +62,7 @@ export function ProfileCard({ applicant: a }: { applicant: Applicant }) {
             <div className="flex flex-wrap items-center gap-2 rounded-md px-3 py-2 text-[14px]" style={{ background: 'var(--accent-soft)', color: 'var(--accent-ink)' }}>
               <Icon name="sparkle" size={15} />
               <span className="min-w-0 flex-1 basis-[220px]">From their notes: {p.sureAnswers.map((s) => `${s.field.toLowerCase()} ${s.value.toLowerCase()}`).join(', ')}.</span>
-              <Button className="min-h-0 px-3 py-1.5 text-[13px]" disabled={triage.isPending} onClick={fillIn}>Fill {p.sureAnswers.length === 1 ? 'it' : 'them'} in</Button>
+              <Button busy={triage.isPending} className="min-h-0 px-3 py-1.5 text-[13px]" disabled={triage.isPending} onClick={fillIn}>Fill {p.sureAnswers.length === 1 ? 'it' : 'them'} in</Button>
             </div>
           )}
 

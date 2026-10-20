@@ -146,7 +146,7 @@ function PlacementEditor({ view, providers, council, onDone }: { view: Placement
       </div>
       <p className="m-0 text-[12px] text-[var(--ink-muted)]">Amounts, invoices and payments come from Finances: change them there, not here.</p>
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="primary" className={small} disabled={!urlOk || !pctOk || save.isPending} onClick={go}>{save.isPending ? 'Saving…' : 'Save the placement'}</Button>
+        <Button busy={save.isPending} variant="primary" className={small} disabled={!urlOk || !pctOk || save.isPending} onClick={go}>{save.isPending ? 'Saving…' : 'Save the placement'}</Button>
         <Button className={small} onClick={onDone}>Cancel</Button>
       </div>
     </div>

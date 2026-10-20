@@ -26,6 +26,8 @@ import { setActiveSettings } from './lib/settings';
 import { setLhaFromDatabase, setPostcodeBrma } from './lib/lha';
 import { ThemeToggle } from './components/ThemeToggle';
 import { OutlookAutoSync } from './features/outlook/Outlook';
+import { Notifications } from './features/notifications/Notifications';
+import { showGettingStarted, WhatsNewPage } from './features/guide/Guide';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
@@ -141,6 +143,7 @@ function Shell() {
             <span className="hidden lg:inline">Search</span>
             <kbd className="hidden rounded border border-[var(--line)] px-1 font-mono text-[11px] lg:inline">Ctrl K</kbd>
           </button>
+          <Notifications />
           <NavLink to="/settings" title="Settings" aria-label="Settings"
             className={({ isActive }) => `grid h-9 w-9 place-items-center rounded-md border transition-colors ${
               isActive ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-ink)]' : 'border-[var(--line)] text-[var(--ink-muted)] hover:text-[var(--ink)]'}`}>
@@ -154,6 +157,8 @@ function Shell() {
       {/* officers' emails come in from a connected Outlook while Keel is open */}
       <OutlookAutoSync />
       <main className="flex-1" key={ratesKey}>
+        {/* each page eases in as you arrive on it */}
+        <div key={location.pathname} className="keel-page">
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/bin" element={<BinPage />} />
@@ -166,12 +171,14 @@ function Shell() {
           <Route path="/councils" element={<CouncilsPage />} />
           <Route path="/mailer" element={<MailerPage />} />
           <Route path="/numbers" element={<NumbersPage />} />
+          <Route path="/whats-new" element={<WhatsNewPage />} />
           <Route path="/finances/invoice/:id" element={<InvoicePage />} />
           {/* The page's earlier addresses; old links and bookmarks still land */}
           <Route path="/receivables" element={<Navigate to="/finances" replace />} />
           <Route path="/money" element={<Navigate to="/finances" replace />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
+        </div>
       </main>
 
       <CommandSearch />
@@ -252,6 +259,14 @@ function UserMenu({ email, name, onSignOut }: { email: string | null; name: stri
           <Link to="/settings" onClick={() => setOpen(false)}
             className="block w-full border-b border-[var(--line)] px-4 py-3 text-left text-[15px] text-[var(--ink)] transition-colors hover:bg-[var(--paper)]">
             My settings
+          </Link>
+          <Link to="/whats-new" onClick={() => setOpen(false)}
+            className="flex w-full items-center gap-2 border-b border-[var(--line)] px-4 py-3 text-left text-[15px] text-[var(--ink)] transition-colors hover:bg-[var(--paper)]">
+            <Icon name="gift" size={16} className="text-[var(--accent)]" />What's new
+          </Link>
+          <Link to="/" onClick={() => { showGettingStarted(); setOpen(false); }}
+            className="flex w-full items-center gap-2 border-b border-[var(--line)] px-4 py-3 text-left text-[15px] text-[var(--ink)] transition-colors hover:bg-[var(--paper)]">
+            <Icon name="flag" size={16} className="text-[var(--accent)]" />Getting started list
           </Link>
 
           <button

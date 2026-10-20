@@ -60,7 +60,7 @@ export function PropertyChecks({ property }: { property: Property }) {
       {available && (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
           {held ? (
-            <Button className={small} disabled={setReady.isPending} onClick={() => mark(true)}><Icon name="check" size={13} />Mark ready</Button>
+            <Button busy={setReady.isPending} className={small} disabled={setReady.isPending} onClick={() => mark(true)}><Icon name="check" size={13} />Mark ready</Button>
           ) : (
             <>
               <span className={`inline-flex items-center gap-1 font-medium ${overLha ? 'text-[var(--ink-muted)]' : 'text-[var(--accent-ink)]'}`}>
@@ -77,7 +77,7 @@ export function PropertyChecks({ property }: { property: Property }) {
         <div className="flex flex-wrap items-center gap-2">
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why, e.g. waiting for the EICR" aria-label="Why it is not ready"
             className="h-9 min-w-0 flex-1 basis-[200px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2.5 text-[14px] text-[var(--ink)] outline-none focus:border-[var(--accent)]" />
-          <Button className={small} disabled={setReady.isPending} onClick={() => mark(false)}>Hold it back</Button>
+          <Button busy={setReady.isPending} className={small} disabled={setReady.isPending} onClick={() => mark(false)}>Hold it back</Button>
           <button type="button" onClick={() => { setHolding(false); setNote(''); }} className="text-[13px] text-[var(--ink-muted)] hover:text-[var(--ink)]">Cancel</button>
         </div>
       )}

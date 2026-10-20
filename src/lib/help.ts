@@ -387,6 +387,15 @@ export const HELP = {
       'Letting fee they pay Keel: a set amount, a percentage of a month\'s rent, or weeks of rent (say 1 week\'s rent). When their fee is due counts from sign up, or from when the client\'s first month\'s rent is paid if they only pay after it.',
     ],
   },
+  notifications: {
+    title: 'Notifications',
+    body: [
+      'The bell at the top shows what needs you, worked out by the same rules as Home: something new in the Bin, a nomination waiting on its first reply (with its 4 working hours), a viewing in the next 3 hours, how a viewing went and telling the officer, next steps due, payments overdue, officers\' emails from Outlook, and clients back from ice. Urgent ones come first. Something new pops up at the top right while you are in Keel.',
+      'Marking one read (opening it, or Mark all as read) is remembered on this device. Anything new, like another item in the Bin or a viewing moved, comes back unread.',
+      'Notifications on this device (Settings, My settings) send the same to your phone or computer when Keel is closed: something new in the Bin, a reply waiting, a viewing within the hour, officers\' emails, and a short summary each working morning. Each is sent once. Turn them on for each device you use; on an iPhone, open Keel from your Home Screen first.',
+      'They carry first names and short addresses only, as they can show on a locked screen.',
+    ],
+  },
   outlook: {
     title: 'Outlook',
     body: [

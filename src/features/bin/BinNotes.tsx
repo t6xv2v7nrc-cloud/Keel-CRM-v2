@@ -67,7 +67,7 @@ export function BinFiled({ inbox }: { inbox: InboxItem[] }) {
                           {item.raw_text || 'No text was kept for this item.'}
                         </pre>
                         <div className="flex flex-wrap gap-2">
-                          <Button className="min-h-0 px-3 py-1.5 text-[13px]" disabled={update.isPending} onClick={() => reopen(item)}>
+                          <Button busy={update.isPending} className="min-h-0 px-3 py-1.5 text-[13px]" disabled={update.isPending} onClick={() => reopen(item)}>
                             <Icon name="plus" size={14} />Make a client from it, or add it to one
                           </Button>
                         </div>

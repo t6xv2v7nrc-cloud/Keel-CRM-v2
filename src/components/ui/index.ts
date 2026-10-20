@@ -1,4 +1,4 @@
-export { Button } from './Button';
+export { Button, Spinner } from './Button';
 export { IceBadge, NewBadge, StageBadge } from './Badge';
 export { Card, CardHeader } from './Card';
 export { Field } from './Field';
@@ -6,6 +6,6 @@ export { ToastProvider, useToast } from './Toast';
 export { TierBadge } from './TierBadge';
 export { Icon } from './Icon';
 export type { IconName } from './Icon';
-export { Avatar, DayBars, Donut, Empty, Legend, Meter, PageHeader, Sparkline, StatTile, UpdateNote, UrgentChip } from './Visuals';
+export { Avatar, CountUp, DayBars, Donut, Empty, Legend, Meter, PageHeader, PageSkeleton, Sparkline, StatTile, UpdateNote, UrgentChip } from './Visuals';
 export type { DayBar, Slice } from './Visuals';
 export { Help } from './Help';

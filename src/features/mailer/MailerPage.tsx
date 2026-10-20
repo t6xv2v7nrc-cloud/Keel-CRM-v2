@@ -22,6 +22,7 @@ import { OutlookSendButton } from '../outlook/Outlook';
 import { useApplicants, useMatchOptions, useOfficerSends, useOfficers, usePeople, useProperties, useRecordMailerSend } from '../../lib/hooks';
 import { LONDON_BOROUGHS } from '../../lib/london';
 import type { Applicant, Property } from '../../lib/types';
+import { Tip } from '../guide/Guide';
 
 const small = 'min-h-0 px-3 py-1.5 text-[13px]';
 // "On leave until 20 Nov 2026" reads "on leave until 20 Nov 2026" mid-sentence: only the first letter drops
@@ -44,6 +45,7 @@ export function MailerPage() {
     <div className="mx-auto flex max-w-[1100px] flex-col gap-5 p-4 pb-24 sm:p-6">
       <PageHeader icon="mail" title="Mailer" help="mailer"
         sub={`${ok.length} of ${list.length} available ${list.length === 1 ? 'property' : 'properties'} ready to send`} />
+      <Tip id="mailer" />
 
       {!ready.ok && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg px-4 py-3 text-[14px]" style={{ background: 'var(--danger-soft)', color: 'var(--danger)' }}>
@@ -86,8 +88,8 @@ function AlertsView({ list, canSend }: { list: Sendable[]; canSend: boolean }) {
   return (
     <div className="flex flex-col gap-4">
       {ok.length === 0 ? (
-        <Empty icon="building" title="Nothing ready to send">
-          A property needs to be within LHA, with its safety papers complete and in date and at least 3 photos. See what each one needs under Held back.
+        <Empty icon="building" title="Nothing ready to send" action={<Link to="/properties" className="inline-flex min-h-[40px] items-center gap-2 rounded-md bg-[var(--accent)] px-4 text-[15px] font-medium text-[var(--on-accent)] hover:bg-[var(--accent-strong)]"><Icon name="building" size={16} />Go to Properties</Link>}>
+          Every available property can go unless it is marked not ready; Keel only needs to know its LHA area and its rent. See what each one needs under Held back, or paste a property list.
         </Empty>
       ) : (
         <Card className="overflow-hidden">
@@ -477,7 +479,7 @@ function Composer({ kind, to, recent, sends = [], properties, subject, body, wha
           what={`${kind === 'alert' ? 'this alert' : kind === 'digest' ? 'this digest' : 'the full list'} to ${chosen.length} ${chosen.length === 1 ? 'officer' : 'officers'}`} onSent={save} />
         <Button className={small} disabled={!addresses.length} onClick={() => copy(addresses.length > 1 ? 'Addresses for the Bcc box' : 'Address', addressBox({ to: chosen }))}>Copy addresses</Button>
         <Button className={small} onClick={() => copy('Email', text)}>Copy the email</Button>
-        <Button className={small} disabled={disabled || !chosen.length || !!sentAt || record.isPending} onClick={save}>{sentAt ? `Recorded at ${clockTime(sentAt)}` : "I've sent it"}</Button>
+        <Button busy={record.isPending} className={small} disabled={disabled || !chosen.length || !!sentAt || record.isPending} onClick={save}>{sentAt ? `Recorded at ${clockTime(sentAt)}` : "I've sent it"}</Button>
       </div>
       <p className="m-0 text-[12px] text-[var(--ink-muted)]">Sending from Outlook, or opening it in your email, records the send. If you copied it instead, press I've sent it once it has gone.</p>
 

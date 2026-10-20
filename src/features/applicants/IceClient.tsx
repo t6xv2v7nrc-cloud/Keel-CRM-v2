@@ -54,10 +54,10 @@ export function IcePanel({ applicant, onClose }: { applicant: Applicant; onClose
         {until ? ` On ${shortDate(until)} they come back with a next step to check in.` : ' They stay on ice until someone takes them off.'}
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="primary" disabled={ice.isPending || missing || (!!until && until <= todayIso())} onClick={go}>
+        <Button busy={ice.isPending} variant="primary" disabled={ice.isPending || missing || (!!until && until <= todayIso())} onClick={go}>
           {ice.isPending ? 'Saving…' : `Put ${first} on ice`}
         </Button>
-        <Button disabled={ice.isPending} onClick={onClose}>Cancel</Button>
+        <Button busy={ice.isPending} disabled={ice.isPending} onClick={onClose}>Cancel</Button>
       </div>
     </div>
   );
@@ -76,7 +76,7 @@ export function IceBand({ applicant }: { applicant: Applicant }) {
         {applicant.iced_reason ? `: ${applicant.iced_reason}` : ''}
         {applicant.iced_at ? <span className="opacity-80"> (since {shortDate(applicant.iced_at)})</span> : null}
       </span>
-      <Button className="min-h-0 px-3 py-1.5 text-[13px]" disabled={ice.isPending}
+      <Button busy={ice.isPending} className="min-h-0 px-3 py-1.5 text-[13px]" disabled={ice.isPending}
         onClick={() => ice.mutate({ applicant, on: false }, {
           onSuccess: () => toast(`${first} is back: next step is to check in today`, 'success'),
           onError: (e) => toast((e as Error).message, 'danger'),

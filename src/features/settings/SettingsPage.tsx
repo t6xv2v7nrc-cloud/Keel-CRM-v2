@@ -18,6 +18,7 @@ import { WhatsAppSettings } from './WhatsAppSettings';
 import { ProvidersTab } from './ProvidersTab';
 import { RequestTemplates } from './RequestTemplates';
 import { OutlookConnectCard, OutlookTeamCard } from '../outlook/Outlook';
+import { PushCard } from '../notifications/PushCard';
 import { isActive } from '../../lib/search';
 import { addDays, isoDay } from '../../lib/calls';
 import { money } from '../../lib/format';
@@ -136,8 +137,9 @@ function MySettingsTab({ draft, set, name, setName, teamReady, email }: {
   return (
     <>
       <WhoNote icon="user">These only change Keel for you. Your co-worker has their own.</WhoNote>
+      <PushCard />
       <OutlookConnectCard />
-      <Card fold="settings.you" startsFolded>
+      <Card id="you" fold="settings.you" startsFolded className="scroll-mt-28">
         <CardHeader icon="user" title="You" help="mySettings" />
         <div className="flex flex-col gap-5 p-5">
           <Row icon="pencil" title="Your name" text={`Shown to your co-worker next to calls and changes you make${email ? ` (signed in as ${email})` : ''}.`}>
@@ -569,9 +571,9 @@ function SharingSettings({ draft, set, clients }: {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button className={small} disabled={bulk.isPending} onClick={() => run('on')}>Turn on for everyone</Button>
-            <Button className={small} disabled={bulk.isPending} onClick={() => run('off')}>Turn off for everyone</Button>
-            <Button className={small} disabled={bulk.isPending} onClick={() => run('form')}>Match the referral form ({formYes} agreed)</Button>
+            <Button busy={bulk.isPending} className={small} disabled={bulk.isPending} onClick={() => run('on')}>Turn on for everyone</Button>
+            <Button busy={bulk.isPending} className={small} disabled={bulk.isPending} onClick={() => run('off')}>Turn off for everyone</Button>
+            <Button busy={bulk.isPending} className={small} disabled={bulk.isPending} onClick={() => run('form')}>Match the referral form ({formYes} agreed)</Button>
           </div>
         </div>
       </div>

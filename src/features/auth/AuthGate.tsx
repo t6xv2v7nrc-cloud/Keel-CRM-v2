@@ -3,6 +3,7 @@ import type { FormEvent, ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { Button, Card, Field } from '../../components/ui';
+import { Spinner } from '../../components/ui';
 
 /** Sign-in gate (password or email link). Invite only: the email link never
  *  creates an account, so only people invited from Supabase can get in.
@@ -22,8 +23,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   if (loading) {
     return (
-      <div className="grid min-h-screen place-items-center text-[var(--ink-muted)]">
-        Loading…
+      <div className="grid min-h-screen place-items-center text-[var(--ink-muted)]" aria-busy="true">
+        <span className="flex items-center gap-2 text-[15px]"><Spinner size={16} />Opening Keel…</span>
       </div>
     );
   }

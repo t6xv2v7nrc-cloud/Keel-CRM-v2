@@ -114,7 +114,7 @@ export function CallLogger({ applicant, onDone, autoFocus = false }: { applicant
         <span className="text-[13px] text-[var(--ink-muted)]">
           {next ? <>Next call <strong className="text-[var(--ink)]">{dayLabel(next)}</strong></> : 'No follow-up set'}
         </span>
-        <Button variant="primary" onClick={save} disabled={!outcome || log.isPending}>
+        <Button busy={log.isPending} variant="primary" onClick={save} disabled={!outcome || log.isPending}>
           <Icon name="check" size={16} />
           {log.isPending ? 'Saving…' : `Log call with ${first}`}
         </Button>
