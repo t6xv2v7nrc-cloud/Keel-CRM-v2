@@ -34,6 +34,8 @@ export interface NewThing { id: string; date: string; title: string; body: strin
 
 /** Newest first. An id is never reused: what someone has seen is remembered by it. */
 export const WHATS_NEW: NewThing[] = [
+  { id: '2026-10-20-paste-officers', date: '2026-10-20', title: 'Paste officers onto the list', body: 'Paste a spreadsheet, the To line of an email, or signatures, and Keel reads out each officer\'s name, email, phone, job title and council for you to look over and add. Anyone already on the list just gets their blanks filled in.', href: '/councils', where: 'Councils, Paste officers' },
+  { id: '2026-10-20-mailer', date: '2026-10-20', title: 'A tidier Mailer', body: 'Each property is one clear row with its rent against the LHA, and writing an email goes in three steps: who it goes to, the email, and sending it.', href: '/mailer' },
   { id: '2026-10-20-notifications', date: '2026-10-20', title: 'Notifications', body: 'The bell at the top shows what needs you: replies due to officers, viewings coming up, new things in the Bin, payments overdue. New ones pop up while you work, and your phone can get them when Keel is closed.', href: '/settings#notifications', where: 'Settings, My settings, Notifications on this device' },
   { id: '2026-10-20-feel', date: '2026-10-20', title: 'A livelier Keel', body: 'Buttons give when you press them and spin while they work, folded cards open smoothly, messages slide in with a close button, and numbers count up on Home. Switched off if your device asks for less motion.' },
   { id: '2026-10-20-guide', date: '2026-10-20', title: 'Getting started and tips', body: 'Home lists the setting-up steps and ticks them off by itself, and each page has a one-time tip.' },
@@ -52,7 +54,7 @@ export const TIPS = {
   bin: 'Paste a screenshot anywhere (Ctrl or Cmd and V), drop an image here, or paste an enquiry email. With Outlook connected, officers\' nominations land here by themselves.',
   pipeline: 'Sort by Recently contacted to see who has gone quiet. Every client\'s row opens their page.',
   client: 'Arrange, at the top, puts these cards in your own order, and each one folds away. Share sends their details to a landlord once they have agreed.',
-  councils: 'One click marks an officer opted out or left, and every email list keeps to it. Officers from your Outlook adds the ones you already email.',
+  councils: 'Paste officers adds a whole list at once, from a spreadsheet, an email or signatures. One click marks an officer opted out or left, and every email list keeps to it.',
   finances: 'The ghost total is everything owed plus a fee for every client with a viewing booked or further on: the whole pipeline, if it all came in.',
 } as const;
 export type TipId = keyof typeof TIPS;

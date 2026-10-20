@@ -73,6 +73,12 @@ src/
                            Finances page's Placements tab, features/money/Placement.tsx),
               invoice.ts (invoice wording, numbering, VAT split, WhatsApp and email text; client first name only to providers),
               officers.ts (housing officers gathered from clients' details, joined on email, phone, name; copy formats),
+              officerPaste.ts (Paste officers on Councils, features/councils/PasteOfficers.tsx: `readOfficerPaste` reads a
+                           spreadsheet with headings, an email's To line, signatures or one a line into name, email, phone,
+                           job title, council; checked against the list (`recordFor`, then name); one already on it only gets
+                           its blanks filled (`fills`); `pastedRow` is never opted in unless "They asked" with how; a team
+                           mailbox for properties (`mailboxKind`) is a procurement mailbox; the Bin hands a pasted officer
+                           list over (`looksLikeOfficers`, `PASTE_HANDOFF` in sessionStorage); `useAddPastedOfficers`),
               councils.ts (0020: the officer list (HELM's `officers` table) with send status, sends log, council schemes;
                            THE HARD RULE `mailingList`: every export, mailer list and bulk action of officer addresses goes
                            through it: no left, on leave, opted out, bounced, or housing officer not opted in or nominated;
@@ -91,7 +97,10 @@ src/
                          `complianceLine`, up to 3 `photo_urls`, credentials and a STOP line; never client names or
                          incentives; every send recorded (`useRecordMailerSend`: officer_sends with subject and
                          property_ids, last_sent_at, property and officer history); `oldMailerBackup` for the separate
-                         Keel Mailer's Restore box), business.ts (Team settings `business`: redress, CMP, LLAS, ICO, fees,
+                         Keel Mailer's Restore box, folded under the Officers tab (?tab=old lands there);
+                         page: one status line, a Before you send card (gov.uk rates, footer details), tabs Alerts, Monthly
+                         digest, All properties, Officers; each property one line with an LHA chip (`LhaChip`); the
+                         email in three steps: who it goes to, the email (subject and a preview), send it), business.ts (Team settings `business`: redress, CMP, LLAS, ICO, fees,
                          unsubscribe email; blank ones left out; `signature` also signs the officer outcome email),
               outlook.ts (each person's work Outlook through Microsoft Graph, from the browser: MSAL sign-in in Microsoft's
                       window (popup; full page in the home-screen app), delegated User.Read, Mail.Read, Mail.Send, kept on
@@ -217,8 +226,9 @@ supabase/checks/live-vs-repo.sql  (read-only: which migrations the live database
 - Invoices to providers or landlords name the client by first name only; a council incentive claim carries the full name.
 - Outlook (each person's own work Outlook, connected under My settings): Send from Outlook always asks before sending and
   records the send like the email link; only officer and council emails are ever read in, nothing else from the mailbox
-  is kept; officers added from Outlook are not opted in, so `mailingList` never emails them in bulk until they opt in or
-  refer a client. Claude never signs in to anyone's Microsoft account.
+  is kept; officers added from Outlook (or pasted on Councils, unless ticked as having asked, with how) are not opted in,
+  so `mailingList` never emails them in bulk until they opt in or refer a client. Claude never signs in to anyone's
+  Microsoft account.
 - Two people use Keel: Ridwan (owner) and a co-worker. Ridwan invites people from the Supabase dashboard; Claude never
   creates accounts or enters passwords.
 - Contacts was removed on request; do not bring it back unasked. Housing officers live on each client (officer_*) and,

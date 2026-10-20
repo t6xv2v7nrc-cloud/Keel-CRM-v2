@@ -161,9 +161,10 @@ export const HELP = {
       'Every property is ready to send unless you marked it not ready (the suppliers see to the safety checks); Keel also needs to know its LHA area and rent. One over LHA can go too: it is marked red, and the email says how far over. Held back lists the rest and what each needs. Nothing goes until the gov.uk LHA rates are loaded (Team settings, LHA rates), so an email never quotes built-in figures.',
       'Alerts: one property each, only to the officers of clients they referred that it fits. Monthly digest: one borough, 5 to 8 properties at most. Anyone who had a bulk email or digest in the last 30 days is flagged and left unticked.',
       'All properties: every property ready to send at once (or one borough\'s), by area and numbered right through, as one email to the officers on the list in Bcc, one WhatsApp, or a spreadsheet to attach. Over LHA and outside Greater London are left out until you tick them in. Choose which go takes any out. It is recorded as a full list, and counts as a bulk email for the 30 days.',
-      'Who can be emailed comes from the officer list on Councils: never anyone who left, is on leave, opted out, bounced or has not opted in or referred a client; a team mailbox replaces personal emails. London officers never get anything outside Greater London unless you include it, and then it is marked.',
+      'Officers shows who can be emailed, from the officer list on Councils: never anyone who left, is on leave, opted out, bounced or has not opted in or referred a client; a team mailbox replaces personal emails. London officers never get anything outside Greater London unless you include it, and then it is marked.',
       'Every email has the subject [Borough] | type | rent | LHA | available date, the LHA rate for the area, any safety papers recorded with their dates, up to 3 photo links, Keel\'s business details (Team settings, Business details) and a way to stop the emails. Clients are never named.',
-      'Send it on WhatsApp instead gives the same message for WhatsApp, with a link for each ticked officer who has a mobile number (a team mailbox means email only), or Pick a chat or group for a WhatsApp group of officers. Each send is recorded like an email.',
+      'Writing one goes in three steps: who it goes to (tick officers in or out), the email (subject and the whole message, to copy if you like), and sending it: Send from Outlook when it is connected, else Open in my email, or I\'ve sent it if it went another way. The old Keel Mailer\'s Restore list is under Officers.',
+      'Or send it on WhatsApp gives the same message for WhatsApp, with a link for each ticked officer who has a mobile number (a team mailbox means email only), or Pick a chat or group for a WhatsApp group of officers. Each send is recorded like an email.',
     ],
   },
   responses: {
@@ -247,6 +248,16 @@ export const HELP = {
       'Record a bulk email after you send one: Keel keeps who was sent what and when, and warns when someone would get a second bulk email or digest inside 30 days.',
       'The boxes at the top are the list\'s health: who can be emailed, who has not opted in, bounces, leavers, leave, opt-outs, and anyone sent to twice in 30 days. Tap one to see who.',
       'Schemes: each council\'s procurement or landlord scheme, registered once per council, with its route mailbox, incentive terms, the most it pays and the documents it wants. Focus boroughs (Team settings) come first, marked with a star.',
+    ],
+  },
+  pasteOfficers: {
+    title: 'Paste officers',
+    body: [
+      'Paste housing officers in however you have them: a spreadsheet copied with its headings (Name, Email, Council, Phone, Job title), the To or Cc line of an email, email signatures one after another, or one officer a line.',
+      'Keel reads each one into a name, email, phone, job title and council (from what you pasted, else from a .gov.uk address), and shows them for you to look over first. Edit fixes a name, council or route; untick anyone you do not want.',
+      'Anyone already on the list (the same email or phone) is not added twice: if the paste has their phone or job title and the list does not, Keel fills in just those blanks and changes nothing else.',
+      'Housing officers are added as not opted in, so the Mailer never emails them until they opt in or refer a client. Tick They asked for property emails only when they did, and say how. A team mailbox for properties (lettings@, rental.alert@ and the like) can be written to straight away.',
+      'Pasted a list of officers into the Bin by mistake? The Bin offers to bring it here.',
     ],
   },
   propertyChecks: {

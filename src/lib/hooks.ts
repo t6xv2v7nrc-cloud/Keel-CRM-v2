@@ -32,6 +32,8 @@ import type { ApplicantStage } from '../types/extraction';
 import { addressesSince, connectOutlook, disconnectOutlook, inboxSince, messageByInternetId, outlookAccount, outlookConfigured, OutlookNeedsSignIn, sendFromOutlook } from './outlook';
 import { binText, officerAddresses, officerRowFor, snippetOf, sortEmail, timelineWords } from './outlookMail';
 import type { FoundAddress, GraphMessage, MailAddress } from './outlookMail';
+import { pastedRow } from './officerPaste';
+import type { PastedOfficer } from './officerPaste';
 import { orgOfEmail } from './search';
 import { extractFromText } from './extract';
 import { runMatching } from './matching';
@@ -2045,6 +2047,36 @@ export function useAddOutlookOfficers() {
       if (res.error) throw isMissingColumn(res.error) ? new Error(COUNCILS_UPDATE) : res.error;
       const names = found.map((f) => f.name ?? f.address);
       await officerActivity(null, `Added ${found.length} ${found.length === 1 ? 'officer' : 'officers'} from Outlook to the officer list: ${names.slice(0, 12).join(', ')}${names.length > 12 ? ` and ${names.length - 12} more` : ''}`, 'created');
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['officers'] }); qc.invalidateQueries({ queryKey: ['activities'] }); },
+  });
+}
+
+/** Officers pasted in (Councils, Paste officers): new ones added (not opted in unless you say they asked), and blanks
+ *  filled in for ones already on the list. Never changes what the list already holds. */
+export function useAddPastedOfficers() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ add, fill, optIn }: { add: PastedOfficer[]; fill: PastedOfficer[]; optIn: string | null }) => {
+      const at = new Date().toISOString();
+      const rows = add.map((p) => pastedRow(p, optIn ? { source: optIn, at } : null));
+      for (let i = 0; i < rows.length; i += 200) {
+        const chunk = rows.slice(i, i + 200);
+        let res = await supabase.from('officers').insert(chunk);
+        // HELM may have left the id without a default: make them
+        if (res.error && /null value in column "id"/i.test(res.error.message ?? '')) res = await supabase.from('officers').insert(chunk.map((r) => ({ ...r, id: crypto.randomUUID() })));
+        if (res.error) throw isMissingColumn(res.error) ? new Error(COUNCILS_UPDATE) : res.error;
+      }
+      for (const p of fill) {
+        if (!p.existing || !Object.keys(p.fills).length) continue;
+        const { error } = await supabase.from('officers').update({ ...p.fills, updated_at: at }).eq('id', p.existing.id);
+        if (error) throw isMissingColumn(error) ? new Error(COUNCILS_UPDATE) : error;
+        await officerActivity(p.existing, `${who(p.existing)}: filled in ${Object.keys(p.fills).map((k) => (k === 'title' ? 'job title' : k)).join(', ')} from a pasted list`);
+      }
+      if (add.length) {
+        const names = add.map((p) => p.name ?? p.email ?? 'an officer');
+        await officerActivity(null, `Added ${add.length} ${add.length === 1 ? 'officer' : 'officers'} from a pasted list${optIn ? ` (opted in: ${optIn})` : ', not opted in'}: ${names.slice(0, 12).join(', ')}${names.length > 12 ? ` and ${names.length - 12} more` : ''}`, 'created');
+      }
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['officers'] }); qc.invalidateQueries({ queryKey: ['activities'] }); },
   });

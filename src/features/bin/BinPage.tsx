@@ -16,6 +16,8 @@ import type { CardState } from './defaults';
 import { supabase } from '../../lib/supabase';
 import { OutlookInbox } from '../outlook/Outlook';
 import { Tip } from '../guide/Guide';
+import { useNavigate } from 'react-router-dom';
+import { looksLikeOfficers, PASTE_HANDOFF } from '../../lib/officerPaste';
 
 type Stage = 'idle' | 'staging' | 'processing';
 
@@ -171,6 +173,13 @@ export function BinPage() {
 
   // Paste a website enquiry email body → structured review item (no OCR).
   const [enquiryText, setEnquiryText] = useState('');
+  const navigate = useNavigate();
+  const officerList = looksLikeOfficers(enquiryText);
+  const toCouncils = () => {
+    try { sessionStorage.setItem(PASTE_HANDOFF, enquiryText); } catch { /* fine */ }
+    setEnquiryText('');
+    navigate('/councils');
+  };
   const processEnquiry = async () => {
     const extraction = parseEnquiryEmail(enquiryText);
     if (!extraction) {
@@ -248,6 +257,12 @@ export function BinPage() {
               rows={5}
               className="w-full rounded-md border border-[var(--line-strong)] bg-[var(--surface)] p-3 font-mono text-[13px] text-[var(--ink)] outline-none focus:border-[var(--hull)]"
             />
+            {officerList && (
+              <div role="note" className="keel-rise flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md px-3 py-2 text-[14px]" style={{ background: 'var(--note-bg)', color: 'var(--note-fg)' }}>
+                <span className="min-w-0 flex-1 basis-[220px]">This looks like a list of housing officers, not a client.</span>
+                <Button className="min-h-0 px-3 py-1.5 text-[13px]" onClick={toCouncils}><Icon name="users" size={14} />Add them to the officer list</Button>
+              </div>
+            )}
             <div className="flex items-center justify-between gap-3">
               <p className="m-0 text-[13px] text-[var(--ink-muted)]">
                 Parses name, phone, household and budget instantly. For hands-off sync, see the Netlify webhook setup.
