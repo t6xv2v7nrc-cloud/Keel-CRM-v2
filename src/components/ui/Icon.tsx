@@ -16,6 +16,7 @@ const PATHS = {
   search: <><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2" /></>,
   plus: <path d="M12 5v14M5 12h14" />,
   check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
+  star: <path d="M12 3.6l2.55 5.2 5.75.84-4.15 4.05.98 5.7L12 16.7l-5.13 2.69.98-5.7L3.7 9.64l5.75-.84z" />,
   x: <path d="M6 6l12 12M18 6L6 18" />,
   clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></>,
   calendar: <><rect x="3.5" y="5" width="17" height="15.5" rx="2" /><path d="M3.5 10h17M8 3v4M16 3v4" /></>,
@@ -53,12 +54,14 @@ const PATHS = {
 
 export type IconName = keyof typeof PATHS;
 
-export function Icon({ name, size = 18, strokeWidth = 1.8, className = '', title }: {
+export function Icon({ name, size = 18, strokeWidth = 1.8, className = '', title, filled = false }: {
   name: IconName; size?: number; strokeWidth?: number; className?: string; title?: string;
+  /** filled in (a starred star) rather than drawn as an outline */
+  filled?: boolean;
 }) {
   return (
     <svg
-      viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor"
+      viewBox="0 0 24 24" width={size} height={size} fill={filled ? 'currentColor' : 'none'} stroke="currentColor"
       strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"
       className={`shrink-0 ${className}`} aria-hidden={title ? undefined : true} role={title ? 'img' : undefined}
     >

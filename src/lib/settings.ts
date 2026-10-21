@@ -156,6 +156,8 @@ export interface AppSettings {
   callsView: 'everyone' | 'mine';
   /** The order of the cards on a client's page, for this person (names from CLIENT_CARDS); empty means the standard order. */
   clientPageOrder: string[];
+  /** Clients this person starred: pinned to the top of their Pipeline (ids). */
+  starredClients: string[];
   /** Targets for the team: placements (clients moved in) and fees secured (letting fees and incentives signed up), 0 = none. */
   targets: Targets;
   /** Boroughs Keel works hardest: listed and sorted first, and flagged, wherever councils or officers are shown. */
@@ -365,6 +367,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   startPage: '/',
   callsView: 'everyone',
   clientPageOrder: [],
+  starredClients: [],
   targets: DEFAULT_TARGETS,
   focusBoroughs: ['Harrow', 'Hounslow', 'Hillingdon', 'Croydon', 'Haringey', 'Islington'],
   wishlistBoroughs: ['Sutton', 'Kingston upon Thames'],
@@ -375,7 +378,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 };
 
 /** Settings each person sets for themselves; everything else is shared by the team. */
-const PERSONAL_KEYS = ['showPossibleMatches', 'showOverLha', 'showOutsideLondon', 'callAgainAfterNoAnswer', 'callAgainAfterAnswered', 'startPage', 'callsView', 'clientPageOrder'] as const;
+const PERSONAL_KEYS = ['showPossibleMatches', 'showOverLha', 'showOutsideLondon', 'callAgainAfterNoAnswer', 'callAgainAfterAnswered', 'startPage', 'callsView', 'clientPageOrder', 'starredClients'] as const;
 type PersonalKey = (typeof PERSONAL_KEYS)[number];
 export type MySettings = Pick<AppSettings, PersonalKey>;
 export type TeamSettings = Omit<AppSettings, PersonalKey>;

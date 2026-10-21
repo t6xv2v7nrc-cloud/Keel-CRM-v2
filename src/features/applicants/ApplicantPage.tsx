@@ -12,7 +12,7 @@ import { HiddenNote, IncomeTag, RuleWarnings } from '../properties/MatchBits';
 import { OfficerMatchesLink } from '../properties/ShareLinks';
 import { activeSettings } from '../../lib/settings';
 import { money, shortDate, timeAgo } from '../../lib/format';
-import { effectiveTier, isActive, isFresh, isIced, isUrgent } from '../../lib/search';
+import { effectiveTier, isActive, isFresh, isIced, isUrgent, receivedWords } from '../../lib/search';
 import { URGENCY_LABEL } from '../../lib/tiering';
 import { dayWord, todayIso } from '../../lib/calls';
 import type { Activity, Applicant } from '../../lib/types';
@@ -21,6 +21,7 @@ import { ClientDetails } from './ClientDetails';
 import { ProfileCard } from './ProfileCard';
 import { NotesCard } from './NotesCard';
 import { ShareClient } from './ShareClient';
+import { StarButton } from '../pipeline/Star';
 import { IceBand, IcePanel } from './IceClient';
 import { CHANNEL_ICON } from './channelIcon';
 import { CHANNEL_LABEL, readNote } from '../../lib/contacts';
@@ -401,6 +402,7 @@ function HeroCard({ applicant }: { applicant: Applicant }) {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="m-0 text-[28px] font-bold leading-tight text-[var(--ink)]">{applicant.full_name}</h1>
+                <StarButton applicant={applicant} size={20} className="-ml-1" />
                 <TierBadge tier={tier} />
                 {isUrgent(applicant) && <UrgentChip reason={URGENCY_LABEL[applicant.urgency ?? '']} showReason />}
                 <StageBadge stage={applicant.stage} />
@@ -413,6 +415,7 @@ function HeroCard({ applicant }: { applicant: Applicant }) {
                 {applicant.phone && <a href={`tel:${applicant.phone}`} className="inline-flex items-center gap-1.5 font-mono hover:text-[var(--link)]"><Icon name="phone" size={15} />{applicant.phone}</a>}
                 {applicant.email && <a href={`mailto:${applicant.email}`} className="inline-flex items-center gap-1.5 hover:text-[var(--link)]"><Icon name="inbox" size={15} />{applicant.email}</a>}
                 {(applicant.council || applicant.referring_borough) && <span className="inline-flex items-center gap-1.5"><Icon name="pin" size={15} />{applicant.council || applicant.referring_borough}</span>}
+                <span className="inline-flex items-center gap-1.5"><Icon name="clock" size={15} />{receivedWords(applicant)}</span>
               </div>
             </div>
           </div>

@@ -187,10 +187,11 @@ export interface PipelineFilters {
   progress: 'any' | 'stuck' | 'cold' | 'viewing' | 'offer' | 'nothing' | 'iced'; // applied by the Pipeline, which has the deals; on ice only here
   officer: 'any' | 'yes' | 'no'; // has a housing officer (case worker)
   council: string; // 'any', 'none', or a borough
+  starred: boolean; // only the clients this person starred; applied by the Pipeline, which knows who is signed in
 }
 
 export const DEFAULT_FILTERS: PipelineFilters = {
-  q: '', stage: 'active', tier: 'any', household: 'any', work: 'any', councilReg: 'any', urgency: 'any', benefits: [], calls: 'any', owner: 'any', progress: 'any', officer: 'any', council: 'any',
+  q: '', stage: 'active', tier: 'any', household: 'any', work: 'any', councilReg: 'any', urgency: 'any', benefits: [], calls: 'any', owner: 'any', progress: 'any', officer: 'any', council: 'any', starred: false,
 };
 
 export function applyFilters(
@@ -238,6 +239,7 @@ export function filtersFromParams(p: URLSearchParams): PipelineFilters {
     progress: oneOf(p.get('progress'), ['any', 'stuck', 'cold', 'viewing', 'offer', 'nothing', 'iced'] as const, 'any'),
     officer: oneOf(p.get('officer'), ['any', 'yes', 'no'] as const, 'any'),
     council: p.get('council') || 'any',
+    starred: p.get('starred') === '1',
   };
 }
 
@@ -257,12 +259,13 @@ export function filtersToParams(f: PipelineFilters, base = new URLSearchParams()
   set('progress', f.progress, 'any');
   set('officer', f.officer, 'any');
   set('council', f.council, 'any');
+  set('starred', f.starred ? '1' : '', '');
   return p;
 }
 
 // ── Sorting ─────────────────────────────────────────────────────────
 
-export type SortKey = 'tier' | 'name' | 'household' | 'benefits' | 'area' | 'officer' | 'budget' | 'stage' | 'updated' | 'contacted';
+export type SortKey = 'tier' | 'name' | 'household' | 'benefits' | 'area' | 'officer' | 'budget' | 'stage' | 'updated' | 'contacted' | 'received';
 
 const HOUSEHOLD_ORDER: Record<string, number> = { single: 0, couple: 1, family: 2, other: 3 };
 const benefitScore = (a: Applicant) => benefitsOf(a).reduce((s, b) => s + ({ lcwra: 8, pip: 4, uc: 2, hb: 1 })[b.key], 0);
@@ -302,6 +305,7 @@ export function sortApplicants(list: Applicant[], key: SortKey, dir: 1 | -1, las
       case 'budget': return (((a.budget_pcm ?? 0) - (b.budget_pcm ?? 0)) || byName(a, b)) * dir;
       case 'stage': return ((APPLICANT_STAGES.indexOf(a.stage) - APPLICANT_STAGES.indexOf(b.stage)) || byName(a, b)) * dir;
       case 'updated': return (time(b.updated_at) - time(a.updated_at)) * dir;
+      case 'received': return ((time(receivedAt(b)) - time(receivedAt(a))) || byName(a, b)) * dir;
       case 'contacted': {
         // most recently contacted first; never contacted always last
         const x = lastContactAt(a), y = lastContactAt(b);
@@ -311,6 +315,37 @@ export function sortApplicants(list: Applicant[], key: SortKey, dir: 1 | -1, las
     }
   };
   return [...list].sort(cmp);
+}
+
+/** Starred clients first, each group keeping the order it had. */
+export function starredFirst(list: Applicant[], starred: ReadonlySet<string>): Applicant[] {
+  if (!starred.size) return list;
+  return [...list.filter((a) => starred.has(a.id)), ...list.filter((a) => !starred.has(a.id))];
+}
+
+// ── When a client reached Keel ──────────────────────────────────────
+
+/** When the referral or enquiry reached Keel: the officer's nomination when it was dated, else when they got in touch. */
+export const receivedAt = (a: Pick<Applicant, 'created_at' | 'nominated_at'>) => a.nominated_at || a.created_at;
+
+const dayStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** "Received today, 2pm", "Received yesterday, 4:30pm", "Received Mon 19 Oct (2 days ago)", "Received 14 Sep (5 weeks ago)";
+ *  the year only when it was not this year. */
+export function receivedWords(a: Pick<Applicant, 'created_at' | 'nominated_at'>, now = new Date()): string {
+  const at = new Date(receivedAt(a));
+  if (Number.isNaN(at.getTime())) return 'Received: date not known';
+  const days = Math.round((dayStart(now) - dayStart(at)) / 86_400_000);
+  const h = at.getHours() % 12 || 12;
+  const clock = `${h}${at.getMinutes() ? `:${String(at.getMinutes()).padStart(2, '0')}` : ''}${at.getHours() < 12 ? 'am' : 'pm'}`;
+  if (days <= 0) return `Received today, ${clock}`;
+  if (days === 1) return `Received yesterday, ${clock}`;
+  const date = `${at.getDate()} ${MONTHS_SHORT[at.getMonth()]}${at.getFullYear() !== now.getFullYear() ? ` ${at.getFullYear()}` : ''}`;
+  if (days < 7) return `Received ${DAYS_SHORT[at.getDay()]} ${date} (${days} days ago)`;
+  const ago = days < 14 ? `${days} days ago` : days < 61 ? `${Math.floor(days / 7)} weeks ago` : days < 730 ? `${Math.floor(days / 30.44)} months ago` : `${Math.floor(days / 365.25)} years ago`;
+  return `Received ${date} (${ago})`;
 }
 
 // ── Display helpers ─────────────────────────────────────────────────

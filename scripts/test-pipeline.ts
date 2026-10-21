@@ -1,5 +1,5 @@
 // Checks for Pipeline filters: housing officer and council. Run with: npx tsx scripts/test-pipeline.ts
-import { applyFilters, councilOf, DEFAULT_FILTERS, hasOfficer, officerName, officerOrg, sortApplicants } from '../src/lib/search';
+import { applyFilters, councilOf, DEFAULT_FILTERS, filtersFromParams, filtersToParams, hasOfficer, officerName, officerOrg, receivedAt, receivedWords, sortApplicants, starredFirst } from '../src/lib/search';
 import type { Applicant } from '../src/lib/types';
 
 let failed = 0;
@@ -39,6 +39,28 @@ check('filter: council not given', f({ council: 'none' }) === 'Christopher,Gemma
 const sorted = sortApplicants(all, 'officer', 1).map((a) => a.full_name.split(' ')[0]);
 check('sort: those with an officer first, by where the officer works', sorted.join(',') === 'Sierra,Gemma,Christopher,Paul,Anna', sorted.join(','));
 check('sort the other way: no officer first', sortApplicants(all, 'officer', -1)[0].full_name === 'Anna None');
+
+// stars: pinned to the top, each group in its own order; kept in the web address
+const pinned = starredFirst(sortApplicants(all, 'name', 1), new Set([sierra.id, green.id])).map((a) => a.full_name.split(' ')[0]);
+check('starred first, each group keeping its sort', pinned.join(',') === 'Gemma,Sierra,Anna,Christopher,Paul', pinned.join(','));
+check('no stars: the list as it was', starredFirst(all, new Set()) === all);
+check('Starred only survives in the web address', filtersFromParams(filtersToParams({ ...DEFAULT_FILTERS, starred: true })).starred === true
+  && !filtersToParams(DEFAULT_FILTERS).has('starred'));
+
+// when the referral was received
+const now = new Date(2026, 9, 21, 15, 0); // Wednesday 21 October 2026, 3pm
+const at = (y: number, m: number, d: number, h = 10, min = 0) => new Date(y, m, d, h, min).toISOString();
+check('received: the officer\'s nomination when dated, else when they got in touch', receivedAt({ created_at: '2026-10-20T09:00:00Z', nominated_at: '2026-10-19T16:00:00Z' }) === '2026-10-19T16:00:00Z'
+  && receivedAt({ created_at: '2026-10-20T09:00:00Z', nominated_at: null }) === '2026-10-20T09:00:00Z');
+const words = (iso: string) => receivedWords({ created_at: iso, nominated_at: null }, now);
+check('received today, with the time', words(at(2026, 9, 21, 9, 30)) === 'Received today, 9:30am', words(at(2026, 9, 21, 9, 30)));
+check('received yesterday', words(at(2026, 9, 20, 16)) === 'Received yesterday, 4pm', words(at(2026, 9, 20, 16)));
+check('received this week: the day and how long ago', words(at(2026, 9, 19)) === 'Received Mon 19 Oct (2 days ago)', words(at(2026, 9, 19)));
+check('received weeks ago', words(at(2026, 8, 1)) === 'Received 1 Sep (7 weeks ago)', words(at(2026, 8, 1)));
+check('received last year: with the year', words(at(2025, 9, 1)) === 'Received 1 Oct 2025 (12 months ago)', words(at(2025, 9, 1)));
+const byReceived = sortApplicants([client({ full_name: 'Old', created_at: '2026-09-01T10:00:00Z' }), client({ full_name: 'New', created_at: '2026-10-20T10:00:00Z' }),
+  client({ full_name: 'Nominated', created_at: '2026-10-21T10:00:00Z', nominated_at: '2026-10-10T10:00:00Z' })], 'received', 1).map((a) => a.full_name);
+check('sort by Recently received: newest first, by the nomination date when there is one', byReceived.join(',') === 'New,Nominated,Old', byReceived.join(','));
 
 console.log(failed ? `\n${failed} failed` : '\nAll passed');
 process.exit(failed ? 1 : 0);

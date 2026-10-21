@@ -34,6 +34,7 @@ export interface NewThing { id: string; date: string; title: string; body: strin
 
 /** Newest first. An id is never reused: what someone has seen is remembered by it. */
 export const WHATS_NEW: NewThing[] = [
+  { id: '2026-10-21-pipeline-stars', date: '2026-10-21', title: 'Star clients on the Pipeline', body: 'Tap the star by a client to pin them to the top of your Pipeline; your stars are your own. Each client also shows when their referral was received, and Sort by Recently received puts the newest first.', href: '/pipeline', where: 'Pipeline, or the star on a client\'s page' },
   { id: '2026-10-20-paste-officers', date: '2026-10-20', title: 'Paste officers onto the list', body: 'Paste a spreadsheet, the To line of an email, or signatures, and Keel reads out each officer\'s name, email, phone, job title and council for you to look over and add. Anyone already on the list just gets their blanks filled in.', href: '/councils', where: 'Councils, Paste officers' },
   { id: '2026-10-20-mailer', date: '2026-10-20', title: 'A tidier Mailer', body: 'Each property is one clear row with its rent against the LHA, and writing an email goes in three steps: who it goes to, the email, and sending it.', href: '/mailer' },
   { id: '2026-10-20-notifications', date: '2026-10-20', title: 'Notifications', body: 'The bell at the top shows what needs you: replies due to officers, viewings coming up, new things in the Bin, payments overdue. New ones pop up while you work, and your phone can get them when Keel is closed.', href: '/settings#notifications', where: 'Settings, My settings, Notifications on this device' },
@@ -52,7 +53,7 @@ export const TIPS = {
   properties: 'Fold the cards (Cards: Folded) to scan the list quickly. Send all properties sends every ready one by email or WhatsApp, and anything over LHA is marked red.',
   mailer: 'Alerts send one property to the officers whose clients it suits; Monthly digest picks the best few for a borough; All properties sends the lot. With Outlook connected, Send from Outlook does it in one click.',
   bin: 'Paste a screenshot anywhere (Ctrl or Cmd and V), drop an image here, or paste an enquiry email. With Outlook connected, officers\' nominations land here by themselves.',
-  pipeline: 'Sort by Recently contacted to see who has gone quiet. Every client\'s row opens their page.',
+  pipeline: 'Star a client to pin them to the top. Sort by Recently received for the newest referrals, or Recently contacted to see who has gone quiet.',
   client: 'Arrange, at the top, puts these cards in your own order, and each one folds away. Share sends their details to a landlord once they have agreed.',
   councils: 'Paste officers adds a whole list at once, from a spreadsheet, an email or signatures. One click marks an officer opted out or left, and every email list keeps to it.',
   finances: 'The ghost total is everything owed plus a fee for every client with a viewing booked or further on: the whole pipeline, if it all came in.',

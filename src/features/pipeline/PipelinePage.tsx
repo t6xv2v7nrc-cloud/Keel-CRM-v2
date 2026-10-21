@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useApplicants, useCalls, useDeals, useLastContacts, useMoveStage, useDeleteApplicant, usePeople, useProviders, useRequests } from '../../lib/hooks';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { useApplicants, useCalls, useDeals, useLastContacts, useMoveStage, usePeople, useProviders, useRequests, useSettings } from '../../lib/hooks';
 import { CHANNEL_LABEL } from '../../lib/contacts';
 import type { LastContact } from '../../lib/contacts';
 import { Avatar, Button, Card, Help, IceBadge, Icon, NewBadge, PageHeader, PageSkeleton, TierBadge, UrgentChip, useToast } from '../../components/ui';
 import { HousingOfficersBox } from './Officers';
 import { DuplicatesBox } from './Duplicates';
+import { StarButton } from './Star';
 import { openGroups } from '../../lib/duplicates';
 import { callState, dayLabel, dayWord, lastCallMap, todayIso } from '../../lib/calls';
 import { readNotes } from '../../lib/readNotes';
@@ -16,11 +17,12 @@ import type { Applicant, Deal, ProviderRequest } from '../../lib/types';
 import { RequestChip } from '../requests/RequestSheet';
 import { coldDays, DEAL_STEPS, isLive, stuckDays } from '../../lib/progress';
 import { DealChip, StuckChip } from '../progress/Progress';
-import { money, shortDate, timeAgo } from '../../lib/format';
+import { clockTime, money, shortDate, timeAgo } from '../../lib/format';
 import { HOUSEHOLD_LABEL, tierLabel, tierNumbers, URGENCY_LABEL, WORK_STATUS_LABEL } from '../../lib/tiering';
 import {
   applyFilters, areaOf, BENEFITS, benefitsOf, councilOf, DEFAULT_FILTERS, effectiveTier, filtersFromParams,
-  filtersToParams, hasOfficer, householdOf, isActive, isFresh, isIced, isUrgent, officerName, officerOrg, parseQuery, previewText, searchText, sortApplicants,
+  filtersToParams, hasOfficer, householdOf, isActive, isFresh, isIced, isUrgent, officerName, officerOrg, parseQuery, previewText, receivedAt, receivedWords, searchText,
+  sortApplicants, starredFirst,
 } from '../../lib/search';
 import type { BenefitKey, PipelineFilters, SortKey } from '../../lib/search';
 import { Tip } from '../guide/Guide';
@@ -35,7 +37,7 @@ const PICKABLE_STAGES: ApplicantStage[] = APPLICANT_STAGES.filter((s) => s !== '
 
 const SORT_OPTIONS: Array<[SortKey, string]> = [
   ['tier', 'Tier'], ['name', 'Name'], ['officer', 'Housing officer first'], ['household', 'Client type'], ['benefits', 'Benefits'],
-  ['area', 'Area'], ['budget', 'Budget'], ['stage', 'Stage'], ['contacted', 'Recently contacted'], ['updated', 'Recently updated'],
+  ['area', 'Area'], ['budget', 'Budget'], ['stage', 'Stage'], ['received', 'Recently received'], ['contacted', 'Recently contacted'], ['updated', 'Recently updated'],
 ];
 
 const PROGRESS_LABEL: Record<PipelineFilters['progress'], string> = {
@@ -96,9 +98,10 @@ export function PipelinePage() {
     return [a.id, r.suggestions.filter((s) => s.confidence >= 0.55).length + r.flags.filter((f) => f.fix).length] as const;
   })), [applicants]);
   const moveStage = useMoveStage();
-  const deleteApplicant = useDeleteApplicant();
+  const { settings } = useSettings();
+  // this person's stars: pinned to the top
+  const starred = useMemo(() => new Set(settings.starredClients), [settings.starredClients]);
   const { toast } = useToast();
-  const navigate = useNavigate();
 
   // ── Filters + sort ──
   // React state is the source of truth (so rapid changes never overwrite each
@@ -161,9 +164,12 @@ export function PipelinePage() {
       if (filters.progress === 'viewing') return pr.lead?.status === 'viewing';
       return pr.lead?.status === 'offered' || pr.lead?.status === 'accepted';
     };
-    return sortApplicants(applyFilters(applicants, filters, (a) => textIndex.get(a.id) ?? '').filter(byCalls).filter(byOwner).filter(byProgress),
-      sortKey, dir, (a) => contacts.get(a.id)?.at ?? null);
-  }, [applicants, filters, textIndex, sortKey, dir, last, contacts, people.meId, progressOf]);
+    const byStar = (a: Applicant) => !filters.starred || starred.has(a.id);
+    return starredFirst(sortApplicants(applyFilters(applicants, filters, (a) => textIndex.get(a.id) ?? '').filter(byCalls).filter(byOwner).filter(byProgress).filter(byStar),
+      sortKey, dir, (a) => contacts.get(a.id)?.at ?? null), starred);
+  }, [applicants, filters, textIndex, sortKey, dir, last, contacts, people.meId, progressOf, starred]);
+  const starredShown = rows.filter((a) => starred.has(a.id)).length;
+  const starredCount = applicants.filter((a) => starred.has(a.id)).length;
 
   const stageCounts = useMemo(() => {
     const m = new Map<string, number>();
@@ -193,6 +199,7 @@ export function PipelinePage() {
   type Pill = { label: string; remove: (f: PipelineFilters) => PipelineFilters };
   const pills: Pill[] = [];
   if (filters.q) pills.push({ label: `Search: ${filters.q}`, remove: (f) => ({ ...f, q: '' }) });
+  if (filters.starred) pills.push({ label: 'Starred only', remove: (f) => ({ ...f, starred: false }) });
   if (filters.stage !== 'active') pills.push({ label: filters.stage === 'all' ? 'All stages' : STAGE_LABEL[filters.stage], remove: (f) => ({ ...f, stage: 'active' }) });
   if (filters.tier !== 'any') pills.push({ label: tierLabel(Number(filters.tier)), remove: (f) => ({ ...f, tier: 'any' }) });
   if (filters.household !== 'any') pills.push({ label: filters.household === 'unknown' ? 'Client type not set' : HOUSEHOLD_LABEL[filters.household], remove: (f) => ({ ...f, household: 'any' }) });
@@ -227,14 +234,6 @@ export function PipelinePage() {
       { id: a.id, from: a.stage, to },
       { onSuccess: () => toast(`${a.full_name.split(' ')[0]} → ${STAGE_LABEL[to]}`, 'success') },
     );
-  };
-
-  const removeApplicant = (a: Applicant) => {
-    if (!window.confirm(`Delete ${a.full_name}? This removes their record, activity and any placement. This cannot be undone.`)) return;
-    deleteApplicant.mutate(a.id, {
-      onSuccess: () => toast(`Deleted ${a.full_name}`, 'success'),
-      onError: (e) => toast(`Delete failed: ${(e as Error).message}`, 'danger'),
-    });
   };
 
   if (isLoading) return <PageSkeleton />;
@@ -348,6 +347,11 @@ export function PipelinePage() {
         <span className="text-[var(--ink-muted)]">
           Showing <strong className="text-[var(--ink)]">{rows.length}</strong> of {scopeCount} {scopeLabel}
         </span>
+        {starredCount > 0 && !filters.starred && (
+          <button type="button" onClick={() => update({ starred: true })} className="inline-flex items-center gap-1 text-[var(--link)] hover:underline">
+            <Icon name="star" size={13} filled className="text-[var(--accent)]" />{starredCount} starred
+          </button>
+        )}
         {icedCount > 0 && filters.progress !== 'iced' && (
           <button type="button" onClick={() => update({ progress: 'iced' })} className="text-[var(--link)] hover:underline">
             {icedCount} on ice
@@ -391,31 +395,47 @@ export function PipelinePage() {
           <SortLabel k="stage" sortKey={sortKey} dir={dir} onSort={toggleSort}>Stage</SortLabel>
         </div>
         <ul className="m-0 list-none p-0">
-          {rows.map((a) => {
-            const preview = previewText(a, terms);
+          {rows.map((a, i) => {
+            const preview = terms.length ? previewText(a, terms) : '';
             const household = householdOf(a);
             const benefits = benefitsOf(a);
             const pr = progressOf(a);
             const req = openRequestOf.get(a.id);
             const needs = [household ? TYPE_SHORT[household] : null, a.budget_pcm ? `${money(a.budget_pcm)} budget` : null].filter(Boolean).join(' · ');
+            // a label above the starred clients, and above everyone else once they end
+            const label = starredShown > 0 && starredShown < rows.length && (i === 0 || i === starredShown)
+              ? (i === 0 ? `Starred (${starredShown})` : 'Everyone else') : null;
+            const chips = pr.stuck !== null || (pr.lead && pr.lead.status !== 'sent') || req || (fromNotes.get(a.id) ?? 0) > 0 || a.assigned_to;
             return (
-              <li key={a.id} className="grid gap-x-5 gap-y-3 border-t border-[var(--line)] px-5 py-3 first:border-t-0 hover:bg-[var(--surface-2)] md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1.1fr)_minmax(0,1fr)_150px] xl:first:border-t">
-                {/* Who */}
-                <div className="flex min-w-0 gap-3">
+              <Fragment key={a.id}>
+                {label && (
+                  <li className="flex items-center gap-1.5 border-t border-[var(--line)] bg-[var(--surface-2)] px-5 py-1.5 text-[12px] font-semibold text-[var(--ink-muted)] first:border-t-0 xl:first:border-t">
+                    {i === 0 && <Icon name="star" size={12} filled className="text-[var(--accent)]" />}{label}
+                  </li>
+                )}
+              <li className="grid gap-x-5 gap-y-2.5 border-t border-[var(--line)] px-4 py-3.5 first:border-t-0 hover:bg-[var(--surface-2)] sm:px-5 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1.1fr)_minmax(0,1fr)_150px] xl:first:border-t">
+                {/* Who: the star sits at the end on a phone (top right of the card), before the name on a wide screen */}
+                <div className="flex min-w-0 items-start gap-3">
+                  <StarButton applicant={a} className="order-last -mr-1 -mt-1 xl:order-first xl:-ml-2 xl:mr-0" />
                   <Avatar name={a.full_name} size={34} accent={effectiveTier(a) === 1} />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <button onClick={() => navigate(`/applicants/${a.id}`)} className="text-left font-medium text-[var(--ink)] hover:underline">
+                      <Link to={`/applicants/${a.id}`} className="text-left text-[15px] font-semibold text-[var(--ink)] hover:underline">
                         <Highlight text={a.full_name} terms={terms} />
-                      </button>
+                      </Link>
                       <TierBadge tier={effectiveTier(a)} />
                       {isFresh(a) && <NewBadge />}
                       {isIced(a) && <IceBadge until={a.iced_until ? shortDate(a.iced_until) : null} />}
                       {isUrgent(a) && <UrgentChip reason={URGENCY_LABEL[a.urgency ?? '']} />}
                     </div>
-                    {a.phone && <div className="font-mono text-[13px] text-[var(--ink-muted)]">{a.phone}</div>}
-                    {(pr.stuck !== null || (pr.lead && pr.lead.status !== 'sent') || req || (fromNotes.get(a.id) ?? 0) > 0 || a.assigned_to) && (
-                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[13px] text-[var(--ink-muted)]">
+                      <span className="inline-flex items-center gap-1" title={`${shortDate(receivedAt(a))}, ${clockTime(receivedAt(a))}`}>
+                        <Icon name="inbox" size={13} className="shrink-0" />{receivedWords(a)}
+                      </span>
+                      {a.phone && <a href={`tel:${a.phone}`} className="tabular-nums hover:text-[var(--link)]">{a.phone}</a>}
+                    </div>
+                    {chips && (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1">
                         {pr.stuck !== null && <StuckChip days={pr.stuck} />}
                         {pr.lead && pr.lead.status !== 'sent' && <span title={pr.lead.address}><DealChip deal={pr.lead} /></span>}
                         {req && <RequestChip request={req} providers={providers} />}
@@ -441,7 +461,7 @@ export function PipelinePage() {
                 </div>
 
                 {/* Looking for */}
-                <div className="min-w-0 text-[14px] md:pl-0 pl-[46px]">
+                <div className="min-w-0 pl-[46px] text-[14px] md:pl-0">
                   <div className="flex flex-wrap items-center gap-1">
                     {needs && <span className="text-[var(--ink)]">{needs}</span>}
                     {benefits.map((b) => (
@@ -449,22 +469,23 @@ export function PipelinePage() {
                     ))}
                     {!needs && benefits.length === 0 && <span className="text-[var(--ink-muted)]">Type and benefits not known</span>}
                   </div>
-                  <div className="mt-1 line-clamp-2 text-[13px] text-[var(--ink-muted)]" title={areaOf(a) || undefined}>
+                  <div className="mt-0.5 line-clamp-2 text-[13px] text-[var(--ink-muted)]" title={areaOf(a) || undefined}>
                     {areaOf(a) || 'Area not given'}
                   </div>
                 </div>
 
                 {/* Housing officer and next step */}
-                <div className="flex min-w-0 flex-col gap-1.5 pl-[46px] text-[14px] md:pl-[46px] xl:pl-0">
+                <div className="flex min-w-0 flex-col gap-1 pl-[46px] text-[14px] xl:pl-0">
                   {hasOfficer(a) ? (
                     <div className="min-w-0" title={[a.officer_name, a.officer_email, a.officer_phone].filter(Boolean).join('\n')}>
                       <div className="flex items-center gap-1.5 truncate text-[var(--ink)]">
                         <Icon name="user" size={13} className="shrink-0 text-[var(--ink-muted)]" />
                         <span className="truncate">{officerName(a) ?? a.officer_email ?? a.officer_phone}</span>
+                        {officerOrg(a) && <span className="truncate text-[13px] text-[var(--ink-muted)]">{officerOrg(a)}</span>}
                       </div>
-                      <div className="truncate pl-[19px] text-[12px] text-[var(--ink-muted)]">
-                        {[officerOrg(a), councilOf(a) && councilOf(a) !== officerOrg(a) ? `client: ${councilOf(a)}` : null].filter(Boolean).join(' · ')}
-                      </div>
+                      {councilOf(a) && councilOf(a) !== officerOrg(a) && (
+                        <div className="truncate pl-[19px] text-[12px] text-[var(--ink-muted)]">Client's council: {councilOf(a)}</div>
+                      )}
                     </div>
                   ) : (
                     <div className="text-[13px] text-[var(--ink-muted)]">No housing officer</div>
@@ -473,35 +494,25 @@ export function PipelinePage() {
                 </div>
 
                 {/* Stage */}
-                <div className="flex items-center gap-2 pl-[46px] md:col-span-2 md:pl-[46px] xl:col-span-1 xl:flex-col xl:items-stretch xl:pl-0">
+                <div className="pl-[46px] md:col-span-2 xl:col-span-1 xl:pl-0">
                   <select
                     value={a.stage}
                     onChange={(e) => changeStage(a, e.target.value as ApplicantStage)}
                     aria-label={`Stage for ${a.full_name}`}
-                    className="min-h-[36px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[13px] text-[var(--ink)]"
+                    className="min-h-[36px] w-full max-w-[220px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[13px] text-[var(--ink)] xl:max-w-none"
                   >
                     {(PICKABLE_STAGES.includes(a.stage) ? PICKABLE_STAGES : [...PICKABLE_STAGES, a.stage]).map((s) => (
                       <option key={s} value={s}>{STAGE_LABEL[s]}</option>
                     ))}
                   </select>
-                  <div className="flex items-center gap-2 xl:justify-between">
-                    <span className="text-[12px] text-[var(--ink-muted)]">Updated {timeAgo(a.updated_at)}</span>
-                    <button
-                      onClick={() => removeApplicant(a)}
-                      aria-label={`Delete ${a.full_name}`}
-                      title="Delete client"
-                      className="rounded p-1.5 text-[var(--ink-muted)] transition-colors hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
-                    >
-                      <Icon name="trash" size={15} />
-                    </button>
-                  </div>
                 </div>
               </li>
+              </Fragment>
             );
           })}
           {rows.length === 0 && (
             <li className="px-5 py-10 text-center text-[var(--ink-muted)]">
-              No clients match this search.{' '}
+              {filters.starred && starredCount === 0 ? 'No starred clients yet. Tap the star on any client to pin them here.' : 'No clients match this search.'}{' '}
               {pills.length > 0 && <button onClick={clearAll} className="text-[var(--link)] hover:underline">Clear all filters</button>}
             </li>
           )}

@@ -253,6 +253,11 @@ supabase/checks/live-vs-repo.sql  (read-only: which migrations the live database
   on WhatsApp, by email or copied, only once they agreed; it is logged (activity kind "shared"), not counted as contact.
 - Notes: each client page has Notes and contact (how you were in touch, what was said, who, when); the Pipeline shows
   last contact per client and sorts by Recently contacted.
+- Stars: each person stars their own clients (personal setting `starredClients`, saved by `useStarClient`, no migration);
+  starred ones sit at the top of their Pipeline under a Starred label (`starredFirst`), `?starred=1` shows only them, and
+  the star is by the name on the Pipeline row and the client page (features/pipeline/Star.tsx). Each row and the client
+  page say when the referral was received (`receivedAt`: nominated_at, else created_at; `receivedWords`), and the
+  Pipeline sorts by Recently received. Rows carry no delete button (delete is on the client page).
 - Calls are kept quiet on request: not in the top bar, not on Home, not on the client page (the /calls page still exists
   but nothing links to it); log a call as a note. Home shows next steps due instead. Do not make calls prominent again unasked.
 - Finances leads with the ghost total: everything owed plus a fee for every client with a viewing booked or further

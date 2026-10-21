@@ -44,6 +44,8 @@ export const HELP = {
       'Every client in one table. Search by name, phone, area or anything in their notes. Put words in quotes to match a phrase, like "north finchley".',
       'Filters add up: UC plus Tier 1 plus "Due a call now" shows only clients who are all three. Assigned lets you see just your own clients.',
       'Click a column heading to sort. Your search is kept in the web address, so you can bookmark it or send it to each other.',
+      'Star a client (the star by their name, here or on their page) to pin them to the top of your Pipeline. Stars are your own: your co-worker keeps theirs. Tap "starred" above the list to see only them.',
+      'Each client shows when their referral or enquiry was received: the officer\'s nomination if it was dated, else when they got in touch. Sort by Recently received for the newest first.',
     ],
   },
   pipelineCalls: {

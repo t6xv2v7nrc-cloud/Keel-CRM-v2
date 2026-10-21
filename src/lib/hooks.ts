@@ -889,6 +889,30 @@ export function useSavePlacement() {
 }
 
 /** Save either my own settings or the team's. */
+/** Star or unstar a client for this person (a personal setting, so each of you keeps your own): shown at once, then saved. */
+export function useStarClient() {
+  const qc = useQueryClient();
+  type Cached = { settings: AppSettings; ready: boolean };
+  return useMutation({
+    onMutate: ({ id, on }: { id: string; on: boolean }) => {
+      qc.setQueryData<Cached>(['settings'], (c) => {
+        const now = c ?? { settings: DEFAULT_SETTINGS, ready: true };
+        const list = now.settings.starredClients.filter((x) => x !== id);
+        return { ...now, settings: { ...now.settings, starredClients: on ? [id, ...list] : list } };
+      });
+    },
+    mutationFn: async () => {
+      const uid = await currentUserId();
+      if (!uid) throw new Error('Sign in again to star clients.');
+      // the list as it stands after every tap so far
+      const settings = qc.getQueryData<Cached>(['settings'])?.settings ?? DEFAULT_SETTINGS;
+      const { error } = await supabase.from('settings').upsert({ key: myKey(uid), value: myPart(settings), updated_at: new Date().toISOString() });
+      if (error) throw error;
+    },
+    onError: () => { qc.invalidateQueries({ queryKey: ['settings'] }); },
+  });
+}
+
 export function useSaveSettings() {
   const qc = useQueryClient();
   return useMutation({
