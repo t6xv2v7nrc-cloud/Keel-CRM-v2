@@ -160,6 +160,9 @@ src/
 netlify/functions/ intake.mjs (website form to the Bin), read-screenshot.ts (Claude reads a Bin screenshot; checks the
               caller's Supabase token, answers 501 until ANTHROPIC_API_KEY is set), lib/prompt.ts (what Claude is told).
               Type-checked strictly by `tsconfig.functions.json` as part of `npm run build`.
+tools/        keel-mailer.html: the standalone mailer Ridwan runs as a Claude artifact (window.storage; reads lists through
+              the Claude API); not part of the app or the build. Each housing officer gets a local list (their council and the
+              3 neighbouring areas with the most properties; BORDERS is copied from london.ts) or the full list, by Outlook.
 supabase/migrations/
 supabase/checks/live-vs-repo.sql  (read-only: which migrations the live database has had, and tables no migration made)
 ```
