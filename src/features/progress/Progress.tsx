@@ -385,7 +385,7 @@ function AddDeal({ applicant, tracked, onDone }: { applicant: Applicant; tracked
   const [status, setStatus] = useState<DealStatus>('interested');
   const have = new Set(tracked.map((d) => d.address));
   const available = properties.filter((p) => (p.status === 'void' || p.status === 'under_offer') && !have.has(p.address_line));
-  const suited = matchesForApplicant(applicant, available);
+  const suited = matchesForApplicant(applicant, available, { deals: tracked });
   const suitedIds = new Set(suited.map((x) => x.property.id));
   const others = available.filter((p) => !suitedIds.has(p.id)).sort((a, b) => a.address_line.localeCompare(b.address_line));
   const chosen = available.find((p) => p.id === pick);

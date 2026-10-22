@@ -41,6 +41,9 @@ export interface PropertyLike {
   furnished: string | null;
   notes: string | null;
   lha_area?: string | null;
+  /** 0019: 0 is the ground floor, below 0 a basement; and whether there is a lift */
+  floor?: number | null;
+  lift?: boolean | null;
 }
 
 export type Strength = 'strong' | 'good' | 'possible';
@@ -227,7 +230,8 @@ function propertyFacts(p: PropertyLike) {
     || (small && /\ben[- ]?suite\b/i.test(text));
   return {
     kind, beds, district, borough, areas, shared,
-    stepFree: /\b(ground\s+floor|step[- ]?free|level\s+access|lift|bungalow)\b/i.test(text),
+    floor: p.floor ?? null, lift: p.lift ?? null,
+    stepFree: p.floor === 0 || p.lift === true || /\b(ground\s+floor|step[- ]?free|level\s+access|lift|bungalow)\b/i.test(text),
     furnished: p.furnished ? !/^unfurnished$/i.test(p.furnished) : null,
     lha: /lha/i.test(p.rent_text ?? ''),
   };
@@ -360,10 +364,15 @@ export function scoreMatch(p: PropertyLike, a: Applicant): Match | null {
     score += 5; // their own council's area as well as their ask
   }
 
-  // Needs
+  // Needs: step-free, and for families the lower floors (a pram up three flights is no fun)
   if (need.needsStepFree) {
-    if (f.stepFree) { score += 10; reasons.push('Ground floor / step-free'); }
+    if (f.stepFree) { score += 10; reasons.push(f.floor === 0 ? 'Ground floor, as they need' : f.lift ? 'Has a lift, as they need step-free' : 'Ground floor / step-free'); }
+    else if (f.floor != null && f.floor !== 0) cautions.push(`Needs step-free, this is ${f.floor < 0 ? 'a basement' : `floor ${f.floor}`}: check for a lift`);
     else cautions.push('Needs ground floor or step-free: check');
+  } else if (isFamily && f.floor != null) {
+    if (f.floor === 0) { score += 4; reasons.push('Ground floor, easy with children'); }
+    else if (f.lift) score += 2;
+    else if (f.floor >= 3) { score -= 4; cautions.push(`Floor ${f.floor} with no lift: hard with children`); }
   }
   if (need.furnished === 'yes' && f.furnished === true) { score += 5; reasons.push(p.furnished ?? 'Furnished'); }
   if (need.furnished === 'no' && f.furnished === true) cautions.push('Wants unfurnished');

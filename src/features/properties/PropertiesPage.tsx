@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Button, Card, Help, Icon, NewBadge, PageHeader, PageSkeleton, TierBadge, UrgentChip, useToast } from '../../components/ui';
 import {
   NeedsDatabaseUpdate, PROPERTY_STATUS_LABEL, sentKey, useAddProperties, useApplicants, useDeleteProperties, useProperties,
-  useDeals, useMatchOptions, useProviders, useRequests, useSentOnWhatsApp, useSetPropertyProvider, useSetPropertyStatus,
+  useDeals, useMatchOptions, useProspectContext, useProviders, useRequests, useSentOnWhatsApp, useSetPropertyProvider, useSetPropertyStatus,
 } from '../../lib/hooks';
 import { isLocalProperty, localProperties } from '../../lib/localProperties';
 import type { NewProperty, SavedProperty, SentOnWhatsApp } from '../../lib/hooks';
@@ -14,7 +14,9 @@ import { bestFew, brief } from '../../lib/propertyMatch';
 import type { Strength } from '../../lib/propertyMatch';
 import { matchesForProperty } from '../../lib/matchRules';
 import type { RuledMatch } from '../../lib/matchRules';
-import { IncomeTag, RuleWarnings } from './MatchBits';
+import { FitBadge, IncomeTag, ProspectTag, ProspectWhy, RuleWarnings } from './MatchBits';
+import { chanceWords, prospectFor, ranked } from '../../lib/prospects';
+import type { Prospect, ProspectContext } from '../../lib/prospects';
 import { LandlordShareLink } from './ShareLinks';
 import { BOROUGHS } from '../../lib/london';
 import { activeSettings } from '../../lib/settings';
@@ -27,7 +29,7 @@ import { RequestButton } from '../requests/RequestSheet';
 import { providerFor } from '../../lib/requests';
 import { effectiveTier, isFresh, isUrgent } from '../../lib/search';
 import { tierLabel } from '../../lib/tiering';
-import { shortDate } from '../../lib/format';
+import { money, shortDate } from '../../lib/format';
 import { bedsOfType, TYPE_OPTIONS } from '../../lib/propertyEdit';
 import { EditProperty } from './EditProperty';
 import { FlagChip, PropertyChecks } from './Checks';
@@ -127,6 +129,21 @@ export function PropertiesPage() {
     [properties, applicants, matchOptions],
   );
 
+  // each match's fit, chance of placing and expected money; best bets first
+  const pctx = useProspectContext();
+  const scored = useMemo(
+    () => new Map(properties.map((p) => [p.id, ranked(matches.get(p.id) ?? [], (m) => m, (m) => prospectFor(m, p, pctx))] as const)),
+    [properties, matches, pctx],
+  );
+  // a property marked not ready cannot go out yet, so it is nobody's best bet today
+  const notReady = useMemo(() => new Set(properties.filter((p) => p.not_ready_at).map((p) => p.id)), [properties]);
+  const bestBet = (id: string) => (notReady.has(id) ? null : scored.get(id)?.[0]?.prospect ?? null);
+  // the order of the list, remembered on this device: most money likely first, as standard
+  const [order, setOrderState] = useState<'money' | 'clients' | 'newest'>(() => {
+    try { const v = localStorage.getItem('keel-properties-order'); return v === 'clients' || v === 'newest' ? v : 'money'; } catch { return 'money'; }
+  });
+  const setOrder = (v: typeof order) => { setOrderState(v); try { localStorage.setItem('keel-properties-order', v); } catch { /* fine */ } };
+
   const counts = {
     available: properties.filter((p) => p.status === 'void').length,
     under_offer: properties.filter((p) => p.status === 'under_offer').length,
@@ -155,9 +172,10 @@ export function PropertiesPage() {
       .filter((p) => !needle || [p.address_line, p.area, p.borough, p.postcode, p.property_type, p.source_tag]
         .some((x) => x?.toLowerCase().includes(needle)))
       .sort((a, b) => Number(justAdded.has(b.id)) - Number(justAdded.has(a.id))
-        || (matches.get(b.id)?.length ?? 0) - (matches.get(a.id)?.length ?? 0)
+        || (order === 'money' ? (bestBet(b.id)?.expected ?? 0) - (bestBet(a.id)?.expected ?? 0) || (bestBet(b.id)?.chance ?? 0) - (bestBet(a.id)?.chance ?? 0) : 0)
+        || (order !== 'newest' ? (matches.get(b.id)?.length ?? 0) - (matches.get(a.id)?.length ?? 0) : 0)
         || b.created_at.localeCompare(a.created_at));
-  }, [properties, status, borough, q, justAdded, matches, lhaFilter, providerFilter, providers]);
+  }, [properties, status, borough, q, justAdded, matches, lhaFilter, providerFilter, providers, order, scored]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeFilters = [status !== 'available', borough !== 'all', lhaFilter !== 'any', providerFilter !== 'any'].filter(Boolean).length;
   const toggle = (id: string) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -182,7 +200,8 @@ export function PropertiesPage() {
   const card = (p: Property) => (
     <PropertyCard
       p={p}
-      matches={matches.get(p.id) ?? []}
+      scored={scored.get(p.id) ?? []}
+      ctx={pctx}
       deals={dealsOf(p)}
       names={names}
       openRequests={requests.filter((r) => r.status === 'sent' && (r.property_id === p.id || r.property_address === p.address_line)).length}
@@ -284,6 +303,15 @@ export function PropertiesPage() {
                 <option value="within">At or under LHA</option>
                 <option value="over">Over LHA</option>
                 <option value="unknown">LHA not worked out</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="flex items-center gap-1.5 text-[13px] font-medium text-[var(--ink-muted)]">Order <Help topic="prospects" /></span>
+              <select value={order} onChange={(e) => setOrder(e.target.value as typeof order)}
+                className="min-h-[40px] rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]">
+                <option value="money">Most money likely</option>
+                <option value="clients">Most clients</option>
+                <option value="newest">Newest</option>
               </select>
             </label>
             {providersReady && providers.length > 0 && (
@@ -663,13 +691,16 @@ function PasteImport({ existing, applicants, canClose, onClose, onAdded, onNeeds
 
 // ── Property card with its matches ────────────────────────────────
 
-function PropertyCard({ p, matches, deals, names, sent, openRequests, isNew, folded, onFold, selected, onToggle, onStatus, onDelete }: {
-  p: Property; matches: RuledMatch[]; deals: Deal[]; names: Map<string, string>; sent: Map<string, SentOnWhatsApp>; openRequests: number; isNew: boolean;
+function PropertyCard({ p, scored, ctx, deals, names, sent, openRequests, isNew, folded, onFold, selected, onToggle, onStatus, onDelete }: {
+  p: Property; scored: Array<{ item: RuledMatch; prospect: Prospect }>; ctx: ProspectContext; deals: Deal[]; names: Map<string, string>; sent: Map<string, SentOnWhatsApp>; openRequests: number; isNew: boolean;
   folded: boolean; onFold: () => void; selected: boolean;
   onToggle: () => void; onStatus: (s: Property['status']) => void; onDelete: () => void;
 }) {
   const [showAll, setShowAll] = useState(false);
   const [editing, setEditing] = useState(false);
+  const matches = scored.map((x) => x.item);
+  const prospectOf = new Map(scored.map((x) => [x.item.applicant.id, x.prospect]));
+  const top = scored[0];
   const best = bestFew(matches, (m) => m.strength);
   const shown = showAll ? matches : best;
   const hidden = matches.length - best.length;
@@ -706,7 +737,7 @@ function PropertyCard({ p, matches, deals, names, sent, openRequests, isNew, fol
             </div>
           </div>
           <div className="mt-0.5 text-[14px] text-[var(--ink-muted)]">{facts.join(' · ') || 'No details'}</div>
-          {folded ? <FoldedSummary p={p} matches={matches} deals={deals} /> : (
+          {folded ? <FoldedSummary p={p} matches={matches} deals={deals} top={top} /> : (
             <>
               <div className="mt-1.5"><LhaLine property={p} /></div>
               <PropertyChecks property={p} />
@@ -748,9 +779,10 @@ function PropertyCard({ p, matches, deals, names, sent, openRequests, isNew, fol
             <p className="m-0 py-1 text-[14px] text-[var(--ink-muted)]">No matching clients yet.</p>
           ) : (
             <>
+              {top && <BestBet top={top} />}
               <ul className="m-0 flex list-none flex-col divide-y divide-[var(--line)] p-0">
                 {shown.map((m) => <MatchRow key={m.applicant.id} m={m} p={p} sent={sent.get(sentKey(m.applicant.id, p.address_line))}
-                  deal={deals.find((d) => d.applicant_id === m.applicant.id)} />)}
+                  deal={deals.find((d) => d.applicant_id === m.applicant.id)} prospect={prospectOf.get(m.applicant.id) ?? null} ctx={ctx} />)}
               </ul>
               {hidden > 0 && (
                 <button onClick={() => setShowAll((v) => !v)} className="mt-1 text-[13px] text-[var(--link)] hover:underline">
@@ -766,13 +798,14 @@ function PropertyCard({ p, matches, deals, names, sent, openRequests, isNew, fol
 }
 
 /** A folded card in a line: its LHA, anything red or held back, and how many clients fit or are in play. */
-function FoldedSummary({ p, matches, deals }: { p: Property; matches: RuledMatch[]; deals: Deal[] }) {
+function FoldedSummary({ p, matches, deals, top }: { p: Property; matches: RuledMatch[]; deals: Deal[]; top?: { item: RuledMatch; prospect: Prospect } }) {
   const flags = checksFor(p).flags.filter((f) => f.tone === 'grey' || (f.tone === 'red' && f.key !== 'over_lha'));
   const strong = matches.filter((m) => m.strength === 'strong').length;
   const going = deals.filter((d) => d.status !== 'sent' && d.status !== 'fell_through').length;
   const words = [
     isAvailable(p) ? (matches.length ? `${matches.length} ${matches.length === 1 ? 'client fits' : 'clients fit'}${strong ? `, ${strong} strong` : ''}` : 'No matching clients yet') : null,
     going ? `${going} in play` : null,
+    isAvailable(p) && top ? `best bet ${top.item.applicant.full_name.split(' ')[0]}, ${chanceWords(top.prospect)}${top.prospect.expected ? `, ≈${money(top.prospect.expected)}` : ''}` : null,
   ].filter(Boolean);
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[var(--ink-muted)]">
@@ -829,7 +862,19 @@ function InPlay({ deals, names }: { deals: Deal[]; names: Map<string, string> })
 }
 
 /** One client: strength, who, the reasons in brief (all of them on hover), and ways to reach them. */
-function MatchRow({ m, p, sent, deal }: { m: RuledMatch; p: Property; sent: SentOnWhatsApp | undefined; deal: Deal | undefined }) {
+/** The best bet on a property: who, how likely, and what it is worth. */
+function BestBet({ top }: { top: { item: RuledMatch; prospect: Prospect } }) {
+  const x = top.prospect;
+  return (
+    <p className="m-0 pb-1 pt-0.5 text-[13px] text-[var(--ink-muted)]">
+      <Icon name="trend" size={13} className="mr-1.5 inline align-[-2px] text-[var(--accent)]" />
+      <span>Best bet: <strong className="font-semibold text-[var(--ink)]">{top.item.applicant.full_name.split(' ')[0]}</strong>, {chanceWords(x)} likely to place{x.expected ? <>, worth about <strong className="font-semibold text-[var(--ink)]">{money(x.expected)}</strong></> : ''}.</span>
+    </p>
+  );
+}
+
+function MatchRow({ m, p, sent, deal, prospect, ctx }: { m: RuledMatch; p: Property; sent: SentOnWhatsApp | undefined; deal: Deal | undefined; prospect: Prospect | null; ctx: ProspectContext }) {
+  const [why, setWhy] = useState(false);
   const a = m.applicant;
   const tier = effectiveTier(a);
   // tier and urgency already show as badges; the one line says why it fits
@@ -837,15 +882,17 @@ function MatchRow({ m, p, sent, deal }: { m: RuledMatch; p: Property; sent: Sent
   const urgentWhy = m.reasons.find((r) => r.startsWith('Urgent:'));
   const detail = [...m.reasons, ...m.warnings.map((w) => w.words), ...m.cautions.map((c) => `Check: ${c}`), m.income.words ? `Keel could expect: ${m.income.words}` : null].filter(Boolean).join('\n');
   return (
-    <li className="flex items-center gap-3 py-2.5">
-      <StrengthBadge s={m.strength} />
-      <div className="min-w-0 flex-1" title={detail}>
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5">
+      <span className="hidden sm:inline-flex"><FitBadge strength={m.strength} fit={prospect?.fit ?? null} /></span>
+      <div className="min-w-0 flex-1 basis-[260px]" title={detail}>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="sm:hidden"><FitBadge strength={m.strength} fit={prospect?.fit ?? null} /></span>
           <Link to={`/applicants/${a.id}`} className="text-[15px] font-medium text-[var(--ink)] hover:underline">{a.full_name}</Link>
           <TierBadge tier={tier} />
           {isFresh(a) && <NewBadge />}
           {isUrgent(a) && <UrgentChip reason={urgentWhy?.replace(/^Urgent:\s*/, '')} />}
           <IncomeTag income={m.income} />
+          {prospect && <ProspectTag prospect={prospect} open={why} onToggle={() => setWhy((v) => !v)} />}
           {deal && deal.status !== 'sent' ? <DealChip deal={deal} /> : <SentTag sent={sent} />}
         </div>
         <div className="text-[13px] text-[var(--ink-muted)] sm:truncate">
@@ -853,15 +900,18 @@ function MatchRow({ m, p, sent, deal }: { m: RuledMatch; p: Property; sent: Sent
           {!m.warnings.length && m.cautions[0] && <span className="text-[var(--note-fg)]">{reasons.length ? ' · ' : ''}{brief(m.cautions[0])}</span>}
         </div>
         {m.warnings.length > 0 && <div className="mt-1 flex flex-wrap gap-1"><RuleWarnings warnings={m.warnings} /></div>}
+        {why && prospect && <ProspectWhy prospect={prospect} ctx={ctx} />}
       </div>
-      <LandlordShareLink applicant={a} property={p} />
-      <WhatsAppLink to={a} properties={[p]} icon />
-      {a.phone && (
-        <a href={`tel:${a.phone}`} title={`Call ${a.full_name} (${a.phone})`} aria-label={`Call ${a.full_name}`}
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-[var(--line)] text-[var(--ink-muted)] transition-colors hover:border-[var(--line-strong)] hover:text-[var(--ink)]">
-          <Icon name="phone" size={15} />
-        </a>
-      )}
+      <div className="flex shrink-0 items-center gap-2">
+        <LandlordShareLink applicant={a} property={p} />
+        <WhatsAppLink to={a} properties={[p]} icon />
+        {a.phone && (
+          <a href={`tel:${a.phone}`} title={`Call ${a.full_name} (${a.phone})`} aria-label={`Call ${a.full_name}`}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-[var(--line)] text-[var(--ink-muted)] transition-colors hover:border-[var(--line-strong)] hover:text-[var(--ink)]">
+            <Icon name="phone" size={15} />
+          </a>
+        )}
+      </div>
     </li>
   );
 }

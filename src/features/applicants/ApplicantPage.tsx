@@ -4,18 +4,21 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Avatar, Button, Card, CardHeader, Empty, Help, IceBadge, Icon, NewBadge, PageSkeleton, StageBadge, TierBadge, UrgentChip, useToast } from '../../components/ui';
 import {
   sentKey, useActivities, useApplicant, useApplicants, useAssign, useCalls, useDeals, useDeleteApplicant, usePeople, useProperties, useProviders, useRequests,
-  useMatchOptions, useSaveSettings, useSentOnWhatsApp, useSettings,
+  useMatchOptions, useProspectContext, useSaveSettings, useSentOnWhatsApp, useSettings,
 } from '../../lib/hooks';
 import { bestFew, brief } from '../../lib/propertyMatch';
 import { hiddenForApplicant, matchesForApplicant } from '../../lib/matchRules';
-import { HiddenNote, IncomeTag, RuleWarnings } from '../properties/MatchBits';
+import { FitBadge, HiddenNote, IncomeTag, ProspectTag, ProspectWhy, RuleWarnings } from '../properties/MatchBits';
+import { prospectFor, ranked } from '../../lib/prospects';
+import type { Prospect, ProspectContext } from '../../lib/prospects';
+import type { RuledPropertyMatch } from '../../lib/matchRules';
 import { OfficerMatchesLink } from '../properties/ShareLinks';
 import { activeSettings } from '../../lib/settings';
 import { money, shortDate, timeAgo } from '../../lib/format';
 import { effectiveTier, isActive, isFresh, isIced, isUrgent, receivedWords } from '../../lib/search';
 import { URGENCY_LABEL } from '../../lib/tiering';
 import { dayWord, todayIso } from '../../lib/calls';
-import type { Activity, Applicant } from '../../lib/types';
+import type { Activity, Applicant, Property } from '../../lib/types';
 import { CallsNeedUpdate } from '../calls/CallsPage';
 import { ClientDetails } from './ClientDetails';
 import { ProfileCard } from './ProfileCard';
@@ -260,11 +263,6 @@ function NextStepCard({ applicant, ready }: { applicant: Applicant; ready: boole
 
 // ── Suitable properties ────────────────────────────────────────────
 
-const STRENGTH = {
-  strong: { label: 'Strong', bg: 'var(--strong-bg)', fg: 'var(--strong-fg)' },
-  good: { label: 'Good', bg: 'var(--good-bg)', fg: 'var(--good-fg)' },
-  possible: { label: 'Possible', bg: 'var(--possible-bg)', fg: 'var(--possible-fg)' },
-} as const;
 
 /** The available properties this client could suit: the best few first, the rest on request. */
 function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
@@ -278,7 +276,12 @@ function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
   const [overLha, setOverLha] = useState(() => activeSettings().showOverLha);
   const [outside, setOutside] = useState(() => activeSettings().showOutsideLondon);
   const opts = useMemo(() => ({ ...base, showOverLha: overLha, showOutsideLondon: outside }), [base, overLha, outside]);
-  const all = useMemo(() => matchesForApplicant(applicant, available, opts), [applicant, available, opts]);
+  const pctx = useProspectContext();
+  // each property's fit, chance of placing and expected money for them; best bets first
+  const scored = useMemo(() => ranked(matchesForApplicant(applicant, available, opts), (x) => x.match, (x) => prospectFor(x.match, x.property, pctx)),
+    [applicant, available, opts, pctx]);
+  const all = scored.map((x) => x.item);
+  const prospectOf = new Map(scored.map((x) => [x.item.property.id, x.prospect]));
   const hidden = useMemo(() => hiddenForApplicant(applicant, available, opts), [applicant, available, opts]);
   const best = bestFew(all, (x) => x.match.strength);
   const atPin = pinned ? available.filter((p) => placeKey(p) === pinned) : [];
@@ -335,30 +338,8 @@ function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
       ) : (
         <div className="px-5 pb-3 pt-1">
           <ul className="m-0 flex list-none flex-col divide-y divide-[var(--line)] p-0">
-            {matches.map(({ property: p, match: m }) => {
-              const st = STRENGTH[m.strength];
-              return (
-                <li key={p.id} className="flex items-center gap-3 py-2.5">
-                  <span className="w-[68px] shrink-0 rounded px-2 py-0.5 text-center text-[12px] font-semibold" style={{ background: st.bg, color: st.fg }}>{st.label}</span>
-                  <div className="min-w-0 flex-1" title={[m.line, ...m.warnings.map((w) => w.words), ...m.cautions.map((c) => `Check: ${c}`), m.income.words ? `Keel could expect: ${m.income.words}` : null].filter(Boolean).join('\n')}>
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="text-[15px] font-medium text-[var(--ink)]">{p.address_line}</span>
-                      <LhaChip property={p} />
-                      <IncomeTag income={m.income} />
-                      <SentTag sent={sent.get(sentKey(applicant.id, p.address_line))} />
-                    </div>
-                    <div className="text-[13px] text-[var(--ink-muted)] sm:truncate">
-                      {[p.property_type, rentShown(p)].filter(Boolean).join(' · ')}
-                      {m.line && <> · <span className="text-[var(--ink)]">{m.line}</span></>}
-                      {!m.warnings.length && m.cautions[0] && <span className="text-[var(--note-fg)]"> · {brief(m.cautions[0])}</span>}
-                    </div>
-                    {m.warnings.length > 0 && <div className="mt-1 flex flex-wrap gap-1"><RuleWarnings warnings={m.warnings} /></div>}
-                  </div>
-                  <RequestButton property={p} client={applicant} compact />
-                  <WhatsAppLink to={applicant} properties={[p]} icon />
-                </li>
-              );
-            })}
+            {matches.map((x) => <SuitableRow key={x.property.id} x={x} applicant={applicant} prospect={prospectOf.get(x.property.id) ?? null} ctx={pctx}
+              sent={sent.get(sentKey(applicant.id, x.property.address_line))} />)}
           </ul>
           {!pinned && all.length > best.length && (
             <button onClick={() => setShowAll((v) => !v)} className="mt-1 text-[13px] text-[var(--link)] hover:underline">
@@ -370,6 +351,40 @@ function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
       )}
       </>)}
     </Card>
+  );
+}
+
+/** One property for this client: fit, the chance it ends in a placement (tap for why), what it could bring. */
+function SuitableRow({ x, applicant, prospect, ctx, sent }: {
+  x: RuledPropertyMatch<Property>; applicant: Applicant; prospect: Prospect | null; ctx: ProspectContext; sent: ReturnType<ReturnType<typeof useSentOnWhatsApp>['get']>;
+}) {
+  const [why, setWhy] = useState(false);
+  const { property: p, match: m } = x;
+  return (
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5">
+      <span className="hidden sm:inline-flex"><FitBadge strength={m.strength} fit={prospect?.fit ?? null} /></span>
+      <div className="min-w-0 flex-1 basis-[260px]" title={[m.line, ...m.warnings.map((w) => w.words), ...m.cautions.map((c) => `Check: ${c}`), m.income.words ? `Keel could expect: ${m.income.words}` : null].filter(Boolean).join('\n')}>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="sm:hidden"><FitBadge strength={m.strength} fit={prospect?.fit ?? null} /></span>
+          <span className="text-[15px] font-medium text-[var(--ink)]">{p.address_line}</span>
+          <LhaChip property={p} />
+          <IncomeTag income={m.income} />
+          {prospect && <ProspectTag prospect={prospect} open={why} onToggle={() => setWhy((v) => !v)} />}
+          <SentTag sent={sent} />
+        </div>
+        <div className="text-[13px] text-[var(--ink-muted)] sm:truncate">
+          {[p.property_type, rentShown(p)].filter(Boolean).join(' · ')}
+          {m.line && <> · <span className="text-[var(--ink)]">{m.line}</span></>}
+          {!m.warnings.length && m.cautions[0] && <span className="text-[var(--note-fg)]"> · {brief(m.cautions[0])}</span>}
+        </div>
+        {m.warnings.length > 0 && <div className="mt-1 flex flex-wrap gap-1"><RuleWarnings warnings={m.warnings} /></div>}
+        {why && prospect && <ProspectWhy prospect={prospect} ctx={ctx} />}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <RequestButton property={p} client={applicant} compact />
+        <WhatsAppLink to={applicant} properties={[p]} icon />
+      </div>
+    </li>
   );
 }
 

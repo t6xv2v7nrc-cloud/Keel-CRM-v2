@@ -12,11 +12,14 @@
 //             or who never said, are not held to it (it says so instead).
 //   London    a client sent by a London housing officer is never offered anything outside Greater London; the "Show
 //             outside London" switch shows it with an amber warning.
+//   turned down  once a client has turned a place down, nothing else in that building is offered to them ("Flat 2" at
+//             the same address as the "Flat 1" they said no to), unless they are already going for it.
+//   stairs    a client who needs ground floor or step-free is never offered an upper floor with no lift.
 // Every match then carries one line saying why it fits, and what Keel could expect from it: the letting fee from the
 // provider's usual terms, and the council incentive (on Finances already, else the most the council's scheme pays, else
 // "likely" for an officer referral). On a property, clients with an incentive come first.
 
-import type { Applicant, Property, Provider, Receivable } from './types';
+import type { Applicant, Deal, Property, Provider, Receivable } from './types';
 import type { CouncilScheme } from './councils';
 import { boroughOf } from './councils';
 import { brief, clientNeeds, scoreMatch } from './propertyMatch';
@@ -32,6 +35,9 @@ import { areNeighbours, BOROUGHS, LONDON_BOROUGHS } from './london';
 import { activeSettings } from './settings';
 import { money } from './format';
 import { todayIso } from './calls';
+import { buildingOf, sameBuilding, turnedDown } from './buildings';
+import { floorWords } from './propertyChecks';
+import { shortAddress, isLive } from './progress';
 
 export type RuleProperty = PropertyLike & {
   id?: string;
@@ -41,10 +47,10 @@ export type RuleProperty = PropertyLike & {
   source_tag?: string | null;
 };
 
-export type Hidden = 'size' | 'kind' | 'suits' | 'area' | 'outside_london' | 'over_lha';
+export type Hidden = 'turned_down' | 'stairs' | 'size' | 'kind' | 'suits' | 'area' | 'outside_london' | 'over_lha';
 export const HIDDEN_WORDS: Record<Hidden, string> = {
-  size: 'too small', kind: 'shared, not for their household', suits: 'marked for other clients', area: 'outside the areas they want',
-  outside_london: 'outside London', over_lha: 'over their LHA',
+  turned_down: 'in a building they turned down', stairs: 'upstairs with no lift', size: 'too small', kind: 'shared, not for their household',
+  suits: 'marked for other clients', area: 'outside the areas they want', outside_london: 'outside London', over_lha: 'over their LHA',
 };
 
 export interface Warning { tone: 'red' | 'amber'; words: string }
@@ -56,8 +62,11 @@ export interface RuleOptions {
   providers?: Provider[];
   schemes?: CouncilScheme[];
   receivables?: Array<Pick<Receivable, 'applicant_id' | 'kind' | 'status' | 'amount'>>;
+  /** every client's deals: a building they turned down is not offered again */
+  deals?: RuleDeal[];
   today?: string;
 }
+export type RuleDeal = Pick<Deal, 'applicant_id' | 'property_id' | 'address' | 'status' | 'fell_through_reason'> & Partial<Pick<Deal, 'viewing_outcome'>>;
 
 export interface LhaFit {
   brma: string;
@@ -101,6 +110,29 @@ export function targetsOf(a: Applicant): Targets {
   return targets;
 }
 
+// each client's deals, worked out once per list of deals
+const dealsCache = new WeakMap<RuleDeal[], Map<string, RuleDeal[]>>();
+function dealsOf(all: RuleDeal[], applicantId: string): RuleDeal[] {
+  let by = dealsCache.get(all);
+  if (!by) {
+    by = new Map();
+    for (const d of all) by.set(d.applicant_id, [...(by.get(d.applicant_id) ?? []), d]);
+    dealsCache.set(all, by);
+  }
+  return by.get(applicantId) ?? [];
+}
+
+/** The deal at this building the client turned down, unless they are going for this very place now. */
+export function turnedDownHere(p: RuleProperty, a: Pick<Applicant, 'id'>, deals: RuleDeal[] | undefined): RuleDeal | null {
+  if (!deals?.length) return null;
+  const mine = dealsOf(deals, a.id);
+  if (!mine.length) return null;
+  const isThis = (d: RuleDeal) => (p.id && d.property_id === p.id) || d.address.trim().toLowerCase() === p.address_line.trim().toLowerCase();
+  if (mine.some((d) => isThis(d) && isLive(d) && !turnedDown(d))) return null;
+  const here = buildingOf(p.address_line, p.postcode);
+  return mine.find((d) => turnedDown(d) && (isThis(d) || sameBuilding(buildingOf(d.address), here))) ?? null;
+}
+
 const sizeRank = (s: LhaSize) => (s === 'shared' ? 0 : s);
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const londonOfficer = (a: Applicant) => {
@@ -117,6 +149,14 @@ export function rulesFor(p: RuleProperty, a: Applicant, opts: RuleOptions = {}):
   const rt = facts.rateType.value;
   const warnings: Warning[] = [];
   const hide = (hidden: Hidden, why: string, lha: LhaFit | null = null): RuleResult => ({ hidden, why, warnings, lha });
+
+  // a building they turned down: nothing else there
+  const no = turnedDownHere(p, a, opts.deals);
+  if (no) return hide('turned_down', `Turned down ${shortAddress(no.address)}${no.fell_through_reason ? ` (${no.fell_through_reason})` : ''}: same building`);
+  // stairs: an upper floor with no lift is no good to someone who needs step-free
+  if (p.floor != null && p.floor !== 0 && p.lift === false && clientNeeds(a).needsStepFree) {
+    return hide('stairs', `${floorWords(p.floor, p.lift)}: they need ground floor or step-free`);
+  }
 
   // size: a family is never offered fewer bedrooms than they are paid for
   const own = lhaSizeOf(p);

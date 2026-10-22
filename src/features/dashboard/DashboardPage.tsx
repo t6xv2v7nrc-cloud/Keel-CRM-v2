@@ -75,8 +75,8 @@ export function DashboardPage() {
   const available = properties.filter((p) => p.status === 'void' || p.status === 'under_offer');
   // properties at least one client is a strong match for: the ones worth sending today
   const strongCount = useMemo(
-    () => available.filter((p) => matchesForProperty(p, applicants).some((m) => m.strength === 'strong')).length,
-    [available, applicants],
+    () => available.filter((p) => matchesForProperty(p, applicants, { deals }).some((m) => m.strength === 'strong')).length,
+    [available, applicants, deals],
   );
   const housed = applicants.filter(isHoused).length;
 

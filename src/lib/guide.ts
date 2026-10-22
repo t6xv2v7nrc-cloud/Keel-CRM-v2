@@ -34,6 +34,8 @@ export interface NewThing { id: string; date: string; title: string; body: strin
 
 /** Newest first. An id is never reused: what someone has seen is remembered by it. */
 export const WHATS_NEW: NewThing[] = [
+  { id: '2026-10-22-prospects', date: '2026-10-22', title: 'Easy money or hard work', body: 'Every client a property suits now shows a fit score out of 100, the chance it ends in a placement, and what that is worth. Easy money and Hard work stand out, each property names its best bet, and the list puts the most money likely first. Tap the chance to see why.', href: '/properties', where: 'Properties, and Suitable properties on each client' },
+  { id: '2026-10-22-buildings', date: '2026-10-22', title: 'Turned down once, not offered again', body: 'When a client turns a place down, no other flat in that building is offered to them. Clients who need step-free are never offered an upper floor with no lift, and families are steered towards lower floors.', href: '/properties' },
   { id: '2026-10-21-pipeline-stars', date: '2026-10-21', title: 'Star clients on the Pipeline', body: 'Tap the star by a client to pin them to the top of your Pipeline; your stars are your own. Each client also shows when their referral was received, and Sort by Recently received puts the newest first.', href: '/pipeline', where: 'Pipeline, or the star on a client\'s page' },
   { id: '2026-10-20-paste-officers', date: '2026-10-20', title: 'Paste officers onto the list', body: 'Paste a spreadsheet, the To line of an email, or signatures, and Keel reads out each officer\'s name, email, phone, job title and council for you to look over and add. Anyone already on the list just gets their blanks filled in.', href: '/councils', where: 'Councils, Paste officers' },
   { id: '2026-10-20-mailer', date: '2026-10-20', title: 'A tidier Mailer', body: 'Each property is one clear row with its rent against the LHA, and writing an email goes in three steps: who it goes to, the email, and sending it.', href: '/mailer' },
@@ -50,7 +52,7 @@ export const WHATS_NEW: NewThing[] = [
 
 /** The one-time tip on each page: what to know first. */
 export const TIPS = {
-  properties: 'Fold the cards (Cards: Folded) to scan the list quickly. Send all properties sends every ready one by email or WhatsApp, and anything over LHA is marked red.',
+  properties: 'Each client shows a fit score, the chance it ends in a placement and what it is worth: tap the chance for why. The list puts the most money likely first; fold the cards (Cards: Folded) to scan it quickly.',
   mailer: 'Alerts send one property to the officers whose clients it suits; Monthly digest picks the best few for a borough; All properties sends the lot. With Outlook connected, Send from Outlook does it in one click.',
   bin: 'Paste a screenshot anywhere (Ctrl or Cmd and V), drop an image here, or paste an enquiry email. With Outlook connected, officers\' nominations land here by themselves.',
   pipeline: 'Star a client to pin them to the top. Sort by Recently received for the newest referrals, or Recently contacted to see who has gone quiet.',

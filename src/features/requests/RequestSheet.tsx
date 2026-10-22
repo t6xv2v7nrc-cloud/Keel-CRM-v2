@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Button, Help, Icon, useToast } from '../../components/ui';
-import { useApplicants, useCreateRequest, usePeople, useProviders, useRequests } from '../../lib/hooks';
+import { useApplicants, useCreateRequest, useDeals, usePeople, useProviders, useRequests } from '../../lib/hooks';
 import { matchesForProperty } from '../../lib/matchRules';
 import type { Strength } from '../../lib/propertyMatch';
 import {
@@ -72,6 +72,7 @@ function RequestSheet({ property, clientIds = [], onClose }: OpenDetail & { onCl
   const { providers, ready } = useProviders();
   const { requests } = useRequests();
   const { data: applicants = [] } = useApplicants();
+  const { deals } = useDeals();
   const { myName } = usePeople();
   const create = useCreateRequest();
   const { toast } = useToast();
@@ -94,7 +95,7 @@ function RequestSheet({ property, clientIds = [], onClose }: OpenDetail & { onCl
   const byId = useMemo(() => new Map(applicants.map((a) => [a.id, a])), [applicants]);
   const clients = picked.map((id) => byId.get(id)).filter((a): a is Applicant => !!a);
   const suggestions = useMemo(() => {
-    const matches = matchesForProperty(property, applicants);
+    const matches = matchesForProperty(property, applicants, { deals });
     const strength = new Map(matches.map((m) => [m.applicant.id, m.strength]));
     const q = search.trim().toLowerCase();
     const pool = applicants.filter(isActive).filter((a) => !picked.includes(a.id)).filter((a) => !q || a.full_name.toLowerCase().includes(q));
@@ -103,7 +104,7 @@ function RequestSheet({ property, clientIds = [], onClose }: OpenDetail & { onCl
       .sort((a, b) => rank(a.id) - rank(b.id) || a.full_name.localeCompare(b.full_name))
       .slice(0, q ? 8 : 5)
       .map((a) => ({ a, strength: strength.get(a.id) ?? null }));
-  }, [applicants, property, picked, search]);
+  }, [applicants, property, picked, search, deals]);
 
   const liveSlots = type === 'viewing' ? slots.filter(Boolean).map((s) => new Date(s).toISOString()) : [];
   const problemsOf: Record<string, string[]> = { '': provider ? propertyProblems(provider, property) : [] };

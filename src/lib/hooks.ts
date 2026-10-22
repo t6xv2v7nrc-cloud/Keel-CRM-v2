@@ -33,6 +33,8 @@ import { addressesSince, connectOutlook, disconnectOutlook, inboxSince, messageB
 import { binText, officerAddresses, officerRowFor, snippetOf, sortEmail, timelineWords } from './outlookMail';
 import type { FoundAddress, GraphMessage, MailAddress } from './outlookMail';
 import { pastedRow } from './officerPaste';
+import { prospectContext } from './prospects';
+import type { ProspectContext } from './prospects';
 import type { PastedOfficer } from './officerPaste';
 import { orgOfEmail } from './search';
 import { extractFromText } from './extract';
@@ -814,7 +816,17 @@ export function useMatchOptions(): RuleOptions {
   const { providers } = useProviders();
   const { schemes } = useCouncilSchemes();
   const { receivables } = useReceivables();
-  return useMemo(() => ({ providers, schemes, receivables }), [providers, schemes, receivables]);
+  const { deals } = useDeals();
+  return useMemo(() => ({ providers, schemes, receivables, deals }), [providers, schemes, receivables, deals]);
+}
+
+/** What each match's chance of placing rests on: Keel's own deals, providers' records, incentives, last contact. */
+export function useProspectContext(): ProspectContext {
+  const { deals } = useDeals();
+  const { data: properties = [] } = useProperties();
+  const { receivables } = useReceivables();
+  const contacts = useLastContacts();
+  return useMemo(() => prospectContext({ deals, properties, receivables, lastContact: (id) => contacts.get(id)?.at ?? null }), [deals, properties, receivables, contacts]);
 }
 
 /** Add or change a council scheme; every change is noted. */

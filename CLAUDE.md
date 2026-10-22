@@ -48,6 +48,19 @@ src/
                            one-line reason (`line`), expected income (`incomeFor`: provider fee + incentive on Finances, else
                            the scheme's max, else "likely" for an officer referral); on a property, incentive-bearing first;
                            `hiddenForApplicant` counts what the rules hid; UI bits in features/properties/MatchBits.tsx),
+              buildings.ts (`buildingOf`, `sameBuilding`: flats at one address are one building; `turnedDown`: said no
+                      at the viewing, or fell through over the place, landlord or money; not let to someone else, landlord
+                      pulled out, client quiet or housed elsewhere); matchRules hides every unit in a building the client
+                      turned down (`turned_down`, unless they are going for that very place) and upper floors with no lift
+                      for clients who need step-free (`stairs`); propertyMatch uses `floor` and `lift` (families favour
+                      lower floors),
+              prospects.ts (per client and unit: `fit` 0 to 100 from the match score less warnings; `chance` of placing:
+                      Keel's own rate (moved in of ended deals, smoothed from 20%) moved by named factors (fit, LHA room,
+                      progress on this place, officer referral, new, urgent, contact, missing details, places turned
+                      down, missed viewings, an offer elsewhere, provider's record, when it is free); `expected` = fee +
+                      incentive (typical incentive for "likely") times chance; Easy money (55%+ and £1,000+) / Hard work
+                      (under 20%); `whyWords`; `ranked` puts best bets first; `useProspectContext`; chips FitBadge,
+                      ProspectTag, ProspectWhy in MatchBits.tsx; Properties' Order: Most money likely (standard)),
               geo.ts (placing postcodes via postcodes.io, cached per device; a client's areas as districts; `locateCouncils`:
                       a council at the middle of its districts, else by name from postcodes.io places),
               officerMap.ts (housing officers on the Properties map: `officerPlaces` groups the officer list and officers

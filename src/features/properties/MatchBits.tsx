@@ -2,6 +2,9 @@ import { Icon } from '../../components/ui';
 import { money } from '../../lib/format';
 import { hiddenWords } from '../../lib/matchRules';
 import type { HiddenCounts, Income, Warning } from '../../lib/matchRules';
+import { chanceWords, whyWords } from '../../lib/prospects';
+import type { Ease, Prospect, ProspectContext } from '../../lib/prospects';
+import type { Strength } from '../../lib/propertyMatch';
 
 /** The rules' warnings on a match: red over LHA (shown on request), amber outside London, age not known, benefit cap. */
 export function RuleWarnings({ warnings, first = false }: { warnings: Warning[]; first?: boolean }) {
@@ -60,4 +63,45 @@ export function HiddenNote({ counts, overLha, onOverLha, outside, onOutside }: {
       )}
     </div>
   );
+}
+
+const STRENGTH_STYLE: Record<Strength, { label: string; bg: string; fg: string }> = {
+  strong: { label: 'Strong', bg: 'var(--strong-bg)', fg: 'var(--strong-fg)' },
+  good: { label: 'Good', bg: 'var(--good-bg)', fg: 'var(--good-fg)' },
+  possible: { label: 'Possible', bg: 'var(--possible-bg)', fg: 'var(--possible-fg)' },
+};
+
+/** "Strong 86": how well they fit, as a word and a score out of 100. */
+export function FitBadge({ strength, fit }: { strength: Strength; fit: number | null }) {
+  const x = STRENGTH_STYLE[strength];
+  return (
+    <span title={fit !== null ? `Fit ${fit} out of 100` : undefined} className="inline-flex w-[84px] shrink-0 items-center justify-center gap-1 rounded px-1.5 py-0.5 text-[12px] font-semibold" style={{ background: x.bg, color: x.fg }}>
+      {x.label}{fit !== null && <span className="tabular-nums opacity-80">{fit}</span>}
+    </span>
+  );
+}
+
+const EASE_STYLE: Record<Ease, { bg: string; fg: string }> = {
+  easy: { bg: 'var(--accent)', fg: 'var(--on-accent)' },
+  fair: { bg: 'var(--good-bg)', fg: 'var(--good-fg)' },
+  hard: { bg: 'var(--note-bg)', fg: 'var(--note-fg)' },
+  long_shot: { bg: 'var(--note-bg)', fg: 'var(--note-fg)' },
+};
+
+/** "Easy money · 70%", "45% to place", "Hard work · 15%": tap for why. */
+export function ProspectTag({ prospect, open, onToggle }: { prospect: Prospect; open: boolean; onToggle: () => void }) {
+  const s = EASE_STYLE[prospect.ease];
+  const words = prospect.label ? `${prospect.label} · ${chanceWords(prospect)}` : `${chanceWords(prospect)} to place`;
+  return (
+    <button type="button" onClick={onToggle} aria-expanded={open} title="Chance this ends in a placement: tap for why"
+      className="inline-flex items-center gap-1 whitespace-nowrap rounded px-1.5 py-0.5 text-[12px] font-semibold" style={{ background: s.bg, color: s.fg }}>
+      <Icon name="trend" size={11} />{words}
+      {prospect.expected !== null && prospect.expected > 0 && <span className="font-medium opacity-90">· ≈{money(prospect.expected)}</span>}
+    </button>
+  );
+}
+
+/** Why the chance is what it is, under a match. */
+export function ProspectWhy({ prospect, ctx }: { prospect: Prospect; ctx: Pick<ProspectContext, 'base' | 'closed'> }) {
+  return <p className="keel-rise m-0 mt-1 rounded-md bg-[var(--surface-2)] px-2.5 py-1.5 text-[12px] leading-snug text-[var(--ink-muted)]">{whyWords(prospect, ctx)}</p>;
 }

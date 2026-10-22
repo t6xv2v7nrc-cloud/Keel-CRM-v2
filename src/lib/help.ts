@@ -262,6 +262,15 @@ export const HELP = {
       'Pasted a list of officers into the Bin by mistake? The Bin offers to bring it here.',
     ],
   },
+  prospects: {
+    title: 'Fit, chance and money',
+    body: [
+      'Every client a property suits shows three things. Fit: how well they match, out of 100 (area, size, rent against their LHA, needs such as a ground floor, and priority). The chance it ends in a placement. And what that is worth: the fee and incentive it could bring, times the chance.',
+      'Easy money means likely (55% or more) and worth at least £1,000. Hard work means under 20%. Tap the chance to see why: what moved it up (a strong fit, room under their LHA, a housing officer referral, a viewing booked, recent contact) and down (details missing, places turned down, missed viewings, an offer elsewhere, over LHA).',
+      'The chance starts from Keel\'s own record: of the properties sent that have ended, how many became a placement. Until there are enough of those it starts at about 20%, and it sharpens as more deals end. A provider whose properties often (or rarely) place moves it too.',
+      'Each property shows its best bet, and the list puts the most money likely first (Order, in the filters). A client who turned a place down is never offered another flat in the same building, and someone who needs step-free is never offered an upper floor with no lift.',
+    ],
+  },
   propertyChecks: {
     title: 'Ready to send?',
     body: [
