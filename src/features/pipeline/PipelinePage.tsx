@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useApplicants, useCalls, useDeals, useLastContacts, useMoveStage, usePeople, useProviders, useRequests, useSettings } from '../../lib/hooks';
 import { CHANNEL_LABEL } from '../../lib/contacts';
 import type { LastContact } from '../../lib/contacts';
-import { Avatar, Button, Card, Help, IceBadge, Icon, NewBadge, PageHeader, PageSkeleton, TierBadge, UrgentChip, useToast } from '../../components/ui';
+import { Avatar, Button, Card, Help, IceBadge, Icon, NewBadge, PageHeader, PageSkeleton, TierBadge, UrgentChip, useShowMore, useToast } from '../../components/ui';
 import { HousingOfficersBox } from './Officers';
 import { DuplicatesBox } from './Duplicates';
 import { StarButton } from './Star';
@@ -169,6 +169,8 @@ export function PipelinePage() {
       sortKey, dir, (a) => contacts.get(a.id)?.at ?? null), starred);
   }, [applicants, filters, textIndex, sortKey, dir, last, contacts, people.meId, progressOf, starred]);
   const starredShown = rows.filter((a) => starred.has(a.id)).length;
+  // the first rows straight away, the rest as you scroll: a long list still opens quickly
+  const more = useShowMore(rows.length, 40, 60);
   const starredCount = applicants.filter((a) => starred.has(a.id)).length;
 
   const stageCounts = useMemo(() => {
@@ -395,7 +397,7 @@ export function PipelinePage() {
           <SortLabel k="stage" sortKey={sortKey} dir={dir} onSort={toggleSort}>Stage</SortLabel>
         </div>
         <ul className="m-0 list-none p-0">
-          {rows.map((a, i) => {
+          {rows.slice(0, more.limit).map((a, i) => {
             const preview = terms.length ? previewText(a, terms) : '';
             const household = householdOf(a);
             const benefits = benefitsOf(a);
@@ -510,6 +512,12 @@ export function PipelinePage() {
               </Fragment>
             );
           })}
+          {more.more && (
+            <li ref={more.ref} className="border-t border-[var(--line)] px-5 py-4 text-center text-[13px] text-[var(--ink-muted)]">
+              Showing {more.limit} of {rows.length}.{' '}
+              <button type="button" onClick={more.showAll} className="font-medium text-[var(--link)] hover:underline">Show all {rows.length}</button>
+            </li>
+          )}
           {rows.length === 0 && (
             <li className="px-5 py-10 text-center text-[var(--ink-muted)]">
               {filters.starred && starredCount === 0 ? 'No starred clients yet. Tap the star on any client to pin them here.' : 'No clients match this search.'}{' '}

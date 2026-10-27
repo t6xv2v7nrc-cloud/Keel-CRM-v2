@@ -26,7 +26,7 @@ import { brief, clientNeeds, scoreMatch } from './propertyMatch';
 import type { Match, PropertyLike, Strength } from './propertyMatch';
 import { rateOf } from './clientProfile';
 import { accommodationOf, inGreaterLondon } from './propertyChecks';
-import { brmaOfDistrict, brmasOfBorough, lhaCheck, lhaSizeOf, lhaTable, londonBrmas, overLha, rateFor, sizeWords } from './lha';
+import { brmaOfDistrict, brmasOfBorough, lhaCheck, lhaSizeOf, lhaTable, lhaVersion, londonBrmas, overLha, rateFor, sizeWords } from './lha';
 import type { LhaSize, LhaTable } from './lha';
 import { feeFrom, fromHousingOfficer, rentOf, usualFee } from './money';
 import { providerFor } from './requests';
@@ -264,8 +264,31 @@ function lineFor(m: Match, lha: LhaFit | null): string {
   return parts.length ? parts.join(' · ') : brief(m.reasons[0] ?? 'Could suit them');
 }
 
+type Ruled = { match: RuledMatch | null; hidden: Hidden | null; why: string | null };
+
+// Every pair is kept once worked out, until something it rests on changes: the property or client (a new copy when
+// either is edited), the deals, providers, schemes, receivables, the switches, the day, the settings or the LHA rates.
+// So moving between pages, or opening a property again, does not work every match out afresh.
+const pairCache = new WeakMap<RuleProperty, WeakMap<Applicant, { sig: unknown[]; result: Ruled }>>();
+const signature = (opts: RuleOptions): unknown[] => [
+  opts.deals, opts.providers, opts.schemes, opts.receivables, opts.showOverLha, opts.showOutsideLondon, opts.today ?? todayIso(),
+  activeSettings(), lhaTable(), lhaVersion(),
+];
+const sameSig = (x: unknown[], y: unknown[]) => x.length === y.length && x.every((v, i) => v === y[i]);
+
 /** A property and a client with the rules applied: the match (or null) and, when the rules hid it, why. */
-export function ruledMatch(p: RuleProperty, a: Applicant, opts: RuleOptions = {}): { match: RuledMatch | null; hidden: Hidden | null; why: string | null } {
+export function ruledMatch(p: RuleProperty, a: Applicant, opts: RuleOptions = {}): Ruled {
+  const sig = signature(opts);
+  let byClient = pairCache.get(p);
+  const hit = byClient?.get(a);
+  if (hit && sameSig(hit.sig, sig)) return hit.result;
+  const result = ruledMatchNow(p, a, opts);
+  if (!byClient) { byClient = new WeakMap(); pairCache.set(p, byClient); }
+  byClient.set(a, { sig, result });
+  return result;
+}
+
+function ruledMatchNow(p: RuleProperty, a: Applicant, opts: RuleOptions): Ruled {
   const m = scoreMatch(p, a);
   if (!m) return { match: null, hidden: null, why: null };
   const r = rulesFor(p, a, opts);

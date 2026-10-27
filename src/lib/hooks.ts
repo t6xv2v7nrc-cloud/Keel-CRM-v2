@@ -14,7 +14,7 @@ import type {
 import { followUpFrom, PROVIDER_OFF, PROVIDER_ON, providerFor, providerNumber, REQUEST_LABEL, tagOf, withdrawnBySwitchOff } from './requests';
 import { basisWords, describe, KIND_LABEL, lettingFeeFor, rentOf, signingUpWith, signUpPatch, STATUS_LABEL } from './money';
 import { invoiceNumber } from './invoice';
-import { CONTACT_KINDS, lastContacts, noteActivity } from './contacts';
+import { CONTACT_KINDS, keptLastContacts, noteActivity } from './contacts';
 import { changedFields, changeWords } from './propertyEdit';
 import type { EditableProperty } from './propertyEdit';
 import type { Channel } from './contacts';
@@ -33,7 +33,7 @@ import { addressesSince, connectOutlook, disconnectOutlook, inboxSince, messageB
 import { binText, officerAddresses, officerRowFor, snippetOf, sortEmail, timelineWords } from './outlookMail';
 import type { FoundAddress, GraphMessage, MailAddress } from './outlookMail';
 import { pastedRow } from './officerPaste';
-import { prospectContext } from './prospects';
+import { keptProspectContext } from './prospects';
 import type { ProspectContext } from './prospects';
 import type { PastedOfficer } from './officerPaste';
 import { orgOfEmail } from './search';
@@ -278,7 +278,7 @@ export function useLastContacts() {
     },
   });
   const rows = q.data;
-  return useMemo(() => lastContacts(rows ?? [], calls), [rows, calls]);
+  return useMemo(() => keptLastContacts(rows, calls), [rows, calls]);
 }
 
 /** Most recent activity across all entities — for the dashboard feed. */
@@ -826,7 +826,7 @@ export function useProspectContext(): ProspectContext {
   const { data: properties = [] } = useProperties();
   const { receivables } = useReceivables();
   const contacts = useLastContacts();
-  return useMemo(() => prospectContext({ deals, properties, receivables, lastContact: (id) => contacts.get(id)?.at ?? null }), [deals, properties, receivables, contacts]);
+  return useMemo(() => keptProspectContext(deals, properties, receivables, contacts), [deals, properties, receivables, contacts]);
 }
 
 /** Add or change a council scheme; every change is noted. */

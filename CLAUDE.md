@@ -160,6 +160,12 @@ src/
                        within LHA (target 100%), first replies and outcomes on time, list health; the month's goal from
                        Team settings `monthlyGoal` (6 to 8 placements, 4 with an incentive); read-only, no migration),
               help.ts (words behind the "?" help buttons)
+              Speed: matching is kept, not redone: `clientNeeds` per client, `propertyFacts` and `lhaCheck` per property,
+              `ruledMatch` per pair (kept until the property, client, deals, providers, schemes, receivables, switches,
+              day, settings or LHA rates change: `lhaVersion`), `prospectFor` per match, `readNotes` per client, and
+              `keptProspectContext` / `keptLastContacts` shared across pages; long lists draw the first rows and the rest
+              as you scroll (`useShowMore` in components/ui/showMore.ts: Pipeline 40, Properties 12). Keep it so: never
+              rebuild an Intl formatter per call or reread notes inside a loop over properties
   components/ ui primitives on tokens (Button (lifts on hover, `busy` spinner; every button gives a little on press,
               index.css), StageBadge, Card, Field, Toast (icon, slide in, close, countdown bar), Icon,
               Visuals: avatars, page headers, stat tiles (numbers count up), PageSkeleton, Empty (with `action`),

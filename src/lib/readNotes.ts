@@ -389,7 +389,15 @@ const currentWords = (a: Applicant, key: string): string | null => {
 };
 
 /** Suggestions for the form from what the client wrote, best first. */
+// read once per client
+const readingCache = new WeakMap<Applicant, NotesReading>();
 export function readNotes(a: Applicant): NotesReading {
+  let r = readingCache.get(a);
+  if (!r) { r = readNotesNow(a); readingCache.set(a, r); }
+  return r;
+}
+
+function readNotesNow(a: Applicant): NotesReading {
   const text = [a.notes, a.requirements].filter(Boolean).join('\n');
   const flags: Flag[] = [];
   readFlags(text, a, flags);

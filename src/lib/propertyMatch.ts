@@ -129,7 +129,19 @@ export function withSelfContained(requirements: string | null, on: boolean): str
   return next.length ? next.join(', ') : null;
 }
 
+// worked out once per client (and again when settings change): reading their notes is the slow part of matching
+const needsCache = new WeakMap<Applicant, { settings: unknown; needs: Needs }>();
+
 export function clientNeeds(a: Applicant): Needs {
+  const settings = activeSettings();
+  const hit = needsCache.get(a);
+  if (hit && hit.settings === settings) return hit.needs;
+  const needs = readNeeds(a);
+  needsCache.set(a, { settings, needs });
+  return needs;
+}
+
+function readNeeds(a: Applicant): Needs {
   const text = [a.notes, a.requirements, a.postcode_area].filter(Boolean).join(' \n ');
   const household = householdOf(a);
   const children = Math.max(a.children ?? 0, household === 'family' && !a.children ? 1 : 0);
@@ -207,7 +219,15 @@ export function clientNeeds(a: Applicant): Needs {
 
 type Kind = 'room' | 'studio' | 'flat' | 'unknown';
 
+// worked out once per property
+const factsCache = new WeakMap<PropertyLike, ReturnType<typeof readFacts>>();
 function propertyFacts(p: PropertyLike) {
+  let f = factsCache.get(p);
+  if (!f) { f = readFacts(p); factsCache.set(p, f); }
+  return f;
+}
+
+function readFacts(p: PropertyLike) {
   const type = p.property_type ?? '';
   // an HMO studio is a studio, not a room
   const kind: Kind = /\b(studio|bedsit)\b/i.test(type) ? 'studio'

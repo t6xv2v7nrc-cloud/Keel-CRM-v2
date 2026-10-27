@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Button, Card, Help, Icon, NewBadge, PageHeader, PageSkeleton, TierBadge, UrgentChip, useToast } from '../../components/ui';
+import { Button, Card, Help, Icon, NewBadge, PageHeader, PageSkeleton, TierBadge, UrgentChip, useShowMore, useToast } from '../../components/ui';
 import {
   NeedsDatabaseUpdate, PROPERTY_STATUS_LABEL, sentKey, useAddProperties, useApplicants, useDeleteProperties, useProperties,
   useDeals, useMatchOptions, useProspectContext, useProviders, useRequests, useSentOnWhatsApp, useSetPropertyProvider, useSetPropertyStatus,
@@ -29,7 +29,7 @@ import { RequestButton } from '../requests/RequestSheet';
 import { providerFor } from '../../lib/requests';
 import { effectiveTier, isFresh, isUrgent } from '../../lib/search';
 import { tierLabel } from '../../lib/tiering';
-import { money, shortDate } from '../../lib/format';
+import { dayWords, money, shortDate } from '../../lib/format';
 import { bedsOfType, TYPE_OPTIONS } from '../../lib/propertyEdit';
 import { EditProperty } from './EditProperty';
 import { FlagChip, PropertyChecks } from './Checks';
@@ -178,6 +178,8 @@ export function PropertiesPage() {
   }, [properties, status, borough, q, justAdded, matches, lhaFilter, providerFilter, providers, order, scored]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeFilters = [status !== 'available', borough !== 'all', lhaFilter !== 'any', providerFilter !== 'any'].filter(Boolean).length;
+  // the first cards straight away, the rest as you scroll
+  const more = useShowMore(rows.length, 12, 20);
   const toggle = (id: string) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const selectedRows = rows.filter((p) => selected.has(p.id));
 
@@ -390,7 +392,13 @@ export function PropertiesPage() {
             <MapView properties={rows} matches={matches} applicants={applicants} renderCard={card} />
           ) : (
             <div className="keel-stagger flex flex-col gap-4">
-              {rows.map((p) => <div key={p.id}>{card(p)}</div>)}
+              {rows.slice(0, more.limit).map((p) => <div key={p.id}>{card(p)}</div>)}
+              {more.more && (
+                <p ref={more.ref} className="m-0 py-2 text-center text-[13px] text-[var(--ink-muted)]">
+                  Showing {more.limit} of {rows.length}.{' '}
+                  <button type="button" onClick={more.showAll} className="font-medium text-[var(--link)] hover:underline">Show all {rows.length}</button>
+                </p>
+              )}
               {rows.length === 0 && <p className="m-0 text-[15px] text-[var(--ink-muted)]">No properties in this view.</p>}
             </div>
           )}
@@ -408,6 +416,10 @@ function SavedLists({ properties, onClose, onMove, moving }: {
 }) {
   const { toast } = useToast();
   const del = useDeleteProperties();
+  // one list opened to pick single properties out of it
+  const [openList, setOpenList] = useState<string | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const pick = (id: string, on: boolean) => setPicked((x) => { const n = new Set(x); if (on) n.add(id); else n.delete(id); return n; });
   // Each paste is saved in one go, so a list is the properties sharing a save time and source.
   const lists = useMemo(() => {
     const by = new Map<string, Property[]>();
@@ -422,11 +434,11 @@ function SavedLists({ properties, onClose, onMove, moving }: {
   const old = properties.filter((p) => p.created_at < cutoff);
   const done = properties.filter((p) => p.status === 'let' || p.status === 'withdrawn');
 
-  const purge = (ps: Property[], what: string) => {
+  const purge = (ps: Property[], what: string, after?: () => void, verb: 'Purge' | 'Remove' = 'Purge') => {
     if (ps.length === 0) return;
-    if (!window.confirm(`Purge ${what} (${plural(ps.length, 'property', 'properties')})? This removes them from every device and cannot be undone.`)) return;
+    if (!window.confirm(`${verb} ${what} (${plural(ps.length, 'property', 'properties')})? This removes them from every device and cannot be undone.`)) return;
     del.mutate(ps.map((p) => p.id), {
-      onSuccess: () => toast(`Purged ${plural(ps.length, 'property', 'properties')}`, 'success'),
+      onSuccess: () => { toast(`${verb === 'Purge' ? 'Purged' : 'Removed'} ${plural(ps.length, 'property', 'properties')}`, 'success'); after?.(); },
       onError: (e) => toast(`Purge failed: ${(e as Error).message}`, 'danger'),
     });
   };
@@ -447,26 +459,67 @@ function SavedLists({ properties, onClose, onMove, moving }: {
         {lists.map((ps) => {
           const available = ps.filter((p) => p.status === 'void' || p.status === 'under_offer').length;
           const onDevice = ps.filter((p) => isLocalProperty(p.id));
+          const key = `${ps[0].created_at}|${ps[0].source_tag ?? ''}|${onDevice.length > 0}`;
+          const isOpen = openList === key;
+          const chosen = ps.filter((p) => picked.has(p.id));
+          const allOn = chosen.length === ps.length;
           return (
-            <li key={`${ps[0].created_at}|${ps[0].source_tag ?? ''}|${onDevice.length > 0}`} className="flex flex-wrap items-center gap-3 px-4 py-3">
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2 text-[15px] font-medium text-[var(--ink)]">
-                  {ps[0].source_tag ? `From ${ps[0].source_tag}` : 'List'}, saved {shortDate(ps[0].created_at)}
-                  {onDevice.length > 0 && <DeviceOnlyTag />}
+            <li key={key} className="flex flex-col">
+              <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+                <div className="min-w-0 flex-1 basis-[200px]">
+                  <div className="flex flex-wrap items-center gap-2 text-[15px] font-medium text-[var(--ink)]">
+                    {ps[0].source_tag ? `From ${ps[0].source_tag}` : 'List'}, saved {shortDate(ps[0].created_at)}
+                    {onDevice.length > 0 && <DeviceOnlyTag />}
+                  </div>
+                  <div className="text-[13px] text-[var(--ink-muted)]">
+                    {ps.length} {ps.length === 1 ? 'property' : 'properties'} · {available} still available
+                  </div>
                 </div>
-                <div className="text-[13px] text-[var(--ink-muted)]">
-                  {ps.length} {ps.length === 1 ? 'property' : 'properties'} · {available} still available
-                </div>
-              </div>
-              {onDevice.length > 0 && (
-                <Button className="min-h-0 px-3 py-1.5 text-[13px]" disabled={moving} onClick={() => onMove(onDevice)}>
-                  Move to your account
+                {onDevice.length > 0 && (
+                  <Button className="min-h-0 px-3 py-1.5 text-[13px]" disabled={moving} onClick={() => onMove(onDevice)}>
+                    Move to your account
+                  </Button>
+                )}
+                <Button className="min-h-0 px-3 py-1.5 text-[13px]" aria-expanded={isOpen}
+                  onClick={() => { setOpenList(isOpen ? null : key); setPicked(new Set()); }}>
+                  <Icon name="list" size={14} />{isOpen ? 'Done choosing' : 'Choose properties'}
                 </Button>
+                <Button busy={del.isPending} variant="danger" className="min-h-0 px-3 py-1.5 text-[13px]" disabled={del.isPending}
+                  onClick={() => purge(ps, ps[0].source_tag ? `the list from ${ps[0].source_tag}` : 'this list')}>
+                  Purge this list
+                </Button>
+              </div>
+              {isOpen && (
+                <div className="keel-rise flex flex-col gap-2 border-t border-[var(--line)] bg-[var(--surface-2)] px-4 py-3">
+                  <label className="flex items-center gap-2 text-[13px] font-medium text-[var(--ink)]">
+                    <input type="checkbox" checked={allOn} onChange={(e) => setPicked(e.target.checked ? new Set(ps.map((p) => p.id)) : new Set())}
+                      className="h-4 w-4 accent-[var(--accent)]" />
+                    Tick all {ps.length}
+                  </label>
+                  <ul className="m-0 flex max-h-[360px] list-none flex-col divide-y divide-[var(--line)] overflow-y-auto rounded-md border border-[var(--line)] bg-[var(--surface)] p-0">
+                    {ps.map((p) => (
+                      <li key={p.id}>
+                        <label className="flex cursor-pointer items-start gap-2.5 px-3 py-2 text-[14px] hover:bg-[var(--surface-2)]">
+                          <input type="checkbox" checked={picked.has(p.id)} onChange={(e) => pick(p.id, e.target.checked)} className="mt-[3px] h-4 w-4 shrink-0 accent-[var(--accent)]" />
+                          <span className="min-w-0">
+                            <span className="block break-words text-[var(--ink)]">{p.address_line}</span>
+                            <span className="block text-[12px] text-[var(--ink-muted)]">
+                              {[p.property_type, rentShown(p), PROPERTY_STATUS_LABEL[p.status]].filter(Boolean).join(' · ')}
+                            </span>
+                          </span>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button busy={del.isPending} variant="danger" className="min-h-0 px-3 py-1.5 text-[13px]" disabled={!chosen.length || del.isPending}
+                      onClick={() => purge(chosen, chosen.length === 1 ? chosen[0].address_line : 'the ticked properties', () => setPicked(new Set()), 'Remove')}>
+                      <Icon name="trash" size={14} />{chosen.length ? `Remove ${plural(chosen.length, 'property', 'properties')}` : 'Tick the ones to remove'}
+                    </Button>
+                    <span className="text-[12px] text-[var(--ink-muted)]">The rest of the list stays.</span>
+                  </div>
+                </div>
               )}
-              <Button busy={del.isPending} variant="danger" className="min-h-0 px-3 py-1.5 text-[13px]" disabled={del.isPending}
-                onClick={() => purge(ps, ps[0].source_tag ? `the list from ${ps[0].source_tag}` : 'this list')}>
-                Purge this list
-              </Button>
             </li>
           );
         })}
@@ -701,7 +754,9 @@ function PropertyCard({ p, scored, ctx, deals, names, sent, openRequests, isNew,
   const matches = scored.map((x) => x.item);
   const prospectOf = new Map(scored.map((x) => [x.item.applicant.id, x.prospect]));
   const top = scored[0];
-  const best = bestFew(matches, (m) => m.strength);
+  // the best few, and the best bet with them when it is not already one of them
+  const few = bestFew(matches, (m) => m.strength);
+  const best = top && !few.includes(top.item) ? [top.item, ...few] : few;
   const shown = showAll ? matches : best;
   const hidden = matches.length - best.length;
   const counts = (['strong', 'good', 'possible'] as const)
@@ -718,6 +773,7 @@ function PropertyCard({ p, scored, ctx, deals, names, sent, openRequests, isNew,
     p.available_from ? `From ${shortDate(p.available_from)}` : null,
     p.source_tag ? `Source: ${p.source_tag}` : null,
   ].filter(Boolean);
+  const added = dayWords(p.created_at);
 
   return (
     <Card className={`overflow-hidden ${isNew ? 'ring-2 ring-[var(--accent)]' : ''}`}>
@@ -736,7 +792,10 @@ function PropertyCard({ p, scored, ctx, deals, names, sent, openRequests, isNew,
               {isLocalProperty(p.id) && <DeviceOnlyTag />}
             </div>
           </div>
-          <div className="mt-0.5 text-[14px] text-[var(--ink-muted)]">{facts.join(' · ') || 'No details'}</div>
+          <div className="mt-0.5 text-[14px] text-[var(--ink-muted)]">
+            {facts.join(' · ') || 'No details'}
+            <span className="whitespace-nowrap" title={`Added ${shortDate(p.created_at)}`}>{facts.length ? ' · ' : ' '}<Icon name="clock" size={12} className="mr-1 inline align-[-1px]" />Added {added}</span>
+          </div>
           {folded ? <FoldedSummary p={p} matches={matches} deals={deals} top={top} /> : (
             <>
               <div className="mt-1.5"><LhaLine property={p} /></div>

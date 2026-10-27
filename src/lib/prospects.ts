@@ -105,8 +105,21 @@ const STEP_WORDS: Partial<Record<Deal['status'], string>> = {
   interested: 'They said they are interested', viewing: 'Viewing booked', viewed: 'They have viewed it', offered: 'Offer made', accepted: 'Offer accepted',
 };
 
+// kept per match (matches themselves are kept, see ruledMatch) until the context changes
+const prospectCache = new WeakMap<RuledMatch, { p: unknown; ctx: ProspectContext; prospect: Prospect }>();
+const gapsCache = new WeakMap<Applicant, string[]>();
+const gapsOf = (a: Applicant) => { let g = gapsCache.get(a); if (!g) { g = matchingGaps(a); gapsCache.set(a, g); } return g; };
+
 /** How likely sending this property to this client is to end in a placement, and what that is worth. */
 export function prospectFor(m: RuledMatch, p: RuleProperty & Partial<Pick<Property, 'available_from' | 'status'>>, ctx: ProspectContext): Prospect {
+  const hit = prospectCache.get(m);
+  if (hit && hit.p === p && hit.ctx === ctx) return hit.prospect;
+  const prospect = prospectNow(m, p, ctx);
+  prospectCache.set(m, { p, ctx, prospect });
+  return prospect;
+}
+
+function prospectNow(m: RuledMatch, p: RuleProperty & Partial<Pick<Property, 'available_from' | 'status'>>, ctx: ProspectContext): Prospect {
   const a: Applicant = m.applicant;
   const factors: Factor[] = [];
   const add = (weight: number, words: string) => { if (weight) factors.push({ words, up: weight > 0, weight }); };
@@ -144,7 +157,7 @@ export function prospectFor(m: RuledMatch, p: RuleProperty & Partial<Pick<Proper
   if (quiet !== null && quiet <= 7) add(0.25, 'In touch this week');
   else if (quiet !== null && quiet > 30) add(-0.35, `Quiet since ${shortDate(last)}`);
   else if (quiet === null && ageDays > 14) add(-0.4, 'Never contacted');
-  const gaps = matchingGaps(a);
+  const gaps = gapsOf(a);
   if (gaps.length) {
     const named = gaps.slice(0, 2).map((g) => g.toLowerCase());
     add(-Math.min(0.6, 0.15 * gaps.length), `${gaps.length} ${gaps.length === 1 ? 'detail' : 'details'} missing (${named.join(gaps.length === 2 ? ' and ' : ', ')}${gaps.length > 2 ? ` and ${gaps.length - 2} more` : ''})`);
@@ -202,4 +215,17 @@ export const byExpected = (x: Prospect, y: Prospect) => (y.expected ?? 0) - (x.e
 export function ranked<T>(items: T[], matchOf: (t: T) => RuledMatch, prospectOf: (t: T) => Prospect): Array<{ item: T; prospect: Prospect }> {
   return items.map((item) => ({ item, prospect: prospectOf(item) }))
     .sort((x, y) => Number(matchOf(x.item).strength === 'possible') - Number(matchOf(y.item).strength === 'possible') || byExpected(x.prospect, y.prospect));
+}
+
+// The same context for every page while nothing it rests on has changed (and for ten minutes at most), so the chances
+// worked out on one page are still there on the next.
+let keptContext: { deals: unknown; properties: unknown; receivables: unknown; contacts: unknown; at: number; ctx: ProspectContext } | null = null;
+export function keptProspectContext(deals: Deal[], properties: Array<Pick<Property, 'id' | 'provider_id'>>,
+  receivables: Array<Pick<Receivable, 'kind' | 'amount' | 'status'>>, contacts: Map<string, { at: string }>): ProspectContext {
+  const now = Date.now();
+  const k = keptContext;
+  if (k && k.deals === deals && k.properties === properties && k.receivables === receivables && k.contacts === contacts && now - k.at < 10 * 60_000) return k.ctx;
+  const ctx = prospectContext({ deals, properties, receivables, lastContact: (id) => contacts.get(id)?.at ?? null });
+  keptContext = { deals, properties, receivables, contacts, at: now, ctx };
+  return ctx;
 }

@@ -61,3 +61,12 @@ export function lastContacts(activities: Array<Pick<Activity, 'entity_type' | 'e
   for (const c of calls) offer(c.applicant_id, { at: c.created_at, channel: 'call', text: c.notes ?? 'Call', actor: c.created_by ?? null });
   return out;
 }
+
+// Shared by every page while the activities and calls are the same, so they are not gathered again on each visit.
+let kept: { rows: unknown; calls: unknown; map: Map<string, LastContact> } | null = null;
+export function keptLastContacts(rows: Parameters<typeof lastContacts>[0] | undefined, calls: Parameters<typeof lastContacts>[1]): Map<string, LastContact> {
+  if (rows && kept && kept.rows === rows && kept.calls === calls) return kept.map;
+  const map = lastContacts(rows ?? [], calls);
+  if (rows) kept = { rows, calls, map };
+  return map;
+}

@@ -440,7 +440,11 @@ export const HELP = {
   },
   savedLists: {
     title: 'Saved lists',
-    body: ['Each paste is kept as a list with the date and where it came from. Purging a list removes it for everyone.'],
+    body: [
+      'Each paste is kept as a list with the date and where it came from. Purging a list removes it for everyone.',
+      'To take out just some of a list, press Choose properties on it, tick the ones to go (or Tick all), then Remove. The rest of the list stays.',
+      'Each property card says when it was added: today, yesterday, or the date.',
+    ],
   },
   matchStrength: {
     title: 'Matching clients',

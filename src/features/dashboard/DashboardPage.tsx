@@ -4,7 +4,7 @@ import {
   Avatar, Button, Card, CardHeader, Donut, Empty, Help, Icon, Legend, Meter, Sparkline, StatTile, TierBadge, UrgentChip,
 } from '../../components/ui';
 import type { IconName } from '../../components/ui';
-import { useApplicants, useCalls, useDeals, usePeople, useProperties, useProviders, useReceivables, useRecentActivity } from '../../lib/hooks';
+import { useApplicants, useCalls, useDeals, useMatchOptions, usePeople, useProperties, useProviders, useReceivables, useRecentActivity } from '../../lib/hooks';
 import { longDay, money, timeAgo } from '../../lib/format';
 import { ghostTotal, potentials, totals as moneyTotals } from '../../lib/money';
 import { isPlaced } from '../../lib/progress';
@@ -72,11 +72,13 @@ export function DashboardPage() {
   const owedNow = moneyTotals(receivables);
   const ghost = useMemo(() => ghostTotal(receivables, potentials(deals, receivables, properties, providers)), [receivables, deals, properties, providers]);
 
+  // the same options as Properties, so the matches worked out there are reused here
+  const matchOptions = useMatchOptions();
   const available = properties.filter((p) => p.status === 'void' || p.status === 'under_offer');
   // properties at least one client is a strong match for: the ones worth sending today
   const strongCount = useMemo(
-    () => available.filter((p) => matchesForProperty(p, applicants, { deals }).some((m) => m.strength === 'strong')).length,
-    [available, applicants, deals],
+    () => available.filter((p) => matchesForProperty(p, applicants, matchOptions).some((m) => m.strength === 'strong')).length,
+    [available, applicants, matchOptions],
   );
   const housed = applicants.filter(isHoused).length;
 

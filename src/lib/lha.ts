@@ -35,14 +35,30 @@ export interface LhaSource { kind: 'database' | 'file' | 'built_in'; url?: strin
 export interface LhaTable { year: string; rates: Record<string, number[]>; source?: LhaSource }
 
 let fromDatabase: LhaTable | null = null;
+let fromDatabaseInput: LhaTable | null | undefined;
+let version = 0;
+/** Goes up whenever the rates or postcode corrections in use change, so matches kept from before are worked out again. */
+export const lhaVersion = () => version;
 /** The rates loaded into the database (lha_rates), once read; null to fall back. Set by the app as it opens. */
-export function setLhaFromDatabase(t: LhaTable | null) { fromDatabase = t && Object.keys(t.rates).length ? t : null; }
+export function setLhaFromDatabase(t: LhaTable | null) {
+  if (t === fromDatabaseInput) return;
+  fromDatabaseInput = t;
+  fromDatabase = t && Object.keys(t.rates).length ? t : null;
+  version += 1;
+}
 
 const BUILT_IN: LhaTable = { year: LHA_YEAR, rates: LHA_RATES, source: { kind: 'built_in' } };
 
 /** The rates in use: from the database (gov.uk, sourced), else a year loaded in Team settings, else the built-in one. */
-export const lhaTable = (): LhaTable => fromDatabase
-  ?? (activeSettings().lhaRates ? { ...activeSettings().lhaRates!, source: { kind: 'file' } } : BUILT_IN);
+let fileTable: { from: unknown; table: LhaTable } | null = null;
+export const lhaTable = (): LhaTable => {
+  if (fromDatabase) return fromDatabase;
+  const r = activeSettings().lhaRates;
+  if (!r) return BUILT_IN;
+  // the same object while the same rates are in use, so what was worked out from them can be kept
+  if (fileTable?.from !== r) fileTable = { from: r, table: { ...r, source: { kind: 'file' } } };
+  return fileTable.table;
+};
 
 /** True only for rates loaded from gov.uk with their source and start date. */
 export const lhaVerified = (t: LhaTable = lhaTable()) => t.source?.kind === 'database' && !!t.source.url;
@@ -211,8 +227,13 @@ export function lhaAreaFor(p: PropertyForLha): LhaArea | null {
 
 let postcodeAreas: Record<string, string> = {};
 /** Corrections kept in the database (postcode_brma): "NW11" or a sector "NW10 4" to its area. Set by the app as it opens. */
+let postcodeKey = '';
 export function setPostcodeBrma(rows: Array<{ postcode_prefix: string; brma: string }>) {
+  const key = rows.map((r) => `${r.postcode_prefix}=${r.brma}`).join('|');
+  if (key === postcodeKey) return;
+  postcodeKey = key;
   postcodeAreas = Object.fromEntries(rows.map((r) => [r.postcode_prefix.toUpperCase().replace(/\s+/g, ' ').trim(), r.brma]));
+  version += 1;
 }
 
 /** "NW10 4AB" → "NW10 4", the postcode sector; null without a full postcode. */
@@ -334,7 +355,18 @@ export interface LhaCheck {
 const pounds = (n: number) => `£${Math.round(n).toLocaleString('en-GB')}`;
 
 /** How the rent compares with LHA for this property, or null if the area or size is not known. */
+// each property's check, kept until the rates, postcode corrections or settings change
+const checkCache = new WeakMap<PropertyForLha, { table: LhaTable; version: number; settings: unknown; check: LhaCheck | null }>();
 export function lhaCheck(p: PropertyForLha): LhaCheck | null {
+  const table = lhaTable(), settings = activeSettings();
+  const hit = checkCache.get(p);
+  if (hit && hit.table === table && hit.version === version && hit.settings === settings) return hit.check;
+  const check = lhaCheckNow(p);
+  checkCache.set(p, { table, version, settings, check });
+  return check;
+}
+
+function lhaCheckNow(p: PropertyForLha): LhaCheck | null {
   const area = lhaAreaFor(p);
   const size = lhaSizeOf(p);
   if (!area || !size) return null;

@@ -17,8 +17,20 @@ const STREET_WORDS: Record<string, string> = {
 const tidy = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim()
   .split(' ').map((w) => STREET_WORDS[w] ?? w).join(' ');
 
+const buildingCache = new Map<string, Building>();
 /** The building an address is in: its house number and street (or its name), and its postcode when it has one. */
 export function buildingOf(address: string, postcode?: string | null): Building {
+  const key = `${address}|${postcode ?? ''}`;
+  let b = buildingCache.get(key);
+  if (!b) {
+    if (buildingCache.size > 5000) buildingCache.clear();
+    b = readBuilding(address, postcode);
+    buildingCache.set(key, b);
+  }
+  return b;
+}
+
+function readBuilding(address: string, postcode?: string | null): Building {
   const pc = POSTCODE.exec(postcode ?? '') ?? POSTCODE.exec(address);
   let rest = address.replace(POSTCODE, ' ').replace(/\([^)]*\)/g, ' ');
   // units first: "Flat 2,", "Ground floor flat", "Flat 2 12 Station Road"

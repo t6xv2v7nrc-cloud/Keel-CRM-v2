@@ -8,14 +8,13 @@ export function toE164(raw: string): string | null {
   return null;
 }
 
+// made once: building a number format is slow, and money is written thousands of times when matching
+const POUNDS = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 });
+
 /** Format money as GBP without pence: 1250 → £1,250 */
 export function money(amount: number | null | undefined): string {
   if (amount == null) return '·';
-  return new Intl.NumberFormat('en-GB', {
-    style: 'currency',
-    currency: 'GBP',
-    maximumFractionDigits: 0,
-  }).format(amount);
+  return POUNDS.format(amount);
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -32,6 +31,17 @@ export function shortDate(iso: string | Date | null | undefined): string {
   const d = asDate(iso);
   if (Number.isNaN(d.getTime())) return String(iso);
   return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+/** "today", "yesterday", "20 Oct", or "20 Oct 2025" when it was not this year. */
+export function dayWords(iso: string | Date, now = new Date()): string {
+  const d = asDate(iso);
+  if (Number.isNaN(d.getTime())) return '·';
+  const start = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((start(now) - start(d)) / 86_400_000);
+  if (days === 0) return 'today';
+  if (days === 1) return 'yesterday';
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}${d.getFullYear() !== now.getFullYear() ? ` ${d.getFullYear()}` : ''}`;
 }
 
 /** "Saturday 10 October" */

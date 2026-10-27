@@ -1,6 +1,7 @@
 export { Button, Spinner } from './Button';
 export { IceBadge, NewBadge, StageBadge } from './Badge';
 export { Card, CardHeader } from './Card';
+export { useShowMore } from './showMore';
 export { Field } from './Field';
 export { ToastProvider, useToast } from './Toast';
 export { TierBadge } from './TierBadge';
