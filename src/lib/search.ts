@@ -328,6 +328,16 @@ export function starredFirst(list: Applicant[], starred: ReadonlySet<string>): A
 /** When the referral or enquiry reached Keel: the officer's nomination when it was dated, else when they got in touch. */
 export const receivedAt = (a: Pick<Applicant, 'created_at' | 'nominated_at'>) => a.nominated_at || a.created_at;
 
+/** Whole days since the referral reached Keel. */
+export const referralAgeDays = (a: Pick<Applicant, 'created_at' | 'nominated_at'>, now = new Date()) =>
+  Math.max(0, Math.floor((now.getTime() - new Date(receivedAt(a)).getTime()) / 86_400_000));
+
+/** An old referral (Team settings, 60 days as standard): it sinks below newer ones unless it is a good match. */
+export function isStaleReferral(a: Pick<Applicant, 'created_at' | 'nominated_at'>, now = new Date()): boolean {
+  const days = activeSettings().staleReferralDays;
+  return days > 0 && referralAgeDays(a, now) > days;
+}
+
 const dayStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

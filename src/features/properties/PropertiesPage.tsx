@@ -27,7 +27,7 @@ import { MapView } from '../map/MapView';
 import { DealChip } from '../progress/Progress';
 import { RequestButton } from '../requests/RequestSheet';
 import { providerFor } from '../../lib/requests';
-import { effectiveTier, isFresh, isUrgent } from '../../lib/search';
+import { effectiveTier, isFresh, isStaleReferral, isUrgent, receivedAt, referralAgeDays } from '../../lib/search';
 import { tierLabel } from '../../lib/tiering';
 import { dayWords, money, shortDate } from '../../lib/format';
 import { bedsOfType, TYPE_OPTIONS } from '../../lib/propertyEdit';
@@ -949,6 +949,12 @@ function MatchRow({ m, p, sent, deal, prospect, ctx }: { m: RuledMatch; p: Prope
           <Link to={`/applicants/${a.id}`} className="text-[15px] font-medium text-[var(--ink)] hover:underline">{a.full_name}</Link>
           <TierBadge tier={tier} />
           {isFresh(a) && <NewBadge />}
+          {isStaleReferral(a) && (
+            <span title={`Referral received ${shortDate(receivedAt(a))}: older than ${activeSettings().staleReferralDays} days, so it sits lower unless it is a good match`}
+              className="inline-flex items-center gap-1 whitespace-nowrap rounded px-1.5 py-0.5 text-[12px] font-medium" style={{ background: 'var(--chip-bg)', color: 'var(--chip-fg)' }}>
+              <Icon name="clock" size={11} />{referralAgeDays(a)} days old
+            </span>
+          )}
           {isUrgent(a) && <UrgentChip reason={urgentWhy?.replace(/^Urgent:\s*/, '')} />}
           <IncomeTag income={m.income} />
           {prospect && <ProspectTag prospect={prospect} open={why} onToggle={() => setWhy((v) => !v)} />}

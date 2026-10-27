@@ -59,7 +59,10 @@ src/
                       progress on this place, officer referral, new, urgent, contact, missing details, places turned
                       down, missed viewings, an offer elsewhere, provider's record, when it is free); `expected` = fee +
                       incentive (typical incentive for "likely") times chance; Easy money (55%+ and £1,000+) / Hard work
-                      (under 20%); `whyWords`; `ranked` puts best bets first; `useProspectContext`; chips FitBadge,
+                      (under 20%); `whyWords`; `ranked` puts best bets first (`sinkOf`: Good and Strong, then Possible,
+                      then a Possible whose referral is older than Team settings `staleReferralDays`, 60: an old
+                      referral keeps its place only as a good match; `isStaleReferral`, `referralAgeDays` in search.ts;
+                      "N days old" chip; also lowers the chance); `useProspectContext`; chips FitBadge,
                       ProspectTag, ProspectWhy in MatchBits.tsx; Properties' Order: Most money likely (standard)),
               geo.ts (placing postcodes via postcodes.io, cached per device; a client's areas as districts; `locateCouncils`:
                       a council at the middle of its districts, else by name from postcodes.io places),

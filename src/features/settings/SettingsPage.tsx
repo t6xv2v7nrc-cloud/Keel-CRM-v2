@@ -263,6 +263,9 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
             text="A client on UC with no PIP or LCWRA, and not working, is never matched to a property above this rent, whatever budget they gave. 0 turns the limit off.">
             <NumberField label="Rent up to" prefix="£" value={draft.ucOnlyRentCap} min={0} step={50} onChange={(v) => set('ucOnlyRentCap', v)} />
           </Row>
+          <Row icon="clock" title="Old referrals" text="On each property's list, a client referred longer ago than this sits below newer ones, unless they are a Good or Strong match. 0 turns it off.">
+            <NumberField label="Days" value={draft.staleReferralDays} min={0} onChange={(v) => set('staleReferralDays', v)} />
+          </Row>
           <Row icon="trash" title="Old property lists" text="The Saved lists panel offers to purge lists older than this.">
             <NumberField label="Days" value={draft.purgeAfterDays} min={1} onChange={(v) => set('purgeAfterDays', v)} />
           </Row>

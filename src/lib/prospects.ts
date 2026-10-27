@@ -13,9 +13,10 @@
 
 import type { Applicant, Deal, Property, Receivable } from './types';
 import type { RuledMatch, RuleProperty } from './matchRules';
+import { sinkOf } from './matchRules';
 import { matchingGaps } from './clientProfile';
 import { fromHousingOfficer } from './money';
-import { isUrgent, receivedAt } from './search';
+import { isStaleReferral, isUrgent, receivedAt, referralAgeDays } from './search';
 import { buildingOf, sameBuilding, turnedDown } from './buildings';
 import { isLive, shortAddress } from './progress';
 import { money, shortDate } from './format';
@@ -151,6 +152,7 @@ function prospectNow(m: RuledMatch, p: RuleProperty & Partial<Pick<Property, 'av
   if (fromHousingOfficer(a)) add(0.35, 'Referred by a housing officer');
   const ageDays = (now.getTime() - new Date(receivedAt(a)).getTime()) / DAY;
   if (ageDays <= 7) add(0.2, 'New referral');
+  else if (isStaleReferral(a, now)) add(-0.4, `Referral ${referralAgeDays(a, now)} days old`);
   if (isUrgent(a)) add(0.3, 'Urgent need');
   const last = ctx.lastContact(a.id);
   const quiet = last ? (now.getTime() - new Date(last).getTime()) / DAY : null;
@@ -211,10 +213,12 @@ export function whyWords(x: Prospect, ctx: Pick<ProspectContext, 'base' | 'close
 /** Best bets first: the most money likely, then the surest. */
 export const byExpected = (x: Prospect, y: Prospect) => (y.expected ?? 0) - (x.expected ?? 0) || y.chance - x.chance || y.fit - x.fit;
 
-/** A list of matches with their prospects, best bets first (looser fits still last). */
-export function ranked<T>(items: T[], matchOf: (t: T) => RuledMatch, prospectOf: (t: T) => Prospect): Array<{ item: T; prospect: Prospect }> {
-  return items.map((item) => ({ item, prospect: prospectOf(item) }))
-    .sort((x, y) => Number(matchOf(x.item).strength === 'possible') - Number(matchOf(y.item).strength === 'possible') || byExpected(x.prospect, y.prospect));
+/** A list of matches with their prospects, best bets first: Good and Strong, then Possible, then a Possible whose
+ *  referral has gone old (see `sinkOf`). */
+export function ranked<T>(items: T[], matchOf: (t: T) => RuledMatch, prospectOf: (t: T) => Prospect, now = new Date()): Array<{ item: T; prospect: Prospect }> {
+  return items.map((item) => ({ item, prospect: prospectOf(item), sink: sinkOf(matchOf(item), now) }))
+    .sort((x, y) => x.sink - y.sink || byExpected(x.prospect, y.prospect))
+    .map(({ item, prospect }) => ({ item, prospect }));
 }
 
 // The same context for every page while nothing it rests on has changed (and for ten minutes at most), so the chances

@@ -115,6 +115,9 @@ export interface AppSettings {
   moveInChecklist: string[];
   /** Saved property lists older than this can be purged in one click. */
   purgeAfterDays: number;
+  /** A referral older than this many days sinks below newer ones on a property's list, unless it is a Good or Strong
+   *  match (0 = never). */
+  staleReferralDays: number;
   /** LHA rates loaded from a CSV (a newer year); null uses the built-in rates. */
   lhaRates: { year: string; rates: Record<string, number[]> } | null;
   /** Corrections to which LHA area (BRMA) a postcode district or borough is in. */
@@ -345,6 +348,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   coldAfterDays: 30,
   moveInChecklist: DEFAULT_MOVE_IN_CHECKLIST,
   purgeAfterDays: 14,
+  staleReferralDays: 60,
   lhaRates: null,
   lhaAreaOverrides: {},
   lhaLeeway: 50,

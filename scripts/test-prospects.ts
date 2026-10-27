@@ -1,9 +1,10 @@
 // Checks for the building a place is in (a client who turned one flat down is not offered the others there), floors
 // and lifts, and each match's fit, chance of placing and expected money. Run with: npx tsx scripts/test-prospects.ts
 import { buildingOf, sameBuilding, turnedDown } from '../src/lib/buildings';
-import { hiddenForApplicant, hiddenWords, ruledMatch } from '../src/lib/matchRules';
+import { hiddenForApplicant, hiddenWords, matchesForProperty, ruledMatch, sinkOf } from '../src/lib/matchRules';
 import type { RuleDeal, RuleProperty } from '../src/lib/matchRules';
-import { byExpected, chanceWords, fitOf, prospectContext, prospectFor, whyWords } from '../src/lib/prospects';
+import { byExpected, chanceWords, fitOf, prospectContext, prospectFor, ranked, whyWords } from '../src/lib/prospects';
+import { isStaleReferral, referralAgeDays } from '../src/lib/search';
 import { rateFor } from '../src/lib/lha';
 import { DEFAULT_SETTINGS, setActiveSettings } from '../src/lib/settings';
 import type { Applicant, Deal } from '../src/lib/types';
@@ -135,6 +136,29 @@ check('an offer already elsewhere lowers it', offerElsewhere.chance < withoutVie
 check('why, in words: where it starts, what moved it, what it is worth', /^Starts from Keel's own rate: 27% of properties sent end in a placement \(20 so far\)\. Up: .*strong fit/.test(whyWords(pBest, ctx))
   && /Could bring £4,000; at \d+% that is worth about £[\d,]+\.$/.test(whyWords(pBest, ctx)), whyWords(pBest, ctx));
 check('best bets first: the most money likely', [pShaky!, pBest].sort(byExpected)[0] === pBest);
+
+// ── Old referrals sit lower, unless they are a good match ──
+const ago = (days: number) => new Date(now.getTime() - days * 86_400_000).toISOString();
+const oldOne = client({ full_name: 'Olive Oldreferral', notes: 'a 1 bed please', council: null, postcode_area: null, created_at: ago(75) });
+const newOne = client({ full_name: 'Nina Newreferral', notes: 'a 1 bed please', council: null, postcode_area: null, created_at: ago(10) });
+check('a referral 75 days old is old (60 days as standard); 10 days is not', isStaleReferral(oldOne, now) && !isStaleReferral(newOne, now) && referralAgeDays(oldOne, now) === 75);
+check('an officer\'s nomination date counts first', !isStaleReferral({ created_at: ago(90), nominated_at: ago(20) }, now));
+const loose = property({ borough: 'Brent', address_line: '8 Loose Lane, Wembley HA9 0AA', postcode: 'HA9 0AA' });
+const mOld = ruledMatch(loose, oldOne, { today }).match!, mNew = ruledMatch(loose, newOne, { today }).match!;
+check('both are loose (Possible) fits here', mOld?.strength === 'possible' && mNew?.strength === 'possible', `${mOld?.strength} ${mNew?.strength}`);
+check('a Possible with an old referral sinks below a newer Possible', sinkOf(mOld, now) > sinkOf(mNew, now));
+const order = ranked([mOld, mNew], (m) => m, (m) => prospectFor(m, loose, prospectContext({ deals: [], now })), now).map((x) => x.item.applicant.full_name);
+check('on the property\'s list: the newer referral first', order[0] === 'Nina Newreferral', order.join(', '));
+const listed = matchesForProperty(loose, [oldOne, newOne], { today }).map((m) => m.applicant.full_name);
+check('the same in the Mailer\'s order', listed.indexOf('Nina Newreferral') < listed.indexOf('Olive Oldreferral'), listed.join(', '));
+const oldGood = client({ full_name: 'Gita Goodmatch', created_at: ago(80) });
+const mg = ruledMatch(flat2, oldGood, { today }).match!;
+check('an old referral that is a good match keeps its place', (mg.strength === 'good' || mg.strength === 'strong') && sinkOf(mg, now) === 0, mg.strength);
+const pOld = prospectFor(mOld, loose, prospectContext({ deals: [], now }));
+check('an old referral lowers the chance, and says so', pOld.factors.some((f) => !f.up && f.words === 'Referral 75 days old'), JSON.stringify(pOld.factors.map((f) => f.words)));
+setActiveSettings({ ...DEFAULT_SETTINGS, showPossibleMatches: true, staleReferralDays: 0 });
+check('0 days in Team settings turns it off', !isStaleReferral(oldOne, now) && sinkOf(mOld, now) === 1);
+setActiveSettings({ ...DEFAULT_SETTINGS, showPossibleMatches: true });
 
 if (failed) { console.log(`\n${failed} failed`); process.exit(1); }
 console.log('\nAll prospect checks pass');

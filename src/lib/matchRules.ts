@@ -30,7 +30,7 @@ import { brmaOfDistrict, brmasOfBorough, lhaCheck, lhaSizeOf, lhaTable, lhaVersi
 import type { LhaSize, LhaTable } from './lha';
 import { feeFrom, fromHousingOfficer, rentOf, usualFee } from './money';
 import { providerFor } from './requests';
-import { benefitCapOf, councilOf, effectiveTier, sharedRateExempt } from './search';
+import { benefitCapOf, councilOf, effectiveTier, isStaleReferral, sharedRateExempt } from './search';
 import { areNeighbours, BOROUGHS, LONDON_BOROUGHS } from './london';
 import { activeSettings } from './settings';
 import { money } from './format';
@@ -306,7 +306,11 @@ function ruledMatchNow(p: RuleProperty, a: Applicant, opts: RuleOptions): Ruled 
 
 const RANK: Record<Strength, number> = { strong: 0, good: 1, possible: 2 };
 const shown = (m: Match) => m.strength !== 'possible' || activeSettings().showPossibleMatches;
-const looser = (m: Match) => (m.strength === 'possible' ? 1 : 0);
+/** Where a match sits in a list: Good and Strong first, then Possible, then a Possible whose referral has gone old
+ *  (Team settings `staleReferralDays`): an old referral only keeps its place when it is a good match. */
+export const sinkOf = (m: Pick<Match, 'strength' | 'applicant'>, now = new Date()) =>
+  m.strength !== 'possible' ? 0 : isStaleReferral(m.applicant, now) ? 2 : 1;
+const looser = (m: Match) => sinkOf(m);
 
 export interface RuledPropertyMatch<P extends RuleProperty> { property: P; match: RuledMatch }
 

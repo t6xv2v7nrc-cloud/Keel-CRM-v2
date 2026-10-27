@@ -451,6 +451,7 @@ export const HELP = {
     body: [
       'Each property shows only its best few clients: every Strong one, topped up with Good ones, or the top two Possible ones when nothing fits better. Show all lists everyone.',
       'The same rules as a client\'s Suitable properties decide who can be offered it (their LHA, their area, the kind of place). Clients whose council pays an incentive come first, looser fits last; each line says why they fit and what Keel could expect.',
+      'A client referred more than 60 days ago (Team settings, Old referrals) sits below newer ones, marked with how many days old, unless they are a Good or Strong match. An old referral also lowers the chance it ends in a placement.',
       'Strong: area, size and rent all fit. Good: a solid fit, perhaps in the borough next door. Possible: a looser fit, so check with the client first.',
       'Anything to check shows in amber. Hover over a client for every reason.',
       'Properties over the premium rent in Team settings are always offered to clients on PIP or in full-time work.',
