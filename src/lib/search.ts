@@ -90,6 +90,13 @@ export function householdOf(a: Applicant): HouseholdKey | null {
   return null;
 }
 
+/** No age on the record where it decides the rate: a single person (or one whose household is not known, or other)
+ *  with no date of birth and no age band. Under 35 they are paid the shared rate, 35 or over the 1 bed rate. */
+export const missingAge = (a: Applicant) => {
+  const h = householdOf(a);
+  return !a.date_of_birth && !a.age_band && (h === null || h === 'single' || h === 'other');
+};
+
 // ── Housing officer (case worker) ─────────────────────────────────
 
 /** The client has a housing officer: any of their name, email or phone is filled in. */
@@ -143,7 +150,7 @@ export function searchText(a: Applicant): string {
   const household = householdOf(a);
   const parts = [
     a.full_name, a.email, a.referring_borough, a.council, a.notes, a.requirements,
-    a.officer_name, a.officer_email, a.source, a.housing_situation, a.lha_band,
+    a.officer_name, a.officer_email, a.source, a.housing_situation,
     household ? HOUSEHOLD_LABEL[household] : '',
     a.work_status ? WORK_STATUS_LABEL[a.work_status] ?? '' : '',
     a.urgency && a.urgency !== 'none' ? URGENCY_LABEL[a.urgency] ?? '' : '',
@@ -188,10 +195,11 @@ export interface PipelineFilters {
   officer: 'any' | 'yes' | 'no'; // has a housing officer (case worker)
   council: string; // 'any', 'none', or a borough
   starred: boolean; // only the clients this person starred; applied by the Pipeline, which knows who is signed in
+  age: 'any' | 'missing'; // missing: single (or not known) with no date of birth and no age band recorded
 }
 
 export const DEFAULT_FILTERS: PipelineFilters = {
-  q: '', stage: 'active', tier: 'any', household: 'any', work: 'any', councilReg: 'any', urgency: 'any', benefits: [], calls: 'any', owner: 'any', progress: 'any', officer: 'any', council: 'any', starred: false,
+  q: '', stage: 'active', tier: 'any', household: 'any', work: 'any', councilReg: 'any', urgency: 'any', benefits: [], calls: 'any', owner: 'any', progress: 'any', officer: 'any', council: 'any', starred: false, age: 'any',
 };
 
 export function applyFilters(
@@ -212,6 +220,7 @@ export function applyFilters(
     if (f.urgency === 'urgent' ? !isUrgent(a) : f.urgency !== 'any' && a.urgency !== f.urgency) return false;
     if (f.officer !== 'any' && hasOfficer(a) !== (f.officer === 'yes')) return false;
     if (f.council !== 'any' && (f.council === 'none' ? councilOf(a) !== null : councilOf(a) !== f.council)) return false;
+    if (f.age === 'missing' && !missingAge(a)) return false;
     for (const key of f.benefits) {
       if (!BENEFITS.some((b) => b.key === key && b.has(a))) return false;
     }
@@ -240,6 +249,7 @@ export function filtersFromParams(p: URLSearchParams): PipelineFilters {
     officer: oneOf(p.get('officer'), ['any', 'yes', 'no'] as const, 'any'),
     council: p.get('council') || 'any',
     starred: p.get('starred') === '1',
+    age: oneOf(p.get('age'), ['any', 'missing'] as const, 'any'),
   };
 }
 
@@ -260,6 +270,7 @@ export function filtersToParams(f: PipelineFilters, base = new URLSearchParams()
   set('officer', f.officer, 'any');
   set('council', f.council, 'any');
   set('starred', f.starred ? '1' : '', '');
+  set('age', f.age, 'any');
   return p;
 }
 

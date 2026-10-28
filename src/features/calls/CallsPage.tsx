@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Avatar, Card, CardHeader, DayBars, Empty, Icon, Meter, PageHeader, Sparkline, StatTile, TierBadge, UpdateNote, UrgentChip, useToast,
 } from '../../components/ui';
+import { tierNeeds } from '../../lib/clientProfile';
 import { useApplicants, useAssign, useCalls, usePeople, useSettings } from '../../lib/hooks';
 import { addDays, callQueue, callsPerDay, callState, dayLabel, isoDay, lastCallMap, OUTCOME_LABEL, queueLabel, todayIso } from '../../lib/calls';
 import { effectiveTier, isUrgent } from '../../lib/search';
@@ -184,7 +185,7 @@ function QueueRow({ a, lastCall, label, overdue, owner, canClaim }: {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <Link to={`/applicants/${a.id}`} className="text-[15px] font-medium text-[var(--ink)] hover:underline">{a.full_name}</Link>
-            <TierBadge tier={tier} />
+            <TierBadge tier={tier} needs={tierNeeds(a)} />
             {isUrgent(a) && <UrgentChip reason={URGENCY_LABEL[a.urgency ?? '']} />}
           </div>
           <div className="mt-0.5 flex flex-wrap gap-x-3 text-[13px]">

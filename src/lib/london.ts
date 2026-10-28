@@ -133,7 +133,8 @@ const low = (s: string) => ` ${s.toLowerCase().replace(/&/g, ' and ').replace(/[
 
 /** Area names, longest first so "north finchley" wins over "finchley". */
 const AREA_NAMES = Object.keys(AREAS).sort((a, b) => b.length - a.length);
-const BOROUGH_KEYS = [
+/** Every way a borough is written, longest first (the database mirrors this list for tiers, 0029). */
+export const BOROUGH_KEYS = [
   ...BOROUGHS.filter((b) => !EVERYDAY_WORD_BOROUGHS.has(b)).map((b) => [b.toLowerCase().replace(/&/g, 'and'), b] as const),
   ...Object.entries(BOROUGH_ALIASES),
 ].sort((a, b) => b[0].length - a[0].length);

@@ -7,6 +7,9 @@ import type { AppSettings } from './settings';
 import { addDays, OUTCOME_LABEL, todayIso } from './calls';
 import { DEAL_LABEL, isLive, shortAddress, shouldAdvance, stageFromDeals, stepAfter, takesOver, viewingWords } from './progress';
 import { computeTier } from './tiering';
+import { autoFill, fillWords } from './autoFill';
+import type { BackfillRow } from './autoFill';
+import { writeDropping } from './columns';
 import { clockTime, moneyFee, shortDate } from './format';
 import type {
   Activity, Applicant, Call, CallOutcome, Deal, DealStatus, Profile, Property, Provider, ProviderRequest, Receivable, RequestStatus, RequestType,
@@ -73,23 +76,55 @@ export function useApplicant(id: string | undefined) {
 export function useUpdateTriage() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ applicant, patch, note }: { applicant: Applicant; patch: Partial<Applicant>; note: string }) => {
-      const merged = { ...applicant, ...patch };
-      const full: Partial<Applicant> = { ...patch };
+    mutationFn: async ({ applicant, patch, note }: { applicant: Applicant; patch: Partial<Applicant>; note: string }): Promise<{ filled: string | null }> => {
+      // new words in their notes or must-haves: fill in any empty answers they give (never one already answered, or set now)
+      const fill = 'notes' in patch || 'requirements' in patch
+        ? autoFill({ ...applicant, ...patch }, { ageBand: 'age_band' in applicant, bedrooms: 'bedrooms_needed' in applicant })
+        : { patch: {}, fills: [] };
+      const fills = fill.fills.filter((f) => !(f.field in patch));
+      const merged = { ...applicant, ...patch, ...Object.fromEntries(fills.map((f) => [f.field, f.to])) };
+      const full: Partial<Applicant> = { ...patch, ...Object.fromEntries(fills.map((f) => [f.field, f.to])) };
       if (!('tier' in patch) && !merged.tier_locked) full.tier = computeTier(merged);
-      let { error } = await supabase.from('applicants').update(full).eq('id', applicant.id);
-      if (error && /tier_locked/.test(error.message)) {
-        // before the 0005 update there is no lock flag: a stored tier simply stands
-        const rest = { ...full };
-        delete rest.tier_locked;
-        ({ error } = await supabase.from('applicants').update(rest).eq('id', applicant.id));
-      }
+      // before an update has been run (0005's lock flag, 0023's age band, 0028's bedrooms), that column is left out
+      const { error, dropped } = await writeDropping(full as Record<string, unknown>, (row) => supabase.from('applicants').update(row).eq('id', applicant.id));
       if (error) throw error;
-      await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: applicant.id, kind: 'updated', body: note });
+      const kept = fills.filter((f) => !dropped.includes(f.field));
+      const filled = kept.length ? fillWords(kept) : null;
+      await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: applicant.id, kind: 'updated', body: filled ? `${note}. Filled in from their notes: ${filled}` : note });
+      return { filled };
     },
     onSuccess: (_d, { applicant }) => {
       qc.invalidateQueries({ queryKey: ['applicants'] });
       qc.invalidateQueries({ queryKey: ['applicants', applicant.id] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+/** The one-off backfill (A9): write exactly the rows shown on Settings, each change on the client's timeline. A tier
+ *  set by hand stays; otherwise the tier follows the filled-in answers. Columns the database lacks are left out. */
+export function useApplyBackfill() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ rows, applicants }: { rows: BackfillRow[]; applicants: Applicant[] }): Promise<{ done: number; failed: string[] }> => {
+      const byId = new Map(applicants.map((a) => [a.id, a]));
+      let done = 0;
+      const failed: string[] = [];
+      for (const r of rows) {
+        const a = byId.get(r.id);
+        if (!a) continue;
+        const patch: Record<string, unknown> = Object.fromEntries(r.fills.map((f) => [f.field, f.to]));
+        if (!a.tier_locked) patch.tier = computeTier({ ...a, ...patch });
+        const { error, dropped } = await writeDropping(patch, (row) => supabase.from('applicants').update(row).eq('id', a.id));
+        if (error) { failed.push(`${a.full_name}: ${error.message}`); continue; }
+        const kept = r.fills.filter((f) => !dropped.includes(f.field));
+        if (kept.length) await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: a.id, kind: 'updated', body: `Filled in from their notes (one-off): ${fillWords(kept)}` });
+        done += 1;
+      }
+      return { done, failed };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['applicants'] });
       qc.invalidateQueries({ queryKey: ['activities'] });
     },
   });

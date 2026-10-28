@@ -6,6 +6,7 @@ import {
   sentKey, useActivities, useApplicant, useApplicants, useAssign, useCalls, useDeals, useDeleteApplicant, usePeople, useProperties, useProviders, useRequests,
   useMatchOptions, useProspectContext, useSaveSettings, useSentOnWhatsApp, useSettings,
 } from '../../lib/hooks';
+import { tierNeeds } from '../../lib/clientProfile';
 import { bestFew, brief } from '../../lib/propertyMatch';
 import { hiddenForApplicant, matchesForApplicant } from '../../lib/matchRules';
 import { FitBadge, HiddenNote, IncomeTag, ProspectTag, ProspectWhy, RuleWarnings } from '../properties/MatchBits';
@@ -418,7 +419,7 @@ function HeroCard({ applicant }: { applicant: Applicant }) {
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="m-0 text-[28px] font-bold leading-tight text-[var(--ink)]">{applicant.full_name}</h1>
                 <StarButton applicant={applicant} size={20} className="-ml-1" />
-                <TierBadge tier={tier} />
+                <TierBadge tier={tier} needs={tierNeeds(applicant)} />
                 {isUrgent(applicant) && <UrgentChip reason={URGENCY_LABEL[applicant.urgency ?? '']} showReason />}
                 <StageBadge stage={applicant.stage} />
                 {isFresh(applicant) && <NewBadge />}

@@ -13,7 +13,7 @@
 // Read-only: nothing here changes the record. `sureAnswers` lists what can be filled in with one tap.
 
 import type { Applicant } from './types';
-import { benefitCapOf, benefitsOf, councilOf, householdOf, sharedRateExempt } from './search';
+import { benefitCapOf, benefitsOf, councilOf, effectiveTier, householdOf, sharedRateExempt } from './search';
 import type { HouseholdKey } from './search';
 import { readAgeText, readHouseholdText, readNotes } from './readNotes';
 import type { Suggestion } from './readNotes';
@@ -29,7 +29,7 @@ import { fromHousingOfficer } from './money';
 import { money } from './format';
 import { todayIso } from './calls';
 import { activeSettings } from './settings';
-import { HOUSEHOLD_LABEL } from './tiering';
+import { HOUSEHOLD_LABEL, tierCount } from './tiering';
 
 export type Source = 'recorded' | 'read' | 'worked out' | 'not known';
 export interface Known<T> { value: T | null; how: Source; why?: string }
@@ -67,6 +67,8 @@ export interface ClientProfile {
   summary: string;
   /** suggestions from their notes sure enough to fill in with one tap (nothing already answered is changed) */
   sureAnswers: Suggestion[];
+  /** the household recorded and their own words disagree: "Check household: notes say a couple" */
+  householdCheck: string | null;
 }
 
 const yearsSince = (iso: string, today: string) => {
@@ -126,9 +128,17 @@ export function rateOf(a: Applicant, today = todayIso()): RateFacts {
   let rateType: Known<RateType>;
   let size: Known<LhaSize>;
   if (h === 'family') {
-    const beds = Math.min(4, Math.max(2, needs.beds && !needs.beds.asked ? needs.beds.min : 1 + Math.ceil(Math.max(1, needs.children) / 2))) as LhaSize;
+    // the bedrooms they need, as recorded or as they asked (capped at 4); worked out from the children only when they did not say
     rateType = { value: 'families', how: household.how };
-    size = { value: beds, how: 'worked out', why: `${needs.children || 'their'} ${needs.children === 1 ? 'child' : 'children'}` };
+    if (needs.beds?.asked) {
+      const beds = Math.min(4, Math.max(1, needs.beds.min)) as LhaSize;
+      size = a.bedrooms_needed != null
+        ? { value: beds, how: 'recorded', why: `needs ${a.bedrooms_needed} ${a.bedrooms_needed === 1 ? 'bedroom' : 'bedrooms'}` }
+        : { value: beds, how: 'read', why: `asked for ${beds} ${beds === 1 ? 'bedroom' : 'bedrooms'}` };
+    } else {
+      const beds = Math.min(4, Math.max(2, 1 + Math.ceil(Math.max(1, needs.children) / 2))) as LhaSize;
+      size = { value: beds, how: 'worked out', why: `${needs.children || 'their'} ${needs.children === 1 ? 'child' : 'children'}` };
+    }
   } else if (h === 'couple') {
     rateType = { value: 'couples', how: household.how };
     size = { value: 1, how: 'worked out', why: 'a couple is paid the 1 bed rate' };
@@ -155,6 +165,41 @@ export function rateOf(a: Applicant, today = todayIso()): RateFacts {
   const facts = { household, age, ageBand, exemptions, rateType, size };
   rateCache.set(a, { today, facts });
   return facts;
+}
+
+/** When the household recorded on the form and what their own words say disagree: "family with 3 children" for a client
+ *  recorded as single, or 3 children where 1 is recorded. Null when they agree, or when only one of them says anything.
+ *  The record is never changed by this: it asks someone to check. */
+export function householdCheck(a: Applicant): string | null {
+  const recorded = a.household_type;
+  if (recorded !== 'single' && recorded !== 'couple' && recorded !== 'family' && recorded !== 'other') return null;
+  const read = readHouseholdText([a.notes, a.requirements].filter(Boolean).join('\n'));
+  if (!read || read.confidence < 0.75) return null;
+  const words = read.type === 'family' ? (read.children ? `a family with ${read.children} ${read.children === 1 ? 'child' : 'children'}` : 'a family with children')
+    : read.type === 'couple' ? 'a couple' : read.type === 'single' ? 'single' : read.adults ? `${read.adults} adults` : 'more than one adult';
+  if (read.type !== recorded) return `Check household: notes say ${words}`;
+  if (recorded === 'family' && read.children && (a.children ?? 0) > 0 && read.children !== a.children) return `Check household: notes say ${read.children} ${read.children === 1 ? 'child' : 'children'}, ${a.children} recorded`;
+  return null;
+}
+
+/** What a client is missing that decides their tier and rate: UC, their age (single people), who is moving in and their
+ *  council. Read answers (from their notes) count as known. */
+export function needsInfo(a: Applicant, today = todayIso()): string[] {
+  const r = rateOf(a, today);
+  const out: string[] = [];
+  if (a.on_uc == null && !benefitsOf(a).some((b) => b.key === 'uc')) out.push('UC');
+  if (!r.household.value) out.push('household');
+  if ((r.household.value === 'single' || r.household.value === 'other' || !r.household.value) && !r.ageBand.value) out.push('age');
+  if (!councilOf(a)) out.push('council');
+  return out;
+}
+
+/** For a client in the last tier ("everyone else") whose tier was not set by hand: what is missing, so their badge says
+ *  "Needs info" (brief A7). Empty for everyone else. */
+export function tierNeeds(a: Applicant, today = todayIso()): string[] {
+  if (a.tier_locked) return [];
+  if (effectiveTier(a) !== tierCount()) return [];
+  return needsInfo(a, today);
 }
 
 /** The answers matching needs (Step 6) that are still missing: where they want to live, age band, who is moving in,
@@ -267,5 +312,5 @@ export function profileOf(a: Applicant, opts: { properties?: Array<PropertyLike 
 
   const sureAnswers = readNotes(a).suggestions.filter((s) => s.confidence >= 0.7 && !s.current);
 
-  return { household, age, ageBand, exemptions, rateType, size, benefits, wants, council: { name: councilName, route, incentive, incentiveMax: scheme?.max_incentive ?? null }, places, toAsk, summary, sureAnswers };
+  return { household, age, ageBand, exemptions, rateType, size, benefits, wants, council: { name: councilName, route, incentive, incentiveMax: scheme?.max_incentive ?? null }, places, toAsk, summary, sureAnswers, householdCheck: householdCheck(a) };
 }

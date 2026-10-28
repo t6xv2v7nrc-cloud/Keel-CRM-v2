@@ -5,6 +5,7 @@ import {
   NeedsDatabaseUpdate, PROPERTY_STATUS_LABEL, sentKey, useAddProperties, useApplicants, useDeleteProperties, useProperties,
   useDeals, useMatchOptions, useProspectContext, useProviders, useRequests, useSentOnWhatsApp, useSetPropertyProvider, useSetPropertyStatus,
 } from '../../lib/hooks';
+import { tierNeeds } from '../../lib/clientProfile';
 import { isLocalProperty, localProperties } from '../../lib/localProperties';
 import type { NewProperty, SavedProperty, SentOnWhatsApp } from '../../lib/hooks';
 import type { Applicant, Deal, Property } from '../../lib/types';
@@ -947,7 +948,7 @@ function MatchRow({ m, p, sent, deal, prospect, ctx }: { m: RuledMatch; p: Prope
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="sm:hidden"><FitBadge strength={m.strength} fit={prospect?.fit ?? null} /></span>
           <Link to={`/applicants/${a.id}`} className="text-[15px] font-medium text-[var(--ink)] hover:underline">{a.full_name}</Link>
-          <TierBadge tier={tier} />
+          <TierBadge tier={tier} needs={tierNeeds(a)} />
           {isFresh(a) && <NewBadge />}
           {isStaleReferral(a) && (
             <span title={`Referral received ${shortDate(receivedAt(a))}: older than ${activeSettings().staleReferralDays} days, so it sits lower unless it is a good match`}

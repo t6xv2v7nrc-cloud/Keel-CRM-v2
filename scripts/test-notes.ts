@@ -29,7 +29,7 @@ const show = (name: string, a: Applicant) => {
 const claire = show('Claire Jones', make({ full_name: 'Claire Jones', council: 'Any', referring_borough: 'Any', consent: true,
   notes: 'I’m currently working with a team that are trying to find properties that are on the LHA budget main 2-4 beds.' }));
 check('Claire: flagged as a professional', claire.flags.some((f) => f.id === 'professional'));
-check('Claire: LHA noticed', claire.suggestions.some((s) => s.field === 'LHA band'));
+check('Claire: the old LHA band is no longer suggested (it is worked out now)', !claire.suggestions.some((s) => s.field === 'LHA band'));
 check('Claire: "Any" is not a council', claire.flags.some((f) => f.id === 'council-text'));
 check('Claire: matching reads 2 to 4 bed', claire.understood.includes('2 to 4 bed'), claire.understood.join(', '));
 

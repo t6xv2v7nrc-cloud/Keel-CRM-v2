@@ -45,6 +45,7 @@ export interface ExtractedApplicant {
   phone?: string;
   email?: string;
   date_of_birth?: string;
+  age_band?: 'under_35' | '35_plus'; // when their age is given but not their date of birth
   adults?: number;
   children?: number;
   benefit_type?: string;
@@ -67,6 +68,15 @@ export interface ExtractedApplicant {
   housing_situation?: string;
   consent?: boolean;
   tier?: number;                 // computed at intake; recomputed on edit
+  // What the home must be (brief C2): empty when not said
+  bedrooms_needed?: number;      // 0 a studio
+  move_by?: string;              // YYYY-MM-DD they must move by
+  max_top_up?: number;           // pounds a month they can add on top of their LHA
+  anchor?: string;               // who or what they must live near
+  anchor_postcode?: string;
+  max_travel_mins?: number;
+  female_only?: boolean;
+  wants_outdoor?: boolean;       // a garden or balcony
 }
 
 export interface ExtractedProperty {
@@ -120,6 +130,7 @@ export interface Extraction {
 export const HOUSEHOLD_TYPES = ['single', 'couple', 'family', 'other'] as const;
 export const WORK_STATUSES = ['not_working', 'part_time', 'full_time'] as const;
 export const URGENCIES = ['homeless_tonight', 'at_risk_56', 'temp_accommodation', 'overcrowding', 'none'] as const;
+export const AGE_BANDS = ['under_35', '35_plus'] as const;
 /** Contacts were removed: the Bin never offers to create one. */
 export const READ_ACTIONS = SUGGESTED_ACTIONS.filter((a) => a !== 'create_contact');
 
@@ -142,6 +153,7 @@ export const EXTRACTION_SCHEMA = object({
     phone: text('The client\'s phone number'),
     email: text('The client\'s email'),
     date_of_birth: day('Date of birth'),
+    age_band: pick(AGE_BANDS, 'Under 35 or 35 and over, when an age is given but not a date of birth'),
     adults: whole('Adults moving in, the client included'),
     children: whole('Children moving in'),
     benefit_type: text('Benefits named, comma separated, e.g. "UC, PIP"'),
@@ -162,6 +174,14 @@ export const EXTRACTION_SCHEMA = object({
     officer_phone: text('That officer\'s phone'),
     housing_situation: text('Where they live now, e.g. "Temporary accommodation", "Sofa surfing"'),
     consent: yesNo('They agreed to their details being shared'),
+    bedrooms_needed: whole('Bedrooms they need, 0 for a studio; the smallest if they give a range'),
+    move_by: day('The date they must move by'),
+    max_top_up: amount('Pounds a month they can pay on top of their housing benefit'),
+    anchor: text('Who or what they must live near: family they care for, a hospital, a school'),
+    anchor_postcode: text('The postcode of that place, if given'),
+    max_travel_mins: whole('The longest they will travel to it, in minutes'),
+    female_only: yesNo('Needs a women-only place'),
+    wants_outdoor: yesNo('Wants a garden or balcony'),
   }),
   property: object({
     address_line: text('The property address, without the postcode'),
@@ -213,12 +233,14 @@ export function cleanExtraction(raw: unknown): Extraction | null {
   };
   const applicant = compact<ExtractedApplicant>({
     full_name: str(a.full_name), phone: str(a.phone), email: str(a.email), date_of_birth: isoDay(a.date_of_birth),
-    adults: int(a.adults), children: int(a.children), benefit_type: str(a.benefit_type), referring_borough: str(a.referring_borough),
+    age_band: oneOf(AGE_BANDS, a.age_band), adults: int(a.adults), children: int(a.children), benefit_type: str(a.benefit_type), referring_borough: str(a.referring_borough),
     budget_pcm: num(a.budget_pcm), requirements: str(a.requirements), notes: str(a.notes),
     household_type: oneOf(HOUSEHOLD_TYPES, a.household_type), on_uc: bool(a.on_uc), pip: bool(a.pip), lcwra: bool(a.lcwra),
     council_registered: bool(a.council_registered), work_status: oneOf(WORK_STATUSES, a.work_status), urgency: oneOf(URGENCIES, a.urgency),
     council: str(a.council), officer_name: str(a.officer_name), officer_email: str(a.officer_email), officer_phone: str(a.officer_phone),
     housing_situation: str(a.housing_situation), consent: bool(a.consent),
+    bedrooms_needed: int(a.bedrooms_needed), move_by: isoDay(a.move_by), max_top_up: num(a.max_top_up), anchor: str(a.anchor),
+    anchor_postcode: str(a.anchor_postcode), max_travel_mins: int(a.max_travel_mins), female_only: bool(a.female_only), wants_outdoor: bool(a.wants_outdoor),
   });
   if (applicant) out.applicant = applicant;
   const property = compact<ExtractedProperty>({

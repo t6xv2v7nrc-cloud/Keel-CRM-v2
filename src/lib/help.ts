@@ -231,15 +231,25 @@ export const HELP = {
       'Lists are saved to the account, so you both see them on every device. Mark a property as let when it goes, or purge old lists under Saved lists.',
     ],
   },
+  backfill: {
+    title: 'Fill in from their notes',
+    body: [
+      'A one-off tidy-up. For every client who is not lost, Keel reads their notes and must-haves for who is moving in (household, adults, children), their age band and the bedrooms they need.',
+      'Only empty answers are filled. Anything someone typed stays as it is; where their words disagree with what is recorded, the client\'s Profile says "Check household" instead.',
+      'Nothing is written until you press Fill in. The list shows each client, each answer, what it is now and what it would become, and the words it was read from. Copy the list to keep it. Each change goes on the client\'s timeline.',
+      'New clients are filled in the same way when they arrive from the Bin, and a client\'s empty answers are filled whenever their notes are saved.',
+    ],
+  },
   profile: {
     title: 'Profile',
     body: [
       'Everything Keel knows or can work out about a client, put together to say where they can be placed. Each answer says where it came from: recorded on the form, read from their message, or worked out.',
       'Needed for matching lists what is still missing: the postcode area they want, their age band, who is moving in, UC, the benefit cap, and PIP or LCWRA. Until those are in, matches are a best guess.',
       'Who is moving in comes from the form, or from what they wrote: someone writing as one person who only asks for a studio or a 1 bed reads as a single adult. Their age comes from their date of birth, or an age they gave.',
-      'The rate they are paid: families by the bedrooms their children need; couples, people 35 or over, and under-35s exempt from the shared rate, the 1 bed rate; other under-35s, the shared accommodation rate. PIP exempts them outright, whatever their age: never the shared rate, no benefit cap and no limit for UC alone. LCWRA lifts the benefit cap and that limit too. Other possible exemptions (leaving care, a hostel stay, MAPPA, domestic abuse) are pointed out to check, never assumed.',
+      'The rate they are paid: families by the bedrooms they need (as recorded, or as they asked, up to 4), else by their children; couples, people 35 or over, and under-35s exempt from the shared rate, the 1 bed rate; other under-35s, the shared accommodation rate. PIP exempts them outright, whatever their age: never the shared rate, no benefit cap and no limit for UC alone. LCWRA lifts the benefit cap and that limit too. Other possible exemptions (leaving care, a hostel stay, MAPPA, domestic abuse) are pointed out to check, never assumed.',
       'Where to place them: the LHA areas of the available properties that match them, counting those whose rent is within the LHA they would be paid there. Focus boroughs are starred. Ask next lists the answers that would change where they can go.',
       'Fill them in applies only the answers Keel is sure of from their notes, and never changes an answer already given. Every change goes on their timeline.',
+      'Check household shows when the household recorded and their own words disagree ("notes say a family with 3 children"). Matching keeps to what is recorded until someone changes it.',
     ],
   },
   councils: {

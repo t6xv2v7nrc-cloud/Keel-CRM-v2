@@ -5,6 +5,7 @@
 import type { Extraction } from '../../types/extraction';
 import type { MatchResult } from '../../lib/matching';
 import type { ConfirmChoice } from './confirm';
+import { readAgeText, readHouseholdText } from '../../lib/readNotes';
 
 /** Items filed before notes were captured still carry the client's message in
  *  their source text; lift it into the notes so it is not lost. */
@@ -12,6 +13,24 @@ export function withMessageNotes(ex: Extraction): Extraction {
   if (!ex.applicant || ex.applicant.notes) return ex;
   const m = ex.transcription.match(/Message:\s*([\s\S]+)$/i);
   return m && m[1].trim() ? { ...ex, applicant: { ...ex.applicant, notes: m[1].trim() } } : ex;
+}
+
+/** The card as it starts: the message in the notes, and an age band from any age they gave ("I'm 28", "over 35"). */
+export function prepared(ex: Extraction): Extraction {
+  const e = withMessageNotes(ex);
+  const a = e.applicant;
+  if (!a || a.date_of_birth || a.age_band) return e;
+  const age = readAgeText([a.notes, a.requirements].filter(Boolean).join('\n'));
+  return age?.band ? { ...e, applicant: { ...a, age_band: age.band } } : e;
+}
+
+/** Age is a required question for a new client whose rate depends on it (anyone but a family or a couple): answered with
+ *  a date of birth, an age band, or "not given yet". True while it is still unanswered. */
+export function ageUnanswered(ex: Extraction, choice: ConfirmChoice): boolean {
+  const a = ex.applicant;
+  if (choice.applicantTarget !== 'create' || !a || a.date_of_birth || a.age_band || choice.ageNotGiven) return false;
+  const household = a.household_type ?? readHouseholdText([a.notes, a.requirements].filter(Boolean).join('\n'))?.type ?? null;
+  return household !== 'family' && household !== 'couple';
 }
 
 /** Best existing client match if there is one, otherwise create; note only when there is no name. */

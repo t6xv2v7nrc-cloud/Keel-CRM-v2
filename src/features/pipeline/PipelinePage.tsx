@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { tierNeeds } from '../../lib/clientProfile';
 import { useApplicants, useCalls, useDeals, useLastContacts, useMoveStage, usePeople, useProviders, useRequests, useSettings } from '../../lib/hooks';
 import { CHANNEL_LABEL } from '../../lib/contacts';
 import type { LastContact } from '../../lib/contacts';
@@ -21,7 +22,7 @@ import { clockTime, money, shortDate, timeAgo } from '../../lib/format';
 import { HOUSEHOLD_LABEL, tierLabel, tierNumbers, URGENCY_LABEL, WORK_STATUS_LABEL } from '../../lib/tiering';
 import {
   applyFilters, areaOf, BENEFITS, benefitsOf, councilOf, DEFAULT_FILTERS, effectiveTier, filtersFromParams,
-  filtersToParams, hasOfficer, householdOf, isActive, isFresh, isIced, isUrgent, officerName, officerOrg, parseQuery, previewText, receivedAt, receivedWords, searchText,
+  filtersToParams, hasOfficer, householdOf, missingAge, isActive, isFresh, isIced, isUrgent, officerName, officerOrg, parseQuery, previewText, receivedAt, receivedWords, searchText,
   sortApplicants, starredFirst,
 } from '../../lib/search';
 import type { BenefitKey, PipelineFilters, SortKey } from '../../lib/search';
@@ -181,6 +182,7 @@ export function PipelinePage() {
   const activeCount = applicants.filter((a) => isActive(a) && !isIced(a)).length;
   const icedCount = applicants.filter((a) => isIced(a)).length;
   const withOfficer = applicants.filter((a) => isActive(a) && hasOfficer(a)).length;
+  const missingAgeCount = applicants.filter((a) => isActive(a) && missingAge(a)).length;
   const councilCount = useMemo(() => {
     const m = new Map<string, number>();
     for (const a of applicants) { const c = councilOf(a); if (c && isActive(a)) m.set(c, (m.get(c) ?? 0) + 1); }
@@ -216,13 +218,14 @@ export function PipelinePage() {
   if (filters.progress !== 'any') pills.push({ label: PROGRESS_LABEL[filters.progress], remove: (f) => ({ ...f, progress: 'any' }) });
   if (filters.officer !== 'any') pills.push({ label: filters.officer === 'yes' ? 'Has a housing officer' : 'No housing officer', remove: (f) => ({ ...f, officer: 'any' }) });
   if (filters.council !== 'any') pills.push({ label: filters.council === 'none' ? 'Council not given' : `${filters.council} council`, remove: (f) => ({ ...f, council: 'any' }) });
+  if (filters.age === 'missing') pills.push({ label: 'Missing age', remove: (f) => ({ ...f, age: 'any' }) });
   for (const b of filters.benefits) {
     pills.push({ label: BENEFITS.find((x) => x.key === b)?.label ?? b, remove: (f) => ({ ...f, benefits: f.benefits.filter((x) => x !== b) }) });
   }
 
   // The everyday filters stay in view; the rest open with More filters (already open if one is in use)
   const extraInUse = [filters.household !== 'any', filters.work !== 'any', filters.councilReg !== 'any', filters.urgency !== 'any', filters.benefits.length > 0,
-    filters.council !== 'any']
+    filters.council !== 'any', filters.age !== 'any']
     .filter(Boolean).length;
   const showMore = moreOpen || extraInUse > 0;
 
@@ -310,6 +313,8 @@ export function PipelinePage() {
               options={[['any', 'Any'], ['not_working', 'Not working'], ['part_time', 'Part time'], ['full_time', 'Full time']]} />
             <FilterSelect label="Council" value={filters.council} onChange={(v) => update({ council: v })}
               options={[['any', 'Any'], ...councils.map((c): [string, string] => [c, `${c} (${councilCount.get(c)})`]), ['none', 'Not given']]} />
+            <FilterSelect label="Age" value={filters.age} onChange={(v) => update({ age: v as PipelineFilters['age'] })}
+              options={[['any', 'Any'], ['missing', `Missing age (${missingAgeCount})`]]} />
             <FilterSelect label="Council-registered" value={filters.councilReg} onChange={(v) => update({ councilReg: v as PipelineFilters['councilReg'] })}
               options={[['any', 'Any'], ['yes', 'Yes'], ['no', 'No']]} />
             <FilterSelect label="Urgency" value={filters.urgency} onChange={(v) => update({ urgency: v as PipelineFilters['urgency'] })}
@@ -425,7 +430,7 @@ export function PipelinePage() {
                       <Link to={`/applicants/${a.id}`} className="text-left text-[15px] font-semibold text-[var(--ink)] hover:underline">
                         <Highlight text={a.full_name} terms={terms} />
                       </Link>
-                      <TierBadge tier={effectiveTier(a)} />
+                      <TierBadge tier={effectiveTier(a)} needs={tierNeeds(a)} />
                       {isFresh(a) && <NewBadge />}
                       {isIced(a) && <IceBadge until={a.iced_until ? shortDate(a.iced_until) : null} />}
                       {isUrgent(a) && <UrgentChip reason={URGENCY_LABEL[a.urgency ?? '']} />}

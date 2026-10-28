@@ -11,6 +11,7 @@ import { DEFAULT_FEE_CHASE, DEFAULT_INVOICE_MESSAGE, DEFAULT_MOVE_IN_CHECKLIST, 
 import type { AppSettings, InvoiceSettings, Target, Targets } from '../../lib/settings';
 import { URGENCY_LABEL } from '../../lib/tiering';
 import { TierLogicEditor } from './TierLogicEditor';
+import { BackfillCard } from './Backfill';
 import { LhaSettings } from './LhaSettings';
 import { BusinessDetailsCard } from './BusinessDetails';
 import { FocusBoroughs } from './FocusBoroughs';
@@ -233,6 +234,8 @@ function TeamSettingsTab({ draft, set, saved, canEdit, ownerName, rolesReady }: 
           </div>
         </div>
       </Card>
+
+      <BackfillCard />
 
       <Card fold="settings.urgency" startsFolded>
         <CardHeader icon="alert" title="Referral triage: urgency" sub={`${urgentDraft} active flagged`} help="urgent" />

@@ -17,6 +17,8 @@ What each type means:
 
 The applicant is the person who needs housing, never the officer, agent or landlord. An officer's or support worker's own details go in officer_name, officer_email and officer_phone.
 
+Their age decides the rent they are paid (under 35s get a lower rate), so always look for it: date_of_birth when it is written, else age_band from any age given ("I'm 28", "aged 40", "over 35").
+
 Dates are YYYY-MM-DD; UK dates are written day first. Amounts are numbers in pounds. A weekly rent becomes rent_pcm as the weekly figure times 52, divided by 12.
 
 transcription holds all the text as written. summary is one short sentence in British English, with no dashes used as punctuation.
