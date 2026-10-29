@@ -6,7 +6,7 @@ import { isLocalProperty } from '../../lib/localProperties';
 import { ACCOMMODATION_LABEL, accommodationOf, BILLS, BILLS_LABEL, SUITS, SUITS_LABEL } from '../../lib/propertyChecks';
 import { BOROUGHS } from '../../lib/london';
 import { normalisePostcode } from '../../lib/format';
-import { bedsOfType, hasCheckFields, hasPhotoLinks, rentFrom, rentWords, TYPE_OPTIONS } from '../../lib/propertyEdit';
+import { bedsOfType, BILLS_STATUS_LABEL, hasCheckFields, hasPhotoLinks, rentFrom, rentWords, TAKES_LABEL, TYPE_OPTIONS } from '../../lib/propertyEdit';
 import type { EditableProperty } from '../../lib/propertyEdit';
 import type { AccommodationType, Property } from '../../lib/types';
 
@@ -51,6 +51,20 @@ export function EditProperty({ p, onDone }: { p: Property; onDone: () => void })
   const canLink = hasPhotoLinks(p, isLocalProperty(p.id));
   const [links, setLinks] = useState<string[]>(() => [0, 1, 2].map((i) => p.photo_urls?.[i] ?? ''));
   const linksOk = links.every((l) => !l.trim() || /^https?:\/\/\S+$/.test(l.trim()));
+  // what matching reads (0031 to 0036): each only once its column is there
+  const has = { media: 'has_media' in p, women: 'female_only' in p, rules: 'landlord_criteria' in p, bills: 'bills_status' in p };
+  const [m, setM] = useState(() => ({
+    has_media: yesNo(p.has_media), media_url: p.media_url ?? '', female_only: yesNo(p.female_only), bills_status: p.bills_status ?? '',
+    min_age: p.landlord_criteria?.min_age == null ? '' : String(p.landlord_criteria.min_age),
+    max_age: p.landlord_criteria?.max_age == null ? '' : String(p.landlord_criteria.max_age),
+    takes: p.landlord_criteria?.benefits ?? [],
+  }));
+  const setMatch = <K extends keyof typeof m>(k: K, v: (typeof m)[K]) => setM((x) => ({ ...x, [k]: v }));
+  const mediaOk = !m.media_url.trim() || /^https?:\/\/\S+$/.test(m.media_url.trim());
+  const criteria = (): Property['landlord_criteria'] => {
+    const min = whole(m.min_age), max = whole(m.max_age);
+    return min === null && max === null && !m.takes.length ? null : { min_age: min, max_age: max, benefits: m.takes };
+  };
 
   const save = () => {
     const typeChanged = (f.property_type || null) !== (p.property_type ?? null);
@@ -76,6 +90,10 @@ export function EditProperty({ p, onDone }: { p: Property; onDone: () => void })
         prs_landlord_id: c.prs_landlord_id.trim() || null, prs_property_id: c.prs_property_id.trim() || null,
       } : {}),
       ...(canLink ? { photo_urls: links.map((l) => l.trim()).filter(Boolean) } : {}),
+      ...(has.media ? { has_media: fromYesNo(m.has_media), media_url: m.media_url.trim() || null } : {}),
+      ...(has.women ? { female_only: fromYesNo(m.female_only) } : {}),
+      ...(has.rules ? { landlord_criteria: criteria() } : {}),
+      ...(has.bills ? { bills_status: (m.bills_status || null) as Property['bills_status'] } : {}),
     };
     update.mutate({ p, next }, {
       onSuccess: (n) => { toast(n ? `Saved ${p.address_line.split(',')[0]}` : 'Nothing changed', 'success'); onDone(); },
@@ -218,8 +236,63 @@ export function EditProperty({ p, onDone }: { p: Property; onDone: () => void })
         )}
       </div>
 
+      <div className="flex flex-col gap-3 border-t border-[var(--line)] pt-3">
+        <div className="flex items-center gap-2 text-[15px] font-semibold text-[var(--ink)]">Who it suits and what comes with it <Help topic="propertyMatchDetails" /></div>
+        {!has.media && !has.women && !has.rules && !has.bills ? (
+          <UpdateNote title="Photos or video, women only, the landlord's rules and bills need one-off database updates." file="0032_media.sql">
+            Run 0031 to 0036 in order.
+          </UpdateNote>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {has.bills && (
+              <Labelled label="Bills" hint={f.bills.trim() ? `Note: ${f.bills.trim()}` : 'The detail goes in the Bills note above'}>
+                <select value={m.bills_status} onChange={(e) => setMatch('bills_status', e.target.value)} className={box} aria-label="Bills included or not">
+                  <option value="">Not said</option>
+                  {Object.entries(BILLS_STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </Labelled>
+            )}
+            {has.women && (
+              <Labelled label="Women only">
+                <select value={m.female_only} onChange={(e) => setMatch('female_only', e.target.value)} className={box} aria-label="Women only">
+                  <option value="">No</option><option value="yes">Yes, women only</option>
+                </select>
+              </Labelled>
+            )}
+            {has.media && (
+              <>
+                <Labelled label="Photos or video in hand" hint="Places with photos go first on a client's list">
+                  <select value={m.has_media} onChange={(e) => setMatch('has_media', e.target.value)} className={box} aria-label="Photos or video in hand">
+                    <option value="">Not said</option><option value="yes">Yes</option><option value="no">No, still to get</option>
+                  </select>
+                </Labelled>
+                <Labelled label="Photos or video link" hint={mediaOk ? 'Goes in the WhatsApp message to a client' : 'The link must start https://'}>
+                  <input type="url" value={m.media_url} onChange={(e) => setMatch('media_url', e.target.value)} placeholder="https://" className={box} aria-label="Photos or video link" />
+                </Labelled>
+              </>
+            )}
+            {has.rules && (
+              <>
+                <Labelled label="Landlord takes ages from">
+                  <input type="number" min={16} max={99} inputMode="numeric" value={m.min_age} onChange={(e) => setMatch('min_age', e.target.value)} placeholder="Any" className={box} aria-label="Youngest age the landlord takes" />
+                </Labelled>
+                <Labelled label="Up to">
+                  <input type="number" min={16} max={99} inputMode="numeric" value={m.max_age} onChange={(e) => setMatch('max_age', e.target.value)} placeholder="Any" className={box} aria-label="Oldest age the landlord takes" />
+                </Labelled>
+                <Group label="Landlord takes (none ticked: anyone)" wide>
+                  {Object.entries(TAKES_LABEL).map(([k, v]) => {
+                    const on = m.takes.includes(k);
+                    return <button key={k} type="button" aria-pressed={on} className={chip(on)} onClick={() => setMatch('takes', on ? m.takes.filter((x) => x !== k) : [...m.takes, k])}>{v}</button>;
+                  })}
+                </Group>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
       <div className="flex flex-wrap items-center gap-2">
-        <Button busy={update.isPending} variant="primary" className="min-h-0 px-4 py-2 text-[14px]" disabled={update.isPending || !f.address_line.trim() || !linksOk} onClick={save}>
+        <Button busy={update.isPending} variant="primary" className="min-h-0 px-4 py-2 text-[14px]" disabled={update.isPending || !f.address_line.trim() || !linksOk || !mediaOk} onClick={save}>
           {update.isPending ? 'Saving…' : 'Save changes'}
         </Button>
         <Button busy={update.isPending} className="min-h-0 px-4 py-2 text-[14px]" disabled={update.isPending} onClick={onDone}>Cancel</Button>

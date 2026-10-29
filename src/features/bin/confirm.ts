@@ -125,6 +125,8 @@ export async function confirmInboxItem({
         max_travel_mins: a.max_travel_mins ?? wishes.max_travel_mins ?? null,
         female_only: a.female_only ?? wishes.female_only ?? null,
         wants_outdoor: a.wants_outdoor ?? wishes.wants_outdoor ?? null,
+        // their message arrived now: awaiting a reply from Keel (0037)
+        last_inbound_at: createdAt,
         adults: answers.adults,
         children: answers.children,
         benefit_type: a.benefit_type ?? null,
@@ -176,6 +178,10 @@ export async function confirmInboxItem({
       .single();
 
     const patch: Record<string, unknown> = {};
+    // a new message from them (or an officer about them): awaiting a reply from Keel (0037), dated from when it arrived
+    const arrived = await firstContactAt(inboxItemId);
+    const lastIn = (current as { last_inbound_at?: string | null } | null)?.last_inbound_at;
+    if (current && 'last_inbound_at' in current && (!lastIn || lastIn < arrived)) patch.last_inbound_at = arrived;
     if (a.phone) patch.phone = a.phone;
     if (a.benefit_type) patch.benefit_type = a.benefit_type;
     if (a.referring_borough) patch.referring_borough = a.referring_borough;

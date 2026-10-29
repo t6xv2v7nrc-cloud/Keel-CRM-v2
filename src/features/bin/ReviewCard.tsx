@@ -10,7 +10,7 @@ import { ageUnanswered, defaultChoice, prepared } from './defaults';
 import type { CardState } from './defaults';
 import { HOUSEHOLD_LABEL, WORK_STATUS_LABEL, URGENCY_LABEL } from '../../lib/tiering';
 import { isoDay, todayIso } from '../../lib/calls';
-import { timeAgo } from '../../lib/format';
+import { shortDate, timeAgo } from '../../lib/format';
 
 function Chip({ children }: { children: React.ReactNode }) {
   return (
@@ -189,7 +189,7 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
           </label>
 
           {/* Referral triage summary (read-only; every answer can be edited on the client page) */}
-          {(a.tier != null || a.household_type || a.on_uc != null || a.officer_name) && (
+          {(a.tier != null || a.household_type || a.on_uc != null || a.officer_name || a.bedrooms_needed != null || a.move_by || a.anchor || a.female_only) && (
             <div className="rounded-md border border-[var(--line)] bg-[var(--surface-2)] p-3">
               <div className="mb-2 flex items-center gap-2">
                 {a.tier != null && <TierBadge tier={a.tier} />}
@@ -203,6 +203,12 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
                 {a.council_registered != null && <Chip>Council-reg: {a.council_registered ? 'Yes' : 'No'}</Chip>}
                 {a.work_status && <Chip>{WORK_STATUS_LABEL[a.work_status] ?? a.work_status}</Chip>}
                 {a.urgency && a.urgency !== 'none' && <Chip>{URGENCY_LABEL[a.urgency] ?? a.urgency}</Chip>}
+                {a.bedrooms_needed != null && <Chip>{a.bedrooms_needed === 0 ? 'Studio' : `${a.bedrooms_needed} bed`}</Chip>}
+                {a.move_by && <Chip>Move by {shortDate(a.move_by)}</Chip>}
+                {a.max_top_up != null && <Chip>Top-up £{a.max_top_up}</Chip>}
+                {a.anchor && <Chip>Near {a.anchor}{a.max_travel_mins ? `, ${a.max_travel_mins} min` : ''}</Chip>}
+                {a.female_only && <Chip>Women only</Chip>}
+                {a.wants_outdoor && <Chip>Garden or balcony</Chip>}
               </div>
               {a.officer_name && (
                 <div className="mt-2 text-[13px] text-[var(--ink-muted)]">

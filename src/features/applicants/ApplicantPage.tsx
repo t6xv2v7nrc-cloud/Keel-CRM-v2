@@ -4,13 +4,14 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Avatar, Button, Card, CardHeader, Empty, Help, IceBadge, Icon, NewBadge, PageSkeleton, StageBadge, TierBadge, UrgentChip, useToast } from '../../components/ui';
 import {
   sentKey, useActivities, useApplicant, useApplicants, useAssign, useCalls, useDeals, useDeleteApplicant, usePeople, useProperties, useProviders, useRequests,
-  useMatchOptions, useProspectContext, useSaveSettings, useSentOnWhatsApp, useSettings,
+  useLocated, useMatchOptions, useProspectContext, useSaveSettings, useSentOnWhatsApp, useSettings,
 } from '../../lib/hooks';
 import { tierNeeds } from '../../lib/clientProfile';
 import { bestFew, brief } from '../../lib/propertyMatch';
 import { hiddenForApplicant, matchesForApplicant } from '../../lib/matchRules';
 import { FitBadge, HiddenNote, IncomeTag, ProspectTag, ProspectWhy, RuleWarnings } from '../properties/MatchBits';
-import { prospectFor, ranked } from '../../lib/prospects';
+import { prospectFor } from '../../lib/prospects';
+import { billsWords } from '../../lib/whatsapp';
 import type { Prospect, ProspectContext } from '../../lib/prospects';
 import type { RuledPropertyMatch } from '../../lib/matchRules';
 import { OfficerMatchesLink } from '../properties/ShareLinks';
@@ -41,7 +42,7 @@ import { openGroups } from '../../lib/duplicates';
 import { openCard, useFold } from '../../lib/collapse';
 import { CLIENT_CARDS, cardOrder, isStandardOrder, moveCard } from '../../lib/clientLayout';
 import type { ClientCard } from '../../lib/clientLayout';
-import { clientAreas, placeKey } from '../../lib/geo';
+import { anchorKey, clientAreas, placeKey } from '../../lib/geo';
 import { Tip } from '../guide/Guide';
 
 export function ApplicantPage() {
@@ -278,13 +279,18 @@ function SuitablePropertiesCard({ applicant }: { applicant: Applicant }) {
   const [outside, setOutside] = useState(() => activeSettings().showOutsideLondon);
   const opts = useMemo(() => ({ ...base, showOverLha: overLha, showOutsideLondon: outside }), [base, overLha, outside]);
   const pctx = useProspectContext();
-  // each property's fit, chance of placing and expected money for them; best bets first
-  const scored = useMemo(() => ranked(matchesForApplicant(applicant, available, opts), (x) => x.match, (x) => prospectFor(x.match, x.property, pctx)),
-    [applicant, available, opts, pctx]);
+  // who or what they must live near: its district and the properties' places, for how far each is (B6)
+  const anchored = !!(applicant.anchor || applicant.anchor_postcode);
+  const located = useLocated(anchored ? [anchorKey(applicant), ...available.map((p) => placeKey(p))] : []);
+  // in the order of the matching rules (B10: self-contained first, nearest, with photos, most room under their LHA),
+  // each with its fit, chance of placing and expected money
+  const scored = useMemo(() => matchesForApplicant(applicant, available, opts).map((item) => ({ item, prospect: prospectFor(item.match, item.property, pctx) })),
+    [applicant, available, opts, pctx, located]);
   const all = scored.map((x) => x.item);
   const prospectOf = new Map(scored.map((x) => [x.item.property.id, x.prospect]));
   const hidden = useMemo(() => hiddenForApplicant(applicant, available, opts), [applicant, available, opts]);
-  const best = bestFew(all, (x) => x.match.strength);
+  // the suggestion is the best 1 to 3, never the whole list (B11)
+  const best = bestFew(all, (x) => x.match.strength, 3);
   const atPin = pinned ? available.filter((p) => placeKey(p) === pinned) : [];
   const matches = pinned ? all.filter((x) => placeKey(x.property) === pinned) : showAll ? all : best;
   const first = applicant.full_name.split(' ')[0];
@@ -374,7 +380,7 @@ function SuitableRow({ x, applicant, prospect, ctx, sent }: {
           <SentTag sent={sent} />
         </div>
         <div className="text-[13px] text-[var(--ink-muted)] sm:truncate">
-          {[p.property_type, rentShown(p)].filter(Boolean).join(' · ')}
+          {[p.property_type, rentShown(p), billsWords(p)].filter(Boolean).join(' · ')}
           {m.line && <> · <span className="text-[var(--ink)]">{m.line}</span></>}
           {!m.warnings.length && m.cautions[0] && <span className="text-[var(--note-fg)]"> · {brief(m.cautions[0])}</span>}
         </div>

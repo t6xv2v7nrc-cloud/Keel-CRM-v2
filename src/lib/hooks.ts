@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { geoVersion, locate } from './geo';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from './supabase';
 import { isLocalProperty, localProperties, useLocalProperties } from './localProperties';
@@ -273,6 +274,21 @@ export function useActivities(entityType: string, entityId: string | undefined) 
   });
 }
 
+/** Keel was in touch with a client just now (0037: last_contact_at): a contact note, a call, a WhatsApp send. Best
+ *  effort, and quiet before 0037 is run; the timeline row is the record either way. */
+async function touchContact(applicantIds: string[], at = new Date().toISOString()) {
+  for (const part of chunks([...new Set(applicantIds)])) {
+    const { error } = await supabase.from('applicants').update({ last_contact_at: at }).in('id', part);
+    if (error && !isMissingColumn(error)) throw error;
+  }
+}
+
+/** A client got in touch just now (0037: last_inbound_at): a call Keel missed. Best effort, quiet before 0037. */
+async function touchInbound(applicantId: string, at = new Date().toISOString()) {
+  const { error } = await supabase.from('applicants').update({ last_inbound_at: at }).eq('id', applicantId);
+  if (error && !isMissingColumn(error)) throw error;
+}
+
 /** Save a note on a client: how you spoke to them (or just a note) and what about. It goes on their timeline. */
 export function useAddNote() {
   const qc = useQueryClient();
@@ -281,8 +297,13 @@ export function useAddNote() {
       if (!text.trim()) throw new Error('Write the note first');
       const { error } = await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: applicantId, ...noteActivity(channel, text) });
       if (error) throw error;
+      // speaking to them answers them (a plain note does not)
+      if (channel !== 'note') await touchContact([applicantId]);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['activities'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['activities'] });
+      qc.invalidateQueries({ queryKey: ['applicants'] });
+    },
   });
 }
 
@@ -346,8 +367,12 @@ export function useLogWhatsApp() {
         entity_type: 'applicant', entity_id: applicantId, kind: 'whatsapp', body: `Sent ${p.address_line} on WhatsApp`,
       })));
       if (error) throw error;
+      await touchContact([applicantId]);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['activities'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['activities'] });
+      qc.invalidateQueries({ queryKey: ['applicants'] });
+    },
   });
 }
 
@@ -505,6 +530,39 @@ export function useSetPropertyReady() {
         entity_type: 'property', entity_id: p.id, kind: 'updated',
         body: ready ? `${p.address_line}: marked ready to send` : `${p.address_line}: marked not ready${patch.not_ready_note ? `: ${patch.not_ready_note}` : ''}`,
       });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['properties'] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+/** Places these postcodes and districts (geo.ts: only property postcodes and districts are ever sent), for distances
+ *  to a client's anchor (B6). Gives a number that goes up when new places are known, for useMemo to follow. */
+export function useLocated(keys: Array<string | null>): number {
+  const [version, setVersion] = useState(geoVersion());
+  const wanted = useMemo(() => [...new Set(keys.filter((k): k is string => !!k))].sort().join('|'), [keys]);
+  useEffect(() => {
+    const list = wanted ? wanted.split('|') : [];
+    if (!list.length) return;
+    let live = true;
+    locate(list).then(() => { if (live) setVersion(geoVersion()); }).catch(() => { /* offline: distances wait */ });
+    return () => { live = false; };
+  }, [wanted]);
+  return version;
+}
+
+/** The provider has just said a property is still free (0031): matches stop asking to check it for 7 days. */
+export function useConfirmAvailable() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (p: Property) => {
+      const patch = { availability_confirmed_at: new Date().toISOString() };
+      if (isLocalProperty(p.id)) { if (!localProperties.update([p.id], patch)) throw new Error('This browser would not save the change'); return; }
+      const { error } = await supabase.from('properties').update(patch).eq('id', p.id);
+      if (error) throw isMissingColumn(error) ? new Error('Confirming a property is still available needs a one-off database update: run supabase/migrations/0031_availability_confirmed.sql in the Supabase SQL Editor.') : error;
+      await supabase.from('activities').insert({ entity_type: 'property', entity_id: p.id, kind: 'updated', body: `${p.address_line}: confirmed still available` });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['properties'] });
@@ -1159,6 +1217,9 @@ export function useLogCall() {
       await supabase.from('activities').insert({
         entity_type: 'applicant', entity_id: applicant.id, kind: 'call', body: callBody(direction, outcome, notes, nextCallAt),
       });
+      // an answered call is a reply; a call of theirs that was missed is them getting in touch
+      if (outcome === 'answered' || direction === 'outgoing') await touchContact([applicant.id]);
+      else await touchInbound(applicant.id);
     },
     onSuccess: (_d, { applicant }) => {
       qc.invalidateQueries({ queryKey: ['calls'] });

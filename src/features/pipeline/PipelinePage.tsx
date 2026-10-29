@@ -8,6 +8,7 @@ import { Avatar, Button, Card, Help, IceBadge, Icon, NewBadge, PageHeader, PageS
 import { HousingOfficersBox } from './Officers';
 import { DuplicatesBox } from './Duplicates';
 import { StarButton } from './Star';
+import { AwaitingReply } from './AwaitingReply';
 import { openGroups } from '../../lib/duplicates';
 import { callState, dayLabel, dayWord, lastCallMap, todayIso } from '../../lib/calls';
 import { readNotes } from '../../lib/readNotes';
@@ -256,6 +257,8 @@ export function PipelinePage() {
         </Button>
       </PageHeader>
       <Tip id="pipeline" />
+
+      <AwaitingReply applicants={applicants} contacts={contacts} />
 
       {dupesOpen && <DuplicatesBox groups={dupes} onClose={() => setDupesOpen(false)} onChange={() => setDupesSeen((n) => n + 1)} />}
 

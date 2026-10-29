@@ -277,13 +277,51 @@ const pol27 = (await fresh27.query(`select count(*)::int as n from pg_policies w
 check('push: one row per device, one set of keys, RLS on all three, no policy opens the keys or the log', dup27 === 1 && two27 === 1 && rls27 === 3 && pol27 === 0,
   JSON.stringify({ dup27, two27, rls27, pol27 }));
 
+// 0028 to 0038: the matching brief (bedrooms, tiers, top-up, availability, media, anchor, women only, landlord rules,
+// bills, last contact, intake wishes). Each backs up what it changes, refuses nonsense and fills in nothing it should not.
+const fresh28 = await freshDb({ upTo: '0027' });
+await fresh28.exec(`insert into applicants (id, full_name, stage, household_type, on_uc, council_registered, tier) values
+  ('a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a0a0a0', 'Old Tier', 'lead', 'single', true, true, 3),
+  ('b0b0b0b0-b0b0-b0b0-b0b0-b0b0b0b0b0b0', 'Hand Set', 'lead', null, null, null, 1);
+  update applicants set tier_locked = true where full_name = 'Hand Set';
+  insert into properties (id, address_line) values ('c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c0c0c0', '1 New Road');
+  insert into inbox_items (id, status, created_at) values ('d0d0d0d0-d0d0-d0d0-d0d0-d0d0d0d0d0d0', 'confirmed', '2026-10-20T09:00:00Z');
+  insert into activities (entity_type, entity_id, kind, body, inbox_item_id) values ('applicant', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a0a0a0', 'created', 'from the Bin', 'd0d0d0d0-d0d0-d0d0-d0d0-d0d0d0d0d0d0');
+  insert into activities (entity_type, entity_id, kind, body, created_at) values ('applicant', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a0a0a0', 'whatsapp', 'Sent 1 New Road on WhatsApp', '2026-10-21T10:00:00Z');`);
+const later = readdirSync(dir).filter((f) => f.endsWith('.sql') && f.slice(0, 4) >= '0028' && f.slice(0, 4) <= '0038').sort();
+for (const f of later) for (let i = 0; i < 2; i++) await fresh28.exec(readFileSync(dir + f, 'utf8'));
+const cols28 = (await fresh28.query(`select table_name || '.' || column_name as c from information_schema.columns where table_schema = 'public'
+  and (table_name, column_name) in (('applicants', 'bedrooms_needed'), ('applicants', 'max_top_up'), ('properties', 'availability_confirmed_at'),
+  ('properties', 'has_media'), ('properties', 'media_url'), ('applicants', 'anchor'), ('applicants', 'anchor_postcode'), ('applicants', 'max_travel_mins'),
+  ('applicants', 'female_only'), ('properties', 'female_only'), ('properties', 'landlord_criteria'), ('properties', 'bills_status'),
+  ('applicants', 'last_contact_at'), ('applicants', 'last_inbound_at'), ('applicants', 'move_by'), ('applicants', 'wants_outdoor'))`)).rows.length;
+check('0028 to 0038 add every new column', cols28 === 16, String(cols28));
+let bad28 = 0;
+for (const sql of [`update applicants set bedrooms_needed = 9`, `update applicants set max_top_up = -5`, `update applicants set max_travel_mins = 1`,
+  `update properties set landlord_criteria = '[1]'`, `update properties set bills_status = 'sometimes'`]) {
+  try { await fresh28.exec(sql); } catch { bad28++; }
+}
+check('nonsense is refused: 9 bedrooms, a negative top-up, a 1 minute journey, criteria that are not a record, unknown bills', bad28 === 5, String(bad28));
+const backups28 = (await fresh28.query(`select count(*)::int as n from information_schema.tables where table_schema = 'keel_backup' and table_name similar to '%_before_00(28|29|30|31|32|33|34|35|36|37|38)'`)).rows[0].n;
+check('each of them backs up what it changes first (0034 both tables)', backups28 === 12, String(backups28));
+const t28 = Object.fromEntries((await fresh28.query(`select full_name, tier from applicants`)).rows.map((r) => [r.full_name, r.tier]));
+check('0029: stale tiers are worked out again once; a tier set by hand stays', t28['Old Tier'] === 2 && t28['Hand Set'] === 1, JSON.stringify(t28));
+const moved28 = (await fresh28.query(`select count(*)::int as n from activities where body like 'Tier worked out again by the database (0029)%'`)).rows[0].n;
+check('0029: each tier it moves goes on the timeline, once (it runs twice)', moved28 === 1, String(moved28));
+await fresh28.exec(`insert into applicants (full_name, stage, household_type, on_uc, council_registered) values ('New Client', 'lead', 'single', true, true)`);
+check('0029: a new client gets their tier from the database', (await fresh28.query(`select tier from applicants where full_name = 'New Client'`)).rows[0].tier === 2);
+const c37 = (await fresh28.query(`select last_contact_at::text as c, last_inbound_at::text as i from applicants where full_name = 'Old Tier'`)).rows[0];
+check('0037: last contact and last message filled from the timeline and the Bin', c37.c.startsWith('2026-10-21') && c37.i.startsWith('2026-10-20'), JSON.stringify(c37));
+const fn28 = (await fresh28.query(`select has_function_privilege('anon', 'keel_tier_for(applicants, jsonb)', 'execute') as anon`)).rows[0];
+check('0029: signed-out visitors cannot run the tier functions', fn28.anon === false);
+
 // The read-only check of a live database against these files
 const liveCheck = readFileSync(new URL('../supabase/checks/live-vs-repo.sql', import.meta.url).pathname, 'utf8');
 const status = async (d) => Object.fromEntries((await d.query(liveCheck)).rows.map((r) => [r.item, [r.status, r.detail]]));
 const full = await status(db);
 const numbered = Object.keys(full).filter((k) => /^\d{4}$/.test(k));
 check('live check: every migration reads as done on a database that has had them all (data-only ones cannot be told)',
-  numbered.length === 27 && numbered.every((k) => full[k][0] === 'done' || (['0003', '0016'].includes(k) && full[k][0].startsWith('cannot tell'))), JSON.stringify(full));
+  numbered.length === 38 && numbered.every((k) => full[k][0] === 'done' || (['0003', '0016'].includes(k) && full[k][0].startsWith('cannot tell'))), JSON.stringify(full));
 const behind = await freshDb();
 await behind.exec(`alter table properties drop column lha_area; drop table postcode_brma;
   create table eod_reports (id uuid primary key, report_date date, data jsonb);`);

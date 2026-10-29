@@ -272,7 +272,7 @@ function propertyFacts(p: PropertyLike) {
 }
 
 function readFacts(p: PropertyLike) {
-  const type = p.property_type ?? '';
+  const type = (p.property_type ?? '').replace(/_/g, ' '); // "hmo_room" is an HMO room
   // an HMO studio is a studio, not a room
   const kind: Kind = /\b(studio|bedsit)\b/i.test(type) ? 'studio'
     : /\b(room|hmo)\b/i.test(type) && !/bed/i.test(type) ? 'room'
@@ -295,10 +295,31 @@ function readFacts(p: PropertyLike) {
   return {
     kind, beds, district, borough, areas, shared,
     floor: p.floor ?? null, lift: p.lift ?? null,
-    stepFree: p.floor === 0 || p.lift === true || /\b(ground\s+floor|step[- ]?free|level\s+access|lift|bungalow)\b/i.test(text),
+    stepFree: p.floor === 0 || p.lift === true || (p.lift !== false && /\b(ground\s+floor|step[- ]?free|level\s+access|lift|bungalow)\b/i.test(text) && !/\b(?:no|without\s+a?)\s*lift\b/i.test(text)),
     furnished: p.furnished ? !/^unfurnished$/i.test(p.furnished) : null,
     lha: /lha/i.test(p.rent_text ?? ''),
   };
+}
+
+/** What kind of place a property is, for the rules: a room, a studio or a flat, its bedrooms, and whether anything is
+ *  shared (a room, an HMO room, a shared kitchen or bathroom) or it is an en-suite room. */
+export function placeFacts(p: PropertyLike) {
+  const f = propertyFacts(p);
+  const ensuite = f.shared && /\ben[- ]?suite\b/i.test(`${p.property_type ?? ''} ${p.notes ?? ''}`);
+  return { kind: f.kind, beds: f.beds, shared: f.shared, ensuite };
+}
+
+/** Whether someone who cannot do stairs can get in: the ground floor or a lift (recorded, or said in its notes), stairs
+ *  (an upper floor or basement with no lift), or not known. "No lift" in the notes is not a lift. */
+export function accessOf(p: PropertyLike): 'step_free' | 'stairs' | 'unknown' {
+  const text = `${p.property_type ?? ''} ${p.notes ?? ''}`;
+  const noLift = /\b(?:no|without\s+a?)\s*lift\b/i.test(text);
+  if (p.floor === 0 || p.lift === true) return 'step_free';
+  if (p.floor != null && p.lift === false) return 'stairs';
+  if (/\b(?:ground\s+floor|step[- ]?free|level\s+access|bungalow|wheelchair\s+accessible)\b/i.test(text) && !/\b(?:no|not)\s+(?:on\s+the\s+)?ground\s+floor\b/i.test(text)) return 'step_free';
+  if (!noLift && /\blift\b/i.test(text)) return 'step_free';
+  if (p.floor != null && p.floor !== 0 && noLift) return 'stairs';
+  return 'unknown';
 }
 
 const householdWords = (x: Needs) =>
@@ -467,13 +488,14 @@ const shown = (m: Match) => m.strength !== 'possible' || activeSettings().showPo
 /**
  * The few to act on first, sized to how many qualify: every strong match (up
  * to 5), topped up with good ones to make 3, or the top 2 possibles when
- * nothing better fits. The list must already be sorted best first.
+ * nothing better fits. The list must already be sorted best first. `most` caps
+ * it (a client's page suggests the best 1 to 3).
  */
-export function bestFew<T>(sorted: T[], strength: (t: T) => Strength): T[] {
-  const strong = sorted.filter((t) => strength(t) === 'strong').slice(0, 5);
-  const good = sorted.filter((t) => strength(t) === 'good').slice(0, Math.max(0, 3 - strong.length));
+export function bestFew<T>(sorted: T[], strength: (t: T) => Strength, most = 5): T[] {
+  const strong = sorted.filter((t) => strength(t) === 'strong').slice(0, Math.min(5, most));
+  const good = sorted.filter((t) => strength(t) === 'good').slice(0, Math.max(0, Math.min(3, most) - strong.length));
   const best = [...strong, ...good];
-  return best.length ? best : sorted.slice(0, 2);
+  return best.length ? best : sorted.slice(0, Math.min(2, most));
 }
 
 /** A reason or caution without its detail in brackets, for one-line lists: "£4 under their LHA". */

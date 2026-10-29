@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader, Help, Icon, UpdateNote, useToast } from '../../components/ui';
 import type { IconName } from '../../components/ui';
+import type { HelpTopic } from '../../lib/help';
 import { useMoveStage, usePeople, useProviders, useUpdateTriage } from '../../lib/hooks';
 import { activeSettings } from '../../lib/settings';
 import { computeTier, HOUSEHOLD_LABEL, tierLabel, tierNumbers, tierReason, tierStyle, URGENCY_LABEL, WORK_STATUS_LABEL } from '../../lib/tiering';
@@ -245,7 +246,7 @@ export function ClientDetails({ applicant }: { applicant: Applicant }) {
         </Section>
       </div>
 
-      <Section icon="key" title="What the home must be">
+      <Section icon="key" title="What the home must be" help="homeNeeds">
         {'move_by' in a && 'max_top_up' in a && 'anchor' in a && 'female_only' in a ? (
           <div className="grid grid-cols-1 gap-x-6 md:grid-cols-2">
             <Box label="Must move by" type="date" value={a.move_by ?? ''} onSave={(v) => {
@@ -450,11 +451,11 @@ function Amber({ children }: { children: ReactNode }) {
   );
 }
 
-function Section({ icon, title, children, border = '', last = false }: { icon: IconName; title: string; children: ReactNode; border?: string; last?: boolean }) {
+function Section({ icon, title, children, border = '', last = false, help }: { icon: IconName; title: string; children: ReactNode; border?: string; last?: boolean; help?: HelpTopic }) {
   return (
     <section className={`flex min-w-0 flex-col gap-1 p-4 sm:p-5 ${last ? '' : 'border-b border-[var(--line)]'} ${border} border-[var(--line)]`}>
       <h4 className="m-0 mb-1 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
-        <Icon name={icon} size={14} /> {title}
+        <Icon name={icon} size={14} /> {title}{help && <Help topic={help} />}
       </h4>
       {children}
     </section>

@@ -3,9 +3,10 @@ import { Link } from 'react-router-dom';
 import { Button, Card, Help, Icon, NewBadge, PageHeader, PageSkeleton, TierBadge, UrgentChip, useShowMore, useToast } from '../../components/ui';
 import {
   NeedsDatabaseUpdate, PROPERTY_STATUS_LABEL, sentKey, useAddProperties, useApplicants, useDeleteProperties, useProperties,
-  useDeals, useMatchOptions, useProspectContext, useProviders, useRequests, useSentOnWhatsApp, useSetPropertyProvider, useSetPropertyStatus,
+  useDeals, useLocated, useMatchOptions, useProspectContext, useProviders, useRequests, useSentOnWhatsApp, useSetPropertyProvider, useSetPropertyStatus,
 } from '../../lib/hooks';
 import { tierNeeds } from '../../lib/clientProfile';
+import { anchorKey, placeKey } from '../../lib/geo';
 import { isLocalProperty, localProperties } from '../../lib/localProperties';
 import type { NewProperty, SavedProperty, SentOnWhatsApp } from '../../lib/hooks';
 import type { Applicant, Deal, Property } from '../../lib/types';
@@ -125,9 +126,15 @@ export function PropertiesPage() {
   const flip = (id: string) => setFlipped((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const matchOptions = useMatchOptions();
+  // clients who must live near someone or something: place their districts and the properties, for how far (B6)
+  const anchorKeys = useMemo(() => {
+    const anchors = applicants.filter((a) => a.anchor || a.anchor_postcode).map(anchorKey);
+    return anchors.some(Boolean) ? [...anchors, ...properties.filter(isAvailable).map((p) => placeKey(p))] : [];
+  }, [applicants, properties]);
+  const located = useLocated(anchorKeys);
   const matches = useMemo(
     () => new Map(properties.map((p) => [p.id, isAvailable(p) ? matchesForProperty(p, applicants, matchOptions) : []])),
-    [properties, applicants, matchOptions],
+    [properties, applicants, matchOptions, located],
   );
 
   // each match's fit, chance of placing and expected money; best bets first

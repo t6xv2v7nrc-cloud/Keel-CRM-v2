@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import { Button, Icon, useToast } from '../../components/ui';
-import { useSetPropertyReady } from '../../lib/hooks';
+import { useConfirmAvailable, useSetPropertyReady } from '../../lib/hooks';
+import { staleAvailability } from '../../lib/matchRules';
+import { billsWords } from '../../lib/whatsapp';
+import { criteriaWords } from '../../lib/propertyEdit';
+import { dayWords } from '../../lib/format';
 import { isLocalProperty } from '../../lib/localProperties';
-import { ACCOMMODATION_LABEL, BILLS_LABEL, checksFor, floorWords, SUITS_LABEL } from '../../lib/propertyChecks';
+import { ACCOMMODATION_LABEL, checksFor, floorWords, SUITS_LABEL } from '../../lib/propertyChecks';
 import type { Flag } from '../../lib/propertyChecks';
 import type { Property } from '../../lib/types';
 
@@ -37,7 +41,9 @@ export function PropertyChecks({ property }: { property: Property }) {
     c.accommodation && !c.accommodation.estimated ? ACCOMMODATION_LABEL[c.accommodation.type] : null,
     c.suits.length ? `Suits ${c.suits.map((s) => SUITS_LABEL[s]).join(', ')}` : null,
     floorWords(property.floor, property.lift),
-    property.bills_included?.length ? `Bills: ${property.bills_included.map((b) => BILLS_LABEL[b as keyof typeof BILLS_LABEL] ?? b).join(', ')}` : null,
+    billsWords(property),
+    property.female_only ? 'Women only' : null,
+    property.landlord_criteria && criteriaWords(property.landlord_criteria) !== 'anyone' ? `Landlord: ${criteriaWords(property.landlord_criteria)}` : null,
   ].filter(Boolean);
   // over LHA is already the red badge on the LHA line above
   const shown = c.flags.filter((f) => f.key !== 'over_lha');
@@ -46,6 +52,15 @@ export function PropertyChecks({ property }: { property: Property }) {
   const available = property.status === 'void' || property.status === 'under_offer';
   // holding one back needs 0025 (a property only on this device can always hold it)
   const canMark = isLocalProperty(property.id) || 'not_ready_at' in property;
+  // still free? confirmed by the provider in the last 7 days, else it asks (0031)
+  const confirm = useConfirmAvailable();
+  const canConfirm = isLocalProperty(property.id) || 'availability_confirmed_at' in property;
+  const stale = staleAvailability(property);
+  const confirmed = property.availability_confirmed_at ? dayWords(property.availability_confirmed_at) : null;
+  const confirmIt = () => confirm.mutate(property, {
+    onSuccess: () => toast('Confirmed still available', 'success'),
+    onError: (e) => toast((e as Error).message, 'danger'),
+  });
   const mark = (ready: boolean) => setReady.mutate({ p: property, ready, note }, {
     onSuccess: () => { toast(ready ? 'Marked ready to send' : 'Marked not ready: it will not be sent', 'success'); setHolding(false); setNote(''); },
     onError: (e) => toast((e as Error).message, 'danger'),
@@ -71,6 +86,12 @@ export function PropertyChecks({ property }: { property: Property }) {
               {!holding && canMark && <button type="button" onClick={() => setHolding(true)} className="text-[var(--link)] hover:underline">Mark not ready</button>}
             </>
           )}
+        </div>
+      )}
+      {available && canConfirm && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
+          {stale ? <FlagChip flag={{ key: 'stale', tone: 'red', words: stale }} /> : confirmed && <span className="text-[var(--ink-muted)]">Confirmed available {confirmed}</span>}
+          <Button busy={confirm.isPending} className={small} disabled={confirm.isPending} onClick={confirmIt}><Icon name="check" size={13} />Confirmed available</Button>
         </div>
       )}
       {holding && !held && (
