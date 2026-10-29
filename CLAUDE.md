@@ -329,6 +329,8 @@ Ridwan's brief "make Keel stop bad matches and bad emails before they happen", w
 vs repo (done: live has had 0001 to 0017), LHA table (Step 1, done: 0018), property fields (Step 2, done: 0019), officers send status (Step 3, done: 0020) plus `council_schemes`, placements and
 incentives (Step 4, done: 0021), viewings (Step 5, done: 0022), matching (Step 6, done: 0023), the Mailer with its "sendable" view (Step 7, done: 0024), KPI dashboard (Step 8, done: Weekly numbers). All steps done. After each step: run it, test it, say what changed in 3 lines.
 - Do not ask Ridwan to run pending migrations until he says; `supabase/checks/live-vs-repo.sql` lists what is pending.
+  Live has had every migration up to 0038 (Ridwan ran 0028 to 0038 on 29 October 2026 and checked them with
+  live-vs-repo.sql), and the one-off Fill in from their notes has been run.
   Live also has tables from HELM (the old name and version of Keel CRM): `leads`, `officers` (108 rows: temp, score,
   last_contact_at, prefers_sms...), `activity_log`, `notifications`, `eod_reports`, all RLS on, unused by this app.
   Officer send status (Step 3) is on `officers`; a client arriving from the Bin with their officer's email stamps
