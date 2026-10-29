@@ -40,7 +40,18 @@ with expect(migration, kind, name) as (values
   ('0024', 'column', 'properties.photo_urls'), ('0024', 'column', 'officer_sends.property_ids'), ('0024', 'column', 'officer_sends.subject'),
   ('0025', 'column', 'properties.not_ready_at'), ('0025', 'column', 'properties.not_ready_note'),
   ('0026', 'table', 'outlook_messages'),
-  ('0027', 'table', 'push_subscriptions'), ('0027', 'table', 'push_keys'), ('0027', 'table', 'push_log')
+  ('0027', 'table', 'push_subscriptions'), ('0027', 'table', 'push_keys'), ('0027', 'table', 'push_log'),
+  ('0028', 'column', 'applicants.bedrooms_needed'),
+  ('0029', 'function', 'keel_tier_for'), ('0029', 'function', 'keel_applicants_tier'), ('0029', 'function', 'keel_settings_retier'),
+  ('0030', 'column', 'applicants.max_top_up'),
+  ('0031', 'column', 'properties.availability_confirmed_at'),
+  ('0032', 'column', 'properties.has_media'), ('0032', 'column', 'properties.media_url'),
+  ('0033', 'column', 'applicants.anchor'), ('0033', 'column', 'applicants.anchor_postcode'), ('0033', 'column', 'applicants.max_travel_mins'),
+  ('0034', 'column', 'applicants.female_only'), ('0034', 'column', 'properties.female_only'),
+  ('0035', 'column', 'properties.landlord_criteria'),
+  ('0036', 'column', 'properties.bills_status'),
+  ('0037', 'column', 'applicants.last_contact_at'), ('0037', 'column', 'applicants.last_inbound_at'),
+  ('0038', 'column', 'applicants.move_by'), ('0038', 'column', 'applicants.wants_outdoor')
 ), found as (
   select e.migration, e.kind, e.name, case e.kind
     when 'table' then exists (select 1 from information_schema.tables t

@@ -11,7 +11,7 @@ import { BinFiled } from './BinNotes';
 import type { InboxItem } from './useInbox';
 import { ReviewCard } from './ReviewCard';
 import { confirmInboxItem } from './confirm';
-import { defaultChoice, withMessageNotes } from './defaults';
+import { ageUnanswered, defaultChoice, prepared } from './defaults';
 import type { CardState } from './defaults';
 import { supabase } from '../../lib/supabase';
 import { OutlookInbox } from '../outlook/Outlook';
@@ -44,9 +44,12 @@ export function BinPage() {
   const [bulk, setBulk] = useState<{ done: number; total: number } | null>(null);
 
   const confirmAll = async (items: InboxItem[]) => {
-    const plan = items
+    const all = items
       .filter((i) => i.extraction)
-      .map((i) => ({ item: i, state: cardStates.current.get(i.id) ?? { extraction: withMessageNotes(i.extraction!), choice: defaultChoice(i.extraction!, i.matches) } }));
+      .map((i) => ({ item: i, state: cardStates.current.get(i.id) ?? { extraction: prepared(i.extraction!), choice: defaultChoice(i.extraction!, i.matches) } }));
+    // a new client whose age is still unanswered waits on its card (age is a required question)
+    const plan = all.filter((x) => !ageUnanswered(x.state.extraction, x.state.choice));
+    const waiting = all.length - plan.length;
     const creates = plan.filter((x) => x.state.choice.applicantTarget === 'create').length;
     const notes = plan.filter((x) => x.state.choice.applicantTarget === 'note_only').length;
     const updates = plan.length - creates - notes;
@@ -55,7 +58,9 @@ export function BinPage() {
       updates && `${updates} ${updates === 1 ? 'update' : 'updates'} to existing clients`,
       notes && `${notes} ${notes === 1 ? 'note' : 'notes'}`,
     ].filter(Boolean).join(', ');
-    if (!window.confirm(`Confirm all ${plan.length} items?\n\nThis saves ${summary}, each using the choice shown on its card (including any edits you have made).`)) return;
+    const waits = waiting ? `\n\n${waiting} new ${waiting === 1 ? 'client waits' : 'clients wait'} in the Bin until their age is answered on the card.` : '';
+    if (!plan.length) { toast(`Answer the age on ${waiting === 1 ? 'the card' : 'each card'} first: it sets the rent they are paid`, 'danger'); return; }
+    if (!window.confirm(`Confirm all ${plan.length} items?\n\nThis saves ${summary}, each using the choice shown on its card (including any edits you have made).${waits}`)) return;
 
     let ok = 0;
     const failed: string[] = [];

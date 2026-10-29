@@ -1,8 +1,12 @@
 import { supabase } from '../../lib/supabase';
 import { computeTier } from '../../lib/tiering';
+import { autoFill, fillWords } from '../../lib/autoFill';
+import { writeDropping } from '../../lib/columns';
+import type { Applicant } from '../../lib/types';
 import { STAGE_ORDER } from '../../lib/progress';
 import { shortDate } from '../../lib/format';
-import { isoDay } from '../../lib/calls';
+import { isoDay, todayIso } from '../../lib/calls';
+import { readWishes } from '../../lib/readWishes';
 import type { Extraction, ApplicantStage } from '../../types/extraction';
 
 /**
@@ -39,6 +43,8 @@ export interface ConfirmChoice {
   advanceStage?: ApplicantStage | null;
   /** A new client is dated from this day (YYYY-MM-DD); left out, from when the Bin received the item. */
   firstContactOn?: string | null;
+  /** Their age was asked for on the card and is not given yet (it stays a gap on their Profile). */
+  ageNotGiven?: boolean;
 }
 
 /** When a new client first got in touch: the day chosen on the card, else when the Bin received the item, never later than now. */
@@ -89,17 +95,40 @@ export async function confirmInboxItem({
   if (choice.applicantTarget === 'create' && extraction.applicant?.full_name) {
     const a = extraction.applicant;
     const stage: ApplicantStage = choice.advanceStage ?? 'referred';
-    const tier = a.tier ?? computeTier(a);
     const createdAt = await firstContactAt(inboxItemId, choice.firstContactOn);
-    const { data, error } = await supabase
-      .from('applicants')
-      .insert({
+    // empty answers their own words give: household, head counts, age band, bedrooms needed (A4); typed ones stand
+    const fill = autoFill({
+      notes: a.notes?.trim() || null, requirements: a.requirements ?? null, household_type: a.household_type ?? null,
+      adults: a.adults ?? null, children: a.children ?? null, date_of_birth: a.date_of_birth ?? null,
+      age_band: (a.age_band as Applicant['age_band']) ?? null, bedrooms_needed: null,
+    });
+    const filled = fill.patch;
+    const wishes = readWishes([a.notes, a.requirements].filter(Boolean).join('\n'), todayIso());
+    const answers = {
+      ...a, household_type: a.household_type ?? filled.household_type ?? null,
+      adults: a.adults ?? filled.adults ?? 1, children: a.children ?? filled.children ?? 0,
+    };
+    const tier = a.tier ?? computeTier(answers);
+    const { data, error, dropped } = await writeDropping({
         created_at: createdAt,
         full_name: a.full_name,
         phone: a.phone ?? null,
         email: a.email ?? null,
-        adults: a.adults ?? 1,
-        children: a.children ?? 0,
+        date_of_birth: a.date_of_birth ?? null,
+        age_band: a.age_band ?? filled.age_band ?? null,
+        bedrooms_needed: a.bedrooms_needed ?? filled.bedrooms_needed ?? null,
+        // what the home must be (C2), as read on the card, else from their words
+        move_by: a.move_by ?? wishes.move_by ?? null,
+        max_top_up: a.max_top_up ?? wishes.max_top_up ?? null,
+        anchor: a.anchor ?? wishes.anchor ?? null,
+        anchor_postcode: a.anchor_postcode ?? wishes.anchor_postcode ?? null,
+        max_travel_mins: a.max_travel_mins ?? wishes.max_travel_mins ?? null,
+        female_only: a.female_only ?? wishes.female_only ?? null,
+        wants_outdoor: a.wants_outdoor ?? wishes.wants_outdoor ?? null,
+        // their message arrived now: awaiting a reply from Keel (0037)
+        last_inbound_at: createdAt,
+        adults: answers.adults,
+        children: answers.children,
         benefit_type: a.benefit_type ?? null,
         referring_borough: a.referring_borough ?? a.council ?? null,
         budget_pcm: a.budget_pcm != null && String(a.budget_pcm) !== '' ? Number(a.budget_pcm) || null : null,
@@ -108,7 +137,7 @@ export async function confirmInboxItem({
         source: a.officer_name ? 'officer' : 'website',
         stage,
         // Referral triage fields
-        household_type: a.household_type ?? null,
+        household_type: answers.household_type,
         on_uc: a.on_uc ?? null,
         pip: a.pip ?? null,
         lcwra: a.lcwra ?? null,
@@ -122,14 +151,17 @@ export async function confirmInboxItem({
         housing_situation: a.housing_situation ?? null,
         consent: a.consent ?? null,
         tier,
-      })
-      .select('id, full_name')
-      .single();
+      }, (row) => supabase.from('applicants').insert(row).select('id, full_name').single());
     if (error) throw error;
-    outcome.applicantId = data.id;
-    outcome.applicantName = data.full_name;
-    logActivity(activities, 'applicant', data.id, 'created', `Created applicant ${data.full_name} at stage ${stage} (from screenshot)`, inboxItemId);
-    await noteNomination({ name: a.officer_name ?? null, email: a.officer_email ?? null, phone: a.officer_phone ?? null, council: a.council ?? null }, createdAt, data.full_name);
+    const made = data as { id: string; full_name: string };
+    outcome.applicantId = made.id;
+    outcome.applicantName = made.full_name;
+    logActivity(activities, 'applicant', made.id, 'created', `Created applicant ${made.full_name} at stage ${stage} (from screenshot)`, inboxItemId);
+    const kept = fill.fills.filter((f) => !dropped.includes(f.field) && (f.field !== 'household_type' || !a.household_type)
+      && (f.field !== 'adults' || a.adults == null) && (f.field !== 'children' || a.children == null) && (f.field !== 'age_band' || !a.age_band)
+      && (f.field !== 'bedrooms_needed' || a.bedrooms_needed == null));
+    if (kept.length) logActivity(activities, 'applicant', made.id, 'updated', `Filled in from their notes: ${fillWords(kept)}`, inboxItemId);
+    await noteNomination({ name: a.officer_name ?? null, email: a.officer_email ?? null, phone: a.officer_phone ?? null, council: a.council ?? null }, createdAt, made.full_name);
   } else if (
     choice.applicantTarget !== 'create' &&
     choice.applicantTarget !== 'note_only'
@@ -141,11 +173,15 @@ export async function confirmInboxItem({
     // Fetch current stage (to enforce monotonic advance) and notes (to append to)
     const { data: current } = await supabase
       .from('applicants')
-      .select('full_name, stage, notes')
+      .select('*')
       .eq('id', id)
       .single();
 
     const patch: Record<string, unknown> = {};
+    // a new message from them (or an officer about them): awaiting a reply from Keel (0037), dated from when it arrived
+    const arrived = await firstContactAt(inboxItemId);
+    const lastIn = (current as { last_inbound_at?: string | null } | null)?.last_inbound_at;
+    if (current && 'last_inbound_at' in current && (!lastIn || lastIn < arrived)) patch.last_inbound_at = arrived;
     if (a.phone) patch.phone = a.phone;
     if (a.benefit_type) patch.benefit_type = a.benefit_type;
     if (a.referring_borough) patch.referring_borough = a.referring_borough;
@@ -169,10 +205,23 @@ export async function confirmInboxItem({
       }
     }
 
+    // their new words may answer something still empty on their record (never anything already answered)
+    let filledWords: string | null = null;
+    if (current && patch.notes) {
+      const now = current as Applicant;
+      const fill = autoFill({ ...now, notes: patch.notes as string }, { ageBand: 'age_band' in now, bedrooms: 'bedrooms_needed' in now });
+      if (fill.fills.length) {
+        Object.assign(patch, fill.patch);
+        if (!now.tier_locked) patch.tier = computeTier({ ...now, ...fill.patch });
+        filledWords = fillWords(fill.fills);
+      }
+    }
+
     if (Object.keys(patch).length > 0) {
-      const { error } = await supabase.from('applicants').update(patch).eq('id', id);
+      const { error } = await writeDropping(patch, (row) => supabase.from('applicants').update(row).eq('id', id));
       if (error) throw error;
     }
+    if (filledWords) logActivity(activities, 'applicant', id, 'updated', `Filled in from their notes: ${filledWords}`, inboxItemId);
 
     outcome.applicantId = id;
     outcome.applicantName = current?.full_name;

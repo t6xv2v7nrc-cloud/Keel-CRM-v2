@@ -1,5 +1,8 @@
 import type { Extraction } from '../types/extraction';
-import { readHouseholdText } from './readNotes';
+import { readAgeText, readHouseholdText } from './readNotes';
+import { readBeds } from './propertyMatch';
+import { readWishes } from './readWishes';
+import { todayIso } from './calls';
 import { toE164 } from './format';
 
 /** Raw key/value pairs from a keellettings.com enquiry (email body or Netlify
@@ -25,9 +28,10 @@ function fieldsFromEmail(text: string): EnquiryFields {
 }
 
 /** Who is moving in, from the message: the same reading the client page uses ("my 13-year-old daughter" is a family). */
-function parseHousehold(message: string): { adults: number; children: number; household_type?: string } {
+function parseHousehold(message: string): { adults?: number; children?: number; household_type?: string } {
   const h = readHouseholdText(message);
-  return { adults: h?.adults ?? 1, children: h?.children ?? 0, household_type: h && h.confidence >= 0.8 ? h.type : undefined };
+  // left out when the message does not say, so the Bin fills them from the notes or the standard 1 adult, no children
+  return { adults: h?.adults, children: h?.children, household_type: h && h.confidence >= 0.8 ? h.type : undefined };
 }
 
 /** Parse a budget figure (pcm) from free text. Returns the upper bound of any
@@ -43,10 +47,12 @@ function parseBudget(message: string): number | undefined {
   return undefined;
 }
 
-/** Parse bedroom requirement, e.g. "2-3 bedroom" → "2-3 bed". */
-function parseBeds(message: string): string | undefined {
-  const m = message.match(/(\d(?:\s*[-–to]+\s*\d)?)\s*(?:bed|bedroom)/i);
-  return m ? `${m[1].replace(/\s/g, '')} bed` : undefined;
+/** Bedroom requirement in words, e.g. "2/3 bedroom" → "2-3 bed", "studio or 1 bed" → "studio or 1 bed". */
+function parseBeds(message: string): { words: string; min: number } | undefined {
+  const b = readBeds(message);
+  if (!b) return undefined;
+  const words = b.min === b.max ? (b.min === 0 ? 'studio' : `${b.min} bed`) : b.min === 0 ? `studio or ${b.max} bed` : `${b.min}-${b.max} bed`;
+  return { words, min: b.min };
 }
 
 /** Turn raw enquiry fields into the shared Extraction contract.
@@ -62,8 +68,10 @@ function enquiryToExtraction(fields: EnquiryFields): Extraction {
   const budget = parseBudget(message);
   const beds = parseBeds(message);
 
+  const wishes = readWishes(message, todayIso());
+  const age = readAgeText(message);
   const requirements = [
-    beds && `${beds} wanted`,
+    beds && `${beds.words} wanted`,
     /furnish/i.test(message) ? (/part/i.test(message) ? 'furnished or part-furnished' : 'furnished') : null,
   ].filter(Boolean).join('; ') || undefined;
 
@@ -86,6 +94,9 @@ function enquiryToExtraction(fields: EnquiryFields): Extraction {
       adults,
       children,
       household_type,
+      age_band: age?.band ?? undefined,
+      bedrooms_needed: beds?.min,
+      ...wishes,
       budget_pcm: budget,
       requirements,
       notes: message || undefined, // kept on the client so you can see and search what they want

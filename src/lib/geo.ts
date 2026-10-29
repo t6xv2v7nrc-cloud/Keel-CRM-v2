@@ -21,9 +21,18 @@ try {
   const saved = JSON.parse(localStorage.getItem(STORE) ?? '{}') as Record<string, LatLng | null>;
   for (const [k, v] of Object.entries(saved)) known.set(k, v);
 } catch { /* no storage: look up again next time */ }
+let version = 0;
 const remember = () => {
+  version += 1; // matches that rest on distances are worked out again
   try { localStorage.setItem(STORE, JSON.stringify(Object.fromEntries(known))); } catch { /* fine */ }
 };
+/** Goes up each time new places are known, so anything worked out from distances is worked out again. */
+export const geoVersion = () => version;
+/** Places known without looking them up: for the checks in scripts/ and the harness only. */
+export function setPointsForTest(points: Record<string, LatLng>) {
+  for (const [k, v] of Object.entries(points)) known.set(k, v);
+  version += 1;
+}
 
 /** What a property is placed by: its full postcode ("NW2 6NR"), else its district ("NW2"). */
 export function placeKey(p: { postcode: string | null; address_line: string }): string | null {
@@ -79,6 +88,34 @@ export async function locate(keys: string[]): Promise<void> {
   for (let i = 0; i < list.length; i += 6) await Promise.all(list.slice(i, i + 6).map(lookUpDistrict));
   for (const key of gone) known.set(key, known.get(districtOfKey(key)) ?? null);
   remember();
+}
+
+// ── How far a client's anchor is (brief B6) ────────────────────────
+// Who or what a client must live near (applicants.anchor, anchor_postcode) is placed by its postcode district only
+// ("HA1", not "HA1 3UJ"): only districts are ever sent to postcodes.io, never a client's own address.
+
+/** The district a client's anchor is placed by: from its postcode, else a district or postcode in its words. */
+export function anchorKey(a: Pick<Applicant, 'anchor' | 'anchor_postcode'>): string | null {
+  return districtOf(a.anchor_postcode ?? '') ?? (a.anchor ? districtOf(a.anchor) : null);
+}
+
+/** Kilometres between two points, as the crow flies. */
+export function kmBetween(x: LatLng, y: LatLng): number {
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const dLat = rad(y[0] - x[0]), dLng = rad(y[1] - x[1]);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(x[0])) * Math.cos(rad(y[0])) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.sqrt(h));
+}
+
+/** A rough journey time by bus or train for a distance: 10 minutes of walking and waiting, then about 3.5 minutes a
+ *  kilometre (London's buses and trains, door to door). A guide for ranking and for "too far", not a timetable. */
+export const travelMins = (km: number) => Math.round(10 + 3.5 * km);
+
+/** About how many minutes a property is from a client's anchor, or null when either place is not known yet. */
+export function minutesToAnchor(a: Pick<Applicant, 'anchor' | 'anchor_postcode'>, p: { postcode: string | null; address_line: string }): number | null {
+  const from = pointOf(anchorKey(a));
+  const to = pointOf(placeKey(p));
+  return from && to ? travelMins(kmBetween(from, to)) : null;
 }
 
 // ── Where a council is (housing officers on the map) ───────────────

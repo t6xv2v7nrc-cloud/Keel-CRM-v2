@@ -4,6 +4,7 @@ import {
   Avatar, Button, Card, CardHeader, Donut, Empty, Help, Icon, Legend, Meter, Sparkline, StatTile, TierBadge, UrgentChip,
 } from '../../components/ui';
 import type { IconName } from '../../components/ui';
+import { tierNeeds } from '../../lib/clientProfile';
 import { useApplicants, useCalls, useDeals, useMatchOptions, usePeople, useProperties, useProviders, useReceivables, useRecentActivity } from '../../lib/hooks';
 import { longDay, money, timeAgo } from '../../lib/format';
 import { ghostTotal, potentials, totals as moneyTotals } from '../../lib/money';
@@ -148,7 +149,7 @@ export function DashboardPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="truncate text-[15px] font-medium text-[var(--ink)]">{a.full_name}</span>
-                      <TierBadge tier={effectiveTier(a)} />
+                      <TierBadge tier={effectiveTier(a)} needs={tierNeeds(a)} />
                       {isUrgent(a) && <UrgentChip reason={URGENCY_LABEL[a.urgency ?? '']} />}
                     </div>
                     <div className="truncate text-[13px] text-[var(--ink-muted)]">{queueLabel(state, a.next_step)}</div>

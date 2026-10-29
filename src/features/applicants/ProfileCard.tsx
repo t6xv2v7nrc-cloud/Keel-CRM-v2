@@ -50,6 +50,14 @@ export function ProfileCard({ applicant: a }: { applicant: Applicant }) {
         <div className="flex flex-col gap-4 px-5 py-4">
           <p className="m-0 text-[15px] leading-relaxed text-[var(--ink)]">{p.summary}</p>
 
+          {p.householdCheck && (
+            <div className="flex flex-wrap items-center gap-2 rounded-md px-3 py-2 text-[14px]" style={{ background: 'var(--note-bg)', color: 'var(--note-fg)' }}>
+              <Icon name="alert" size={15} />
+              <span className="min-w-0 flex-1 basis-[220px]">{p.householdCheck}. Matching uses what is recorded until it is changed.</span>
+              <Button className="min-h-0 px-3 py-1.5 text-[13px]" onClick={toDetails}>Check Client details</Button>
+            </div>
+          )}
+
           {gaps.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 rounded-md px-3 py-2 text-[14px]" style={{ background: 'var(--note-bg)', color: 'var(--note-fg)' }}>
               <Icon name="alert" size={15} />

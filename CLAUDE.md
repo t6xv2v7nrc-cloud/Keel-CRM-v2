@@ -8,22 +8,41 @@ Read `KEEL_CRM_PLAN.md` for the full build plan. Work phase by phase; do not sta
 src/
   lib/        supabase.ts, matching.ts, format.ts (phone/E.164, money, dates),
               settings.ts (team rules + my settings, tier logic types), tiering.ts (tier engine),
-              calls.ts, propertyMatch.ts, readNotes.ts (form answers from free text; `readHouseholdText` reads who is moving
-                           in as a whole: any child, "my 13-year-old daughter", "single mum", makes a family; writing as one
+              calls.ts, propertyMatch.ts (`readBeds`: "2/3 bed", "1 bed, 2 bed", "preferably a 2 bed"; where they live
+                           now and "no studios" are not asks; `bedrooms_needed` (0028) wins; `placeFacts`, `accessOf`: step-free,
+                           stairs or not known, "no lift" is not a lift), readNotes.ts (form answers from free text; `readHouseholdText` reads who is moving
+                           in as a whole: any child, "my 13-year-old daughter", "single mum", twins, "I have a son", makes a family;
+                           grown-up children and relatives are extra adults; "2 adults"; writing as one
                            person and asking only for a studio or 1 bed, nobody else mentioned, reads as single; `readAgeText`
-                           reads "I'm 28"; also used for pasted enquiries),
+                           reads "I'm 28", "client is 40", "over 35"; also used for pasted enquiries; the old free-text LHA band is never read or suggested),
+              autoFill.ts (brief A4, A9: empty household, adults, children, age band, bedrooms needed filled from their words, never a typed
+                           answer; when notes or must-haves are saved (useUpdateTriage) and when a client arrives from the Bin;
+                           `backfillPlan` is the one-off on Team settings, features/settings/Backfill.tsx: the full diff first,
+                           written only on Fill in; scripts/backfill-dry-run.ts runs it on supabase/seed.sql),
+              readWishes.ts (C2: move by, top-up, who they must live near (anchor) and its postcode, longest journey, women
+                           only, garden or balcony, from a message; used by parseEnquiry and the Bin),
+              followUp.ts (C1, 0037: `awaitingReply`: active clients whose last message (last_inbound_at, set by the Bin; before
+                           0037 when they got in touch) has no reply (a contact note, call, WhatsApp send, last_contact_at);
+                           red after 24 hours, nothing older than `responses.watchDays`; the card at the top of the Pipeline,
+                           features/pipeline/AwaitingReply.tsx),
+              columns.ts (`writeDropping`: a write that names a column the database lacks yet is tried again without it),
               clientProfile.ts (the Profile card, first on a client's page: household, age and age band (date of birth,
                            else read), the rate they are paid (families by bedrooms; couples, 35 plus and SAR-exempt the 1 bed
                            rate; other under-35s the shared rate), exemptions to check, benefits, wants ("Area: london" is
                            London), council and incentive, where to place them (LHA areas of available matches within the
                            LHA they are paid there; London clients stay in London), what to ask next; one-tap fill-in of the
-                           notes reader's sure answers (never overwrites an answer)), contacts.ts (notes on a client and last contact: activities kind "contact"
+                           notes reader's sure answers (never overwrites an answer); a family's size is the bedrooms they
+                           need (recorded, else asked, up to 4), else from their children; `householdCheck`: "Check household:
+                           notes say ..." when the record and their words disagree; `needsInfo`/`tierNeeds`: the last tier with
+                           UC, age, household or council missing shows "Needs info" (TierBadge `needs`)), contacts.ts (notes on a client and last contact: activities kind "contact"
                            ("WhatsApp: ...") or "note"; calls and WhatsApp sends count as contact; no migration),
               lha.ts (LHA area, size rules and rent-vs-LHA check; rates from the database (lha_rates, 0018, loaded from the
                       gov.uk CSV with source and start date), else the built-in src/data/lha-rates.ts, marked not checked;
                       postcode corrections in postcode_brma; `rentShown` shows "1-Bed LHA" rents as pounds; `overLha`:
                       over only when £1 or more above, so pennies over is at the LHA, used everywhere),
-              whatsapp.ts (wa.me links and message wording for sending properties),
+              whatsapp.ts (wa.me links and message wording for sending properties: per property in short sentences, the rent
+                      against the client's own LHA (`lhaFitOf`), the kitchen only when known (set by hand, or a flat), floor
+                      and lift, `billsWords`, furnished, when free, a photo or video link),
               shareWhatsApp.ts (the other WhatsApp shares, buttons in features/properties/ShareLinks.tsx: the shown matches
                            to the referring officer (`officerMatchesText`: client's full name, their LHA there, why each
                            fits; not-ready left out, never to an officer who left); the Mailer's alert or digest on WhatsApp
@@ -47,7 +66,15 @@ src/
                            London officers' clients see nothing outside Greater London unless `showOutsideLondon`;
                            one-line reason (`line`), expected income (`incomeFor`: provider fee + incentive on Finances, else
                            the scheme's max, else "likely" for an officer referral); on a property, incentive-bearing first;
-                           `hiddenForApplicant` counts what the rules hid; UI bits in features/properties/MatchBits.tsx),
+                           `hiddenForApplicant` counts what the rules hid; UI bits in features/properties/MatchBits.tsx;
+                           the matching brief (0028 to 0036): a single or couple who asked for a bedroom never gets a studio or
+                           room (`wants_1bed`); step-free clients never see a floor or lift not known (`access_unknown`); over
+                           LHA is fine within `max_top_up` ("£50 over LHA, within their £200 top-up"); `too_far` from their
+                           anchor (geo.ts `minutesToAnchor`: district only, 10 min + 3.5 a km); `female_only`;
+                           `landlord_criteria` (`landlordFit`); red `staleAvailability` after 7 days (Confirmed available on
+                           the card, 0031); amber no photos or video (`hasMedia`); a client's list in `placeOrder`
+                           (self-contained, en-suite, room; exempt housing association first for PIP/ESA; nearest; photos;
+                           most room under LHA); a client's page suggests the best 1 to 3 (`bestFew(..., 3)`)),
               buildings.ts (`buildingOf`, `sameBuilding`: flats at one address are one building; `turnedDown`: said no
                       at the viewing, or fell through over the place, landlord or money; not let to someone else, landlord
                       pulled out, client quiet or housed elsewhere); matchRules hides every unit in a building the client
@@ -198,6 +225,8 @@ supabase/checks/live-vs-repo.sql  (read-only: which migrations the live database
   Use the semantic tokens (`--note-*` for cautions, `--chip-*` for tags, `--strong/good/possible-*`, `--tier-N-*`), not stage colours.
 - Rules that change behaviour (tiers, urgency, premium rent, call follow-ups) live in Settings (`lib/settings.ts`), not constants.
   Tiers are data (`tierLogic`: any number of tiers, conditions on client answers); never assume 3 tiers, use `tierNumbers()`/`tierLabel()`.
+  The database works tiers out too (0029, `keel_tier_for`, `keel_canonical_borough`): a change to tiering.ts FIELDS or
+  london.ts BOROUGH_KEYS needs the same change in a new migration; `scripts/test-tier-sql.ts` checks the two agree.
   Only the owner (`profiles.role`, migration 0007) can change team settings; RLS enforces it.
   Team settings are shared (key `app`); personal ones (`PERSONAL_KEYS`) are per person (key `user:<id>`).
 - Two or more people use Keel: show who did things (`calls.created_by`, `activities.actor`, `usePeople().whoOf`),
@@ -363,7 +392,13 @@ Never commit `.env.local`. Never expose the service role key or Anthropic key to
   applicants for matching; backs up applicants), then 0024 (photo_urls on properties, property_ids and subject on
   officer_sends, for the Mailer; backs up both), then 0025 (not_ready_at and not_ready_note on properties: ready by
   default; backs up properties), then 0026 (outlook_messages: each Outlook email Keel has filed, once; a new table only),
-  then 0027 (push_subscriptions, push_keys, push_log for notifications on devices; new tables only).
+  then 0027 (push_subscriptions, push_keys, push_log for notifications on devices; new tables only),
+  then 0028 to 0038, the matching brief, one per item: 0028 bedrooms_needed; 0029 tiers worked out by the database
+  (keel_tier_for and a trigger on applicants, re-tier when the tier rules are saved, tier_locked left alone; works every
+  tier out once, each change on the timeline; scripts/test-tier-sql.ts checks it against tiering.ts); 0030 max_top_up;
+  0031 availability_confirmed_at; 0032 has_media, media_url; 0033 anchor, anchor_postcode, max_travel_mins; 0034
+  female_only on clients and properties; 0035 landlord_criteria; 0036 bills_status; 0037 last_contact_at,
+  last_inbound_at (filled once from the timeline and the Bin); 0038 move_by, wants_outdoor. Each backs up first.
 - Check every migration runs, twice, on a scratch Postgres before committing one:
   `npm i --no-save @electric-sql/pglite && node scripts/check-migrations.mjs` (it also tests the merge and invoice numbers).
 

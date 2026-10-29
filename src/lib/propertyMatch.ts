@@ -24,6 +24,7 @@ import type { HouseholdKey } from './search';
 import { tierCount, tierLabel, URGENCY_LABEL } from './tiering';
 import { activeSettings } from './settings';
 import { clientLhaSize, lhaCheck, rateFor, sizeWords } from './lha';
+import { readHouseholdText } from './readNotes';
 import {
   areNeighbours, areasIn, boroughFromDistrict, boroughOfArea, boroughsIn, canonicalBorough, CENTRAL_DISTRICTS, districtOf, districtsIn, districtsOfArea,
   boroughsOfRegion, regionsIn, titleCase,
@@ -75,7 +76,7 @@ interface Needs {
   selfContained: boolean; // asked for nothing shared: no rooms, en-suites, HMOs or house shares
   premiumOk: string | null; // why they can take a property over the premium rent: "PIP", "full-time"...
   rentCap: number | null; // on UC alone: the most they can afford, or null if the limit does not apply
-  beds: { min: number; max: number; asked: boolean } | null;
+  beds: BedsAsk | null;
   household: HouseholdKey | null;
   children: number;
   needsStepFree: boolean;
@@ -129,6 +130,49 @@ export function withSelfContained(requirements: string | null, on: boolean): str
   return next.length ? next.join(', ') : null;
 }
 
+// ── Bedrooms they asked for ────────────────────────────────────────
+// "2/3 bed", "2 or 3 bedroom", "1 bed, 2 bed" (every size they name: the smallest to the biggest), "studio or 1 bed",
+// and "preferably a 2 bed" (the size they would most like, inside that range). Where they live now is not an ask:
+// "currently in a 1 bed with 3 kids" says nothing about what they want.
+
+export interface BedsAsk { min: number; max: number; asked: boolean; preferred?: number }
+
+const BED_N = '(\\d|one|two|three|four|five)';
+const BED_WORD = '\\s*[- ]?\\s*bed(?:room)?s?\\b';
+const BED_RANGE = new RegExp(`\\b${BED_N}\\s*(?:-|–|to|or|\\/)\\s*${BED_N}${BED_WORD}`, 'gi');
+const BED_ONE = new RegExp(`\\b${BED_N}${BED_WORD}`, 'gi');
+const STUDIO_OR = [
+  /\b(?:studio|bedsit)\s*(?:or|\/|to|-)\s*(?:an?\s+)?(\d|one|two)\s*[- ]?\s*bed/gi,
+  /\b(\d|one|two)\s*[- ]?\s*bed(?:room)?(?:\s+(?:flat|place))?\s*(?:or|\/)\s*(?:an?\s+)?(?:studio|bedsit)\b/gi,
+];
+const PREFERRED = new RegExp(`\\b(?:preferably|ideally|prefer(?:ably|red)?|would\\s+prefer|rather)\\s+(?:a\\s+|an\\s+)?${BED_N}${BED_WORD}|\\b${BED_N}${BED_WORD}\\s*(?:\\(|,)?\\s*(?:preferably|ideally|preferred)\\b`, 'i');
+// where they live now: "currently in a 1 bed", "we live in a 2 bedroom flat", "overcrowded in a one bed"
+const NOW_IN = /\b(?:currently|live|living|lives|staying|stay|overcrowded|sharing|share|from)\b[^.\n]{0,20}$/i;
+const NOT_WANTED = /\b(?:no|not|never|without|don'?t\s+want|doesn'?t\s+want)\s+(?:an?\s+)?$/i;
+const skip = (text: string, at: number) => NOW_IN.test(text.slice(Math.max(0, at - 30), at)) || NOT_WANTED.test(text.slice(Math.max(0, at - 20), at));
+
+export function readBeds(text: string): BedsAsk | null {
+  const found: Array<{ at: number; end: number; min: number; max: number }> = [];
+  const taken = (at: number, end: number) => found.some((f) => at < f.end && f.at < end);
+  const add = (m: RegExpMatchArray, min: number, max: number) => {
+    const at = m.index ?? 0;
+    if (taken(at, at + m[0].length) || skip(text, at)) return;
+    found.push({ at, end: at + m[0].length, min: Math.min(min, max), max: Math.max(min, max) });
+  };
+  for (const re of STUDIO_OR) for (const m of text.matchAll(re)) add(m, 0, n(m[1]));
+  for (const m of text.matchAll(BED_RANGE)) add(m, n(m[1]), n(m[2]));
+  for (const m of text.matchAll(BED_ONE)) add(m, n(m[1]), n(m[1]));
+  // a studio named on its own: "studio or HMO room", "studio, 1 bed or 2 bed"
+  const studio = [...text.matchAll(/\b(?:studio|bedsit)s?\b/gi)].find((m) => !taken(m.index ?? 0, (m.index ?? 0) + m[0].length) && !skip(text, m.index ?? 0));
+  if (!found.length) return studio ? { min: 0, max: 1, asked: true } : null;
+  if (studio) found.push({ at: studio.index ?? 0, end: (studio.index ?? 0) + studio[0].length, min: 0, max: 0 });
+  const min = Math.min(...found.map((f) => f.min));
+  const max = Math.max(...found.map((f) => f.max));
+  const pref = PREFERRED.exec(text);
+  const preferred = pref ? n(pref[1] ?? pref[2]) : undefined;
+  return { min, max, asked: true, ...(preferred !== undefined && preferred >= min && preferred <= max ? { preferred } : {}) };
+}
+
 // worked out once per client (and again when settings change): reading their notes is the slow part of matching
 const needsCache = new WeakMap<Applicant, { settings: unknown; needs: Needs }>();
 
@@ -143,8 +187,11 @@ export function clientNeeds(a: Applicant): Needs {
 
 function readNeeds(a: Applicant): Needs {
   const text = [a.notes, a.requirements, a.postcode_area].filter(Boolean).join(' \n ');
-  const household = householdOf(a);
-  const children = Math.max(a.children ?? 0, household === 'family' && !a.children ? 1 : 0);
+  // who is moving in: as recorded, else as their own words say ("3 kids", "me and my partner")
+  const read = readHouseholdText([a.notes, a.requirements].filter(Boolean).join('\n'));
+  const household = householdOf(a) ?? read?.type ?? null;
+  const readKids = household === 'family' && read?.type === 'family' ? read.children ?? 0 : 0;
+  const children = (a.children ?? 0) > 0 ? a.children! : readKids > 0 ? readKids : household === 'family' ? 1 : 0;
 
   const wantedAreas = areasIn(text);
   // the postcode area they want (0023): districts ("HA1") or whole postcode areas ("HA", "UB")
@@ -176,18 +223,15 @@ function readNeeds(a: Applicant): Needs {
   ).values()];
   const selfContained = ASKS_SELF_CONTAINED.test(text);
 
-  // Bedrooms: what they asked for, else what the household needs
-  let beds: Needs['beds'] = null;
-  const range = text.match(/\b(\d|one|two|three|four)\s*(?:-|–|to|or)\s*(\d|one|two|three|four)\s*[- ]?\s*bed/i);
-  const single = text.match(/\b(\d|one|two|three|four|five)\s*[- ]?\s*bed(?:room)?s?\b/i);
-  // "studio or 1 bed", "a studio/one bed", "1 bed or a studio"
-  const studioOr = text.match(/\b(?:studio|bedsit)\s*(?:or|\/|to|-)\s*(?:an?\s+)?(\d|one|two)\s*[- ]?\s*bed/i)
-    ?? text.match(/\b(\d|one|two)\s*[- ]?\s*bed(?:room)?(?:\s+(?:flat|place))?\s*(?:or|\/)\s*(?:an?\s+)?(?:studio|bedsit)\b/i);
-  if (range) beds = { min: n(range[1]), max: n(range[2]), asked: true };
-  else if (studioOr) beds = { min: 0, max: n(studioOr[1]), asked: true };
-  else if (single) beds = { min: n(single[1]), max: n(single[1]), asked: true };
-  else if (/\bstudio|bedsit\b/i.test(text)) beds = { min: 0, max: 1, asked: true };
-  else if (household === 'family' || children > 0) {
+  // Bedrooms: what was recorded (0028), else what they asked for, else what the household needs
+  let beds: Needs['beds'] = readBeds(text);
+  const typed = a.bedrooms_needed;
+  if (typed != null && typed >= 0) {
+    // a typed number wins; a range read from their words is kept when it starts there ("2/3 bed", recorded 2)
+    beds = beds && typed >= beds.min && typed <= beds.max ? { ...beds, min: typed } : { min: typed, max: typed, asked: true };
+  } else if (beds) {
+    // asked for
+  } else if (household === 'family' || children > 0) {
     const min = Math.max(2, 1 + Math.floor(children / 2));
     beds = { min, max: children >= 2 ? min + 1 : min, asked: false };
   } else if (household === 'single' || household === 'couple') beds = { min: 0, max: 1, asked: false };
@@ -228,7 +272,7 @@ function propertyFacts(p: PropertyLike) {
 }
 
 function readFacts(p: PropertyLike) {
-  const type = p.property_type ?? '';
+  const type = (p.property_type ?? '').replace(/_/g, ' '); // "hmo_room" is an HMO room
   // an HMO studio is a studio, not a room
   const kind: Kind = /\b(studio|bedsit)\b/i.test(type) ? 'studio'
     : /\b(room|hmo)\b/i.test(type) && !/bed/i.test(type) ? 'room'
@@ -251,10 +295,31 @@ function readFacts(p: PropertyLike) {
   return {
     kind, beds, district, borough, areas, shared,
     floor: p.floor ?? null, lift: p.lift ?? null,
-    stepFree: p.floor === 0 || p.lift === true || /\b(ground\s+floor|step[- ]?free|level\s+access|lift|bungalow)\b/i.test(text),
+    stepFree: p.floor === 0 || p.lift === true || (p.lift !== false && /\b(ground\s+floor|step[- ]?free|level\s+access|lift|bungalow)\b/i.test(text) && !/\b(?:no|without\s+a?)\s*lift\b/i.test(text)),
     furnished: p.furnished ? !/^unfurnished$/i.test(p.furnished) : null,
     lha: /lha/i.test(p.rent_text ?? ''),
   };
+}
+
+/** What kind of place a property is, for the rules: a room, a studio or a flat, its bedrooms, and whether anything is
+ *  shared (a room, an HMO room, a shared kitchen or bathroom) or it is an en-suite room. */
+export function placeFacts(p: PropertyLike) {
+  const f = propertyFacts(p);
+  const ensuite = f.shared && /\ben[- ]?suite\b/i.test(`${p.property_type ?? ''} ${p.notes ?? ''}`);
+  return { kind: f.kind, beds: f.beds, shared: f.shared, ensuite };
+}
+
+/** Whether someone who cannot do stairs can get in: the ground floor or a lift (recorded, or said in its notes), stairs
+ *  (an upper floor or basement with no lift), or not known. "No lift" in the notes is not a lift. */
+export function accessOf(p: PropertyLike): 'step_free' | 'stairs' | 'unknown' {
+  const text = `${p.property_type ?? ''} ${p.notes ?? ''}`;
+  const noLift = /\b(?:no|without\s+a?)\s*lift\b/i.test(text);
+  if (p.floor === 0 || p.lift === true) return 'step_free';
+  if (p.floor != null && p.lift === false) return 'stairs';
+  if (/\b(?:ground\s+floor|step[- ]?free|level\s+access|bungalow|wheelchair\s+accessible)\b/i.test(text) && !/\b(?:no|not)\s+(?:on\s+the\s+)?ground\s+floor\b/i.test(text)) return 'step_free';
+  if (!noLift && /\blift\b/i.test(text)) return 'step_free';
+  if (p.floor != null && p.floor !== 0 && noLift) return 'stairs';
+  return 'unknown';
 }
 
 const householdWords = (x: Needs) =>
@@ -423,13 +488,14 @@ const shown = (m: Match) => m.strength !== 'possible' || activeSettings().showPo
 /**
  * The few to act on first, sized to how many qualify: every strong match (up
  * to 5), topped up with good ones to make 3, or the top 2 possibles when
- * nothing better fits. The list must already be sorted best first.
+ * nothing better fits. The list must already be sorted best first. `most` caps
+ * it (a client's page suggests the best 1 to 3).
  */
-export function bestFew<T>(sorted: T[], strength: (t: T) => Strength): T[] {
-  const strong = sorted.filter((t) => strength(t) === 'strong').slice(0, 5);
-  const good = sorted.filter((t) => strength(t) === 'good').slice(0, Math.max(0, 3 - strong.length));
+export function bestFew<T>(sorted: T[], strength: (t: T) => Strength, most = 5): T[] {
+  const strong = sorted.filter((t) => strength(t) === 'strong').slice(0, Math.min(5, most));
+  const good = sorted.filter((t) => strength(t) === 'good').slice(0, Math.max(0, Math.min(3, most) - strong.length));
   const best = [...strong, ...good];
-  return best.length ? best : sorted.slice(0, 2);
+  return best.length ? best : sorted.slice(0, Math.min(2, most));
 }
 
 /** A reason or caution without its detail in brackets, for one-line lists: "£4 under their LHA". */

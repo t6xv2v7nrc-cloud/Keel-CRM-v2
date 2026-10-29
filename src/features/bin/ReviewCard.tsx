@@ -6,11 +6,11 @@ import type { MatchResult } from '../../lib/matching';
 import { signedBinUrl } from './capture';
 import { confirmInboxItem } from './confirm';
 import type { ConfirmChoice } from './confirm';
-import { defaultChoice, withMessageNotes } from './defaults';
+import { ageUnanswered, defaultChoice, prepared } from './defaults';
 import type { CardState } from './defaults';
 import { HOUSEHOLD_LABEL, WORK_STATUS_LABEL, URGENCY_LABEL } from '../../lib/tiering';
 import { isoDay, todayIso } from '../../lib/calls';
-import { timeAgo } from '../../lib/format';
+import { shortDate, timeAgo } from '../../lib/format';
 
 function Chip({ children }: { children: React.ReactNode }) {
   return (
@@ -41,25 +41,30 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
   const [busy, setBusy] = useState(false);
 
   // Editable copy of the extraction
-  const [draft, setDraft] = useState<Extraction>(() => withMessageNotes(extraction));
+  const [draft, setDraft] = useState<Extraction>(() => prepared(extraction));
 
   // Match choices: start from the shared default (best match, else create)
   const [applicantTarget, setApplicantTarget] = useState<string>(() => defaultChoice(draft, matches).applicantTarget);
   const [advanceStage, setAdvanceStage] = useState<ApplicantStage | ''>('');
   // a new client is dated from when they got in touch: when the Bin received it, unless changed here
   const [firstContactOn, setFirstContactOn] = useState(() => isoDay(new Date(receivedAt)));
+  // age is a required question for a new client (it sets their rate): a date of birth, an age band, or "not given yet"
+  const [ageNotGiven, setAgeNotGiven] = useState(false);
 
   useEffect(() => {
-    onStateChange?.(itemId, { extraction: draft, choice: { applicantTarget, advanceStage: advanceStage || null, firstContactOn } });
+    onStateChange?.(itemId, { extraction: draft, choice: { applicantTarget, advanceStage: advanceStage || null, firstContactOn, ageNotGiven } });
     return () => onStateChange?.(itemId, null);
-  }, [itemId, draft, applicantTarget, advanceStage, firstContactOn, onStateChange]);
+  }, [itemId, draft, applicantTarget, advanceStage, firstContactOn, ageNotGiven, onStateChange]);
 
   useEffect(() => {
     if (imagePath) signedBinUrl(imagePath).then(setImgUrl);
   }, [imagePath]);
 
   const a = draft.applicant ?? {};
-  const setA = (k: string, v: string) => setDraft((d) => ({ ...d, applicant: { ...d.applicant, [k]: v } }));
+  const setA = (k: string, v: string | undefined) => setDraft((d) => ({ ...d, applicant: { ...d.applicant, [k]: v } }));
+  const choiceNow: ConfirmChoice = { applicantTarget, advanceStage: advanceStage || null, firstContactOn, ageNotGiven };
+  const needsAge = ageUnanswered(draft, choiceNow);
+  const asksAge = applicantTarget === 'create' && (needsAge || !!a.age_band || !!a.date_of_birth || ageNotGiven);
 
   const confirmLabel = useMemo(() => {
     if (applicantTarget === 'create' && a.full_name) return `Confirm and create ${a.full_name.split(' ')[0]}`;
@@ -77,6 +82,7 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
         applicantTarget,
         advanceStage: advanceStage || null,
         firstContactOn,
+        ageNotGiven,
       };
       const out = await confirmInboxItem({ inboxItemId: itemId, extraction: draft, choice });
       toast(
@@ -142,6 +148,34 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
             <Field label="Budget pcm" mono value={a.budget_pcm != null ? String(a.budget_pcm) : ''} onChange={(e) => setA('budget_pcm', e.target.value)} />
           </div>
 
+          {/* Age: required for a new client (it sets the rent they are paid) */}
+          {asksAge && (
+            <div className="flex flex-col gap-2 rounded-md border px-3 py-2.5"
+              style={{ borderColor: needsAge ? 'var(--note-fg)' : 'var(--line)', background: needsAge ? 'var(--note-bg)' : 'transparent' }}>
+              <span className="text-[13px] font-medium" style={{ color: needsAge ? 'var(--note-fg)' : 'var(--ink-muted)' }}>
+                Age {needsAge ? '(needed: under 35 they are paid the shared rate, 35 or over the 1 bed rate)' : ''}
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <input type="date" value={a.date_of_birth ?? ''} max={todayIso()} aria-label="Date of birth"
+                  onChange={(e) => setA('date_of_birth', e.target.value || undefined)}
+                  className="min-h-[40px] max-w-full rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]" />
+                <span className="text-[13px] text-[var(--ink-muted)]">or</span>
+                <select value={a.age_band ?? (ageNotGiven ? 'not_given' : '')} aria-label="Age band"
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setAgeNotGiven(v === 'not_given');
+                    setA('age_band', v === 'under_35' || v === '35_plus' ? v : undefined);
+                  }}
+                  className="min-h-[40px] max-w-full rounded-md border border-[var(--line-strong)] bg-[var(--surface)] px-2 text-[15px] text-[var(--ink)]">
+                  <option value="">Choose…</option>
+                  <option value="under_35">Under 35</option>
+                  <option value="35_plus">35 or over</option>
+                  <option value="not_given">Not given yet: ask them</option>
+                </select>
+              </div>
+            </div>
+          )}
+
           {/* The client's own message, saved to their notes so it can be searched */}
           <label className="flex flex-col gap-1">
             <span className="text-[13px] font-medium text-[var(--ink-muted)]">Notes: what they are looking for</span>
@@ -155,7 +189,7 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
           </label>
 
           {/* Referral triage summary (read-only; every answer can be edited on the client page) */}
-          {(a.tier != null || a.household_type || a.on_uc != null || a.officer_name) && (
+          {(a.tier != null || a.household_type || a.on_uc != null || a.officer_name || a.bedrooms_needed != null || a.move_by || a.anchor || a.female_only) && (
             <div className="rounded-md border border-[var(--line)] bg-[var(--surface-2)] p-3">
               <div className="mb-2 flex items-center gap-2">
                 {a.tier != null && <TierBadge tier={a.tier} />}
@@ -169,6 +203,12 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
                 {a.council_registered != null && <Chip>Council-reg: {a.council_registered ? 'Yes' : 'No'}</Chip>}
                 {a.work_status && <Chip>{WORK_STATUS_LABEL[a.work_status] ?? a.work_status}</Chip>}
                 {a.urgency && a.urgency !== 'none' && <Chip>{URGENCY_LABEL[a.urgency] ?? a.urgency}</Chip>}
+                {a.bedrooms_needed != null && <Chip>{a.bedrooms_needed === 0 ? 'Studio' : `${a.bedrooms_needed} bed`}</Chip>}
+                {a.move_by && <Chip>Move by {shortDate(a.move_by)}</Chip>}
+                {a.max_top_up != null && <Chip>Top-up £{a.max_top_up}</Chip>}
+                {a.anchor && <Chip>Near {a.anchor}{a.max_travel_mins ? `, ${a.max_travel_mins} min` : ''}</Chip>}
+                {a.female_only && <Chip>Women only</Chip>}
+                {a.wants_outdoor && <Chip>Garden or balcony</Chip>}
               </div>
               {a.officer_name && (
                 <div className="mt-2 text-[13px] text-[var(--ink-muted)]">
@@ -231,8 +271,8 @@ export function ReviewCard({ itemId, imagePath, extraction, matches, onDone, onD
 
           <div className="mt-auto flex items-center justify-end gap-2">
             <Button variant="danger" onClick={onDiscard} disabled={busy}>Discard</Button>
-            <Button variant="primary" onClick={handleConfirm} disabled={busy}>
-              {busy ? 'Saving…' : confirmLabel}
+            <Button variant="primary" onClick={handleConfirm} disabled={busy || needsAge} title={needsAge ? 'Answer their age first' : undefined}>
+              {busy ? 'Saving…' : needsAge ? 'Answer their age first' : confirmLabel}
             </Button>
           </div>
         </div>

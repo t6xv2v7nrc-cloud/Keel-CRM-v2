@@ -20,7 +20,7 @@ const studio = { address_line: 'Broadfield Close, London NW2 6NR', postcode: 'NW
   bedrooms: 0, rent_pcm: 1436, rent_text: '£1,436 pcm', bills: 'Exc. Council Tax & Electricity' };
 const room = { address_line: 'Room 3, 14 Bruce Grove, N17 6RA', postcode: 'N17 6RA', borough: 'Haringey', property_type: 'En-suite Room',
   bedrooms: 0, rent_pcm: null, rent_text: '1-Bed LHA' };
-check('a property is bold title then rent and bills', propertiesText([studio]) === '*En-suite Studio, Broadfield Close, London NW2 6NR*\n£1,436 pcm · Bills: Exc. Council Tax & Electricity');
+check('a property is a bold title, then the rent and the bills in short sentences', propertiesText([studio]) === '*En-suite Studio, Broadfield Close, London NW2 6NR*\nRent £1,436 pcm.\nBills: Exc. Council Tax & Electricity.', propertiesText([studio]));
 check('an LHA rent is given in pounds too', propertiesText([room]).includes('£1,150 pcm (1-Bed LHA)'), propertiesText([room]));
 const one = clientMessage('Anna Mecani', [studio], 'Ridwan', 'Hi {first name}, {a property}:\n\n{properties}\n\n{my name}');
 check('placeholders filled for one property', one.startsWith('Hi Anna, a property:') && one.endsWith('Ridwan'), one);

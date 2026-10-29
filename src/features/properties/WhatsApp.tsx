@@ -5,6 +5,7 @@ import { timeAgo } from '../../lib/format';
 import { clientMessage, firstName, propertiesText, waLink, waNumber } from '../../lib/whatsapp';
 import type { PropertyForMessage } from '../../lib/whatsapp';
 import type { Applicant } from '../../lib/types';
+import { lhaFitOf } from '../../lib/matchRules';
 
 /**
  * Opens WhatsApp with the property details typed in. With a client: a chat
@@ -12,7 +13,8 @@ import type { Applicant } from '../../lib/types';
  * WhatsApp asks who to send it to.
  */
 export function WhatsAppLink({ to, properties, label, icon = false }: {
-  to?: Pick<Applicant, 'id' | 'full_name' | 'phone'>;
+  /** with a whole client record, each property says how its rent compares with their own LHA */
+  to?: Pick<Applicant, 'id' | 'full_name' | 'phone'> | Applicant;
   properties: PropertyForMessage[];
   label?: string;
   icon?: boolean;
@@ -22,7 +24,8 @@ export function WhatsAppLink({ to, properties, label, icon = false }: {
   const track = useAddDeals();
   if (properties.length === 0) return null;
   const number = to ? waNumber(to.phone) : null;
-  const text = to ? clientMessage(to.full_name, properties, myName) : propertiesText(properties);
+  const client = to && 'stage' in to ? to : null;
+  const text = to ? clientMessage(to.full_name, properties, myName, undefined, client ? (p) => lhaFitOf(p, client) : undefined) : propertiesText(properties);
   const what = properties.length === 1 ? 'this property' : `these ${properties.length} properties`;
   const title = !to ? `Send ${what} to anyone on WhatsApp`
     : number ? `Send ${what} to ${firstName(to.full_name)} on WhatsApp`

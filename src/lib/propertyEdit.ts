@@ -11,13 +11,21 @@ export const CHECK_FIELDS = [
 ] as const;
 type CheckField = typeof CHECK_FIELDS[number];
 
+/** What matching reads about a property (0031 to 0036): each only sent once its column exists. */
+export const MATCH_FIELDS = ['has_media', 'media_url', 'female_only', 'landlord_criteria', 'bills_status'] as const;
+type MatchField = typeof MATCH_FIELDS[number];
+
+/** The benefits a landlord can say they take (landlord_criteria.benefits), in words. */
+export const TAKES_LABEL: Record<string, string> = { uc: 'UC', pip: 'PIP', lcwra: 'LCWRA', hb: 'Housing benefit', esa: 'ESA', working: 'Working' };
+export const BILLS_STATUS_LABEL: Record<string, string> = { included: 'Included', excluded: 'Not included', partial: 'Some included' };
+
 export type EditableProperty = Pick<Property,
   'address_line' | 'postcode' | 'area' | 'borough' | 'property_type' | 'bedrooms' | 'rent_pcm' | 'rent_text' | 'bills' | 'furnished' | 'available_from' | 'notes'>
-  & Partial<Pick<Property, CheckField | 'photo_urls'>>;
+  & Partial<Pick<Property, CheckField | MatchField | 'photo_urls'>>;
 
 export const EDITABLE: ReadonlyArray<keyof EditableProperty> = [
   'address_line', 'postcode', 'area', 'borough', 'property_type', 'bedrooms', 'rent_pcm', 'rent_text', 'bills', 'furnished', 'available_from', 'notes',
-  ...CHECK_FIELDS, 'photo_urls',
+  ...CHECK_FIELDS, 'photo_urls', ...MATCH_FIELDS,
 ];
 
 /** Whether a saved property has the 0024 photo links (a property only on this device can always hold them). */
@@ -57,7 +65,19 @@ const LABEL: Record<keyof EditableProperty, string> = {
   gas_expiry: 'Gas certificate', no_gas: 'No gas', eicr_expiry: 'EICR', epc_rating: 'EPC', epc_sap: 'SAP score',
   licence_needed: 'Licence needed', licence_no: 'Licence number', licence_expiry: 'Licence', alarms_checked: 'Alarms checked',
   photo_count: 'Photos', prs_landlord_id: 'PRS landlord ID', prs_property_id: 'PRS property ID', photo_urls: 'Photo links',
+  has_media: 'Photos or video in hand', media_url: 'Photos or video link', female_only: 'Women only', landlord_criteria: "Landlord's rules",
+  bills_status: 'Bills',
 };
+
+/** A landlord's rules in words: "ages 25 to 60, takes UC or PIP"; "anyone" when empty. */
+export function criteriaWords(c: Property['landlord_criteria'] | null | undefined): string {
+  if (!c) return 'anyone';
+  const min = c.min_age ?? null, max = c.max_age ?? null;
+  const ages = min !== null && max !== null ? `ages ${min} to ${max}` : min !== null ? `${min} and over` : max !== null ? `up to ${max}` : null;
+  const takes = (c.benefits ?? []).map((b) => TAKES_LABEL[b] ?? b);
+  const words = [ages, takes.length ? `takes ${takes.length > 1 ? `${takes.slice(0, -1).join(', ')} or ${takes[takes.length - 1]}` : takes[0]}` : null].filter(Boolean).join(', ');
+  return words || 'anyone';
+}
 const DATES = new Set<keyof EditableProperty>(['available_from', 'gas_expiry', 'eicr_expiry', 'licence_expiry', 'alarms_checked']);
 const label = (map: Record<string, string>, v: string) => map[v] ?? v;
 
@@ -73,13 +93,15 @@ const shown = (k: keyof EditableProperty, v: unknown): string => {
   if (k === 'rent_pcm') return `${money(Number(v))} pcm`;
   if (DATES.has(k)) return shortDate(String(v));
   if (k === 'accommodation_type') return label(ACCOMMODATION_LABEL, String(v));
+  if (k === 'landlord_criteria') return criteriaWords(v as Property['landlord_criteria']);
+  if (k === 'bills_status') return label(BILLS_STATUS_LABEL, String(v)).toLowerCase();
   if (k === 'notes') return String(v).length > 40 ? `${String(v).slice(0, 40)}…` : String(v);
   return String(v);
 };
 
 const same = (a: unknown, b: unknown) => (Array.isArray(a) || Array.isArray(b)
   ? JSON.stringify([...((a as unknown[]) ?? [])].sort()) === JSON.stringify([...((b as unknown[]) ?? [])].sort())
-  : a === b);
+  : (a && typeof a === 'object') || (b && typeof b === 'object') ? JSON.stringify(a ?? null) === JSON.stringify(b ?? null) : a === b);
 
 /** Only the fields that really changed, ready to save. A field left out of `after` is not touched. */
 export function changedFields(before: EditableProperty, after: EditableProperty): Partial<EditableProperty> {

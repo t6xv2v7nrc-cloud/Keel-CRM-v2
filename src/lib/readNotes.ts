@@ -67,7 +67,7 @@ function sentenceAt(text: string, index: number): string {
 }
 
 /** "not", "no", "never"... shortly before a phrase. */
-const negated = (text: string, index: number) => /\b(not|no|never|isn'?t|aren'?t|don'?t|doesn'?t|without|nor)\b[^.,;]{0,18}$/i.test(text.slice(Math.max(0, index - 30), index));
+const negated = (text: string, index: number) => /\b(not|no|never|isn['’]?t|aren['’]?t|don['’]?t|doesn['’]?t|haven['’]?t|hasn['’]?t|without|nor)\b[^.,;]{0,18}$/i.test(text.slice(Math.max(0, index - 30), index));
 
 function* matches(text: string, re: RegExp) {
   const g = new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`);
@@ -106,18 +106,6 @@ function readBudget(text: string, out: Candidate[]) {
       });
     }
   }
-}
-
-function readLha(text: string, out: Candidate[]) {
-  const sized = /\b(\d|one|two|three|four|shared|room)\s*[- ]?bed(?:room)?\s*(?:rate\s*)?lha\b/i.exec(text);
-  if (sized) {
-    const s = sized[1].toLowerCase();
-    const band = s === 'shared' || s === 'room' ? 'Shared room' : `${num(s)}-Bed`;
-    out.push({ key: 'lha', field: 'LHA band', patch: { lha_band: band }, value: band, confidence: 0.85, evidence: evidence(text, sized.index, sized[0].length) });
-    return;
-  }
-  const any = /\blha\b/i.exec(text);
-  if (any) out.push({ key: 'lha', field: 'LHA band', patch: { lha_band: 'LHA rate' }, value: 'LHA rate', confidence: 0.6, evidence: evidence(text, any.index, any[0].length), note: 'Says LHA but not which band' });
 }
 
 // ── Household ──────────────────────────────────────────────────────
@@ -161,11 +149,12 @@ export function readHouseholdText(text: string): HouseholdReading | null {
     if (negated(text, m.index)) continue;
     kids.push({ at: m.index, length: m[0].length, n: num(m[1]) });
   }
-  // "my 13-year-old daughter", "my son and daughter", "and a baby", "with my kids"
-  for (const m of text.matchAll(new RegExp(`\\b(my|our|and|with|plus)\\s+((?:[\\w'-]+\\s+){0,3}?)(${CHILD}|${CHILDREN})\\b${NOT_A_CHILD}`, 'gi'))) {
+  // "my 13-year-old daughter", "my son and daughter", "and a baby", "with my kids", "I have twins", "has a son"
+  for (const m of text.matchAll(new RegExp(`\\b(my|our|and|with|plus|have|has|got)\\s+((?:[\\w'-]+\\s+){0,3}?)(${CHILD}|${CHILDREN})\\b${NOT_A_CHILD}`, 'gi'))) {
     if (seen(m.index, m[0].length) || negated(text, m.index)) continue;
     // "with kids" alone can be general ("good with kids"); "with my kids", "with a baby" cannot
     if (/^(with|plus)$/i.test(m[1]) && !/\b(my|our|a|an|the|\d+|one|two|three|four)\b/i.test(m[2])) continue;
+    if (/^(have|has|got)$/i.test(m[1]) && /^(?:any|no)\b/i.test(m[2])) continue; // "I don't have any children"
     const plural = new RegExp(`^(${CHILDREN})$`, 'i').test(m[3]);
     const age = ageOf(m[2]) ?? ageOf(text.slice(m.index + m[0].length, m.index + m[0].length + 16));
     if (age !== null && age >= 18) { grownUps.push({ at: m.index, length: m[0].length }); continue; }
@@ -177,6 +166,8 @@ export function readHouseholdText(text: string): HouseholdReading | null {
     if (/^(year|yr)$/i.test(m[2]) && Number(m[1]) >= 18) continue;
     kids.push({ at: m.index, length: m[0].length, n: 1 });
   }
+  // "2 adults and 3 children" on a referral form
+  const adultCount = /\b(\d|one|two|three|four|five)\s+adults?\b/i.exec(text);
   const singleParent = /\bsingle (mum|mother|dad|father|parent)\b/i.exec(text);
   const familyOf = /\bfamily of (\d|two|three|four|five|six|seven)\b/i.exec(text);
   const expecting = /\b(pregnant|expecting a baby|expecting my first|baby on the way|due in)\b/i.exec(text);
@@ -189,17 +180,29 @@ export function readHouseholdText(text: string): HouseholdReading | null {
     const counted = kids.every((k) => k.n !== null) && kids.length > 0 ? kids.reduce((s, k) => s + (k.n ?? 0), 0) : undefined;
     const hits: Hit[] = [...kids, ...[singleParent, familyOf, expecting].flatMap((m) => (m ? [{ at: m.index, length: m[0].length }] : []))];
     const first = hits.sort((a, b) => a.at - b.at)[0];
-    const adults = withPartner ? 2 : singleParent ? 1 : undefined;
+    // the parent or parents, then any grown-up son or daughter, or relative living with them, as an extra adult
+    const parents = adultCount ? num(adultCount[1]) : withPartner ? 2 : singleParent || kids.length ? 1 : undefined;
+    const extra = adultCount ? 0 : grownUps.length + (sharing && sharer ? 1 : 0);
+    const adults = parents !== undefined ? parents + extra : undefined;
     const familySize = familyOf ? num(familyOf[1]) : null;
     return {
       type: 'family', at: first.at, length: first.length,
       confidence: kids.length ? 0.9 : singleParent || familyOf ? 0.8 : 0.6,
       children: counted ?? (familySize && adults ? Math.max(0, familySize - adults) : undefined),
-      adults: adults ?? (kids.length && !withPartner && !sharing ? 1 : undefined),
-      note: !kids.length && expecting ? 'Expecting a baby' : undefined,
+      adults,
+      note: !kids.length && expecting ? 'Expecting a baby' : extra ? `${extra} more ${extra === 1 ? 'adult' : 'adults'} moving in with them` : undefined,
     };
   }
-  if (withPartner) return { type: 'couple', confidence: 0.85, adults: 2, at: partner!.index, length: partner![0].length };
+  if (withPartner) {
+    const extra = grownUps.length + (sharing && sharer ? 1 : 0);
+    return extra ? { type: 'other', confidence: 0.7, adults: 2 + extra, at: partner!.index, length: partner![0].length, note: 'A couple with another adult moving in' }
+      : { type: 'couple', confidence: 0.85, adults: 2, at: partner!.index, length: partner![0].length };
+  }
+  if (adultCount && num(adultCount[1]) >= 2) {
+    const n2 = num(adultCount[1]);
+    return n2 === 2 ? { type: 'couple', confidence: 0.6, adults: 2, at: adultCount.index, length: adultCount[0].length, note: 'Says 2 adults: a couple, or two sharing? Check' }
+      : { type: 'other', confidence: 0.65, adults: n2, at: adultCount.index, length: adultCount[0].length, note: `${n2} adults moving in` };
+  }
   if (sharing || grownUps.length) {
     const hit = sharer && sharing ? { at: sharer.index, length: sharer[0].length } : grownUps[0];
     return { type: 'other', confidence: 0.6, adults: 2, at: hit.at, length: hit.length,
@@ -239,8 +242,20 @@ export function readAgeText(text: string): AgeReading | null {
     const age = Number(own[1]);
     if (age >= 16 && age <= 99) return { age, band: age < 35 ? 'under_35' : '35_plus', at: own.index, length: own[0].length };
   }
+  // an officer writing about them: "client is 40", "she is 28 years old", "he's 52"
+  const theirs = /\b(?:client|applicant|he|she)(?:\s+is|'s|’s)\s+(\d{2})\b(?:\s*[- ]?(?:years?|yrs?)(?:[- ]?old)?)?(?!\s*(?:%|k\b|pounds|minutes?|mins?|hours?|days?|weeks?|months?|miles?|bed|£))/i.exec(text);
+  if (theirs && !negated(text, theirs.index)) {
+    const age = Number(theirs[1]);
+    if (age >= 16 && age <= 99) return { age, band: age < 35 ? 'under_35' : '35_plus', at: theirs.index, length: theirs[0].length };
+  }
   const band = /\b(?:i'?m|i am|aged)\s+(under|over|below|above)\s+35\b/i.exec(text);
   if (band) return { age: null, band: /under|below/i.test(band[1]) ? 'under_35' : '35_plus', at: band.index, length: band[0].length };
+  // "over 35", "35+", "35 or over", "under 35": the band on its own
+  const bare = /\b(under|over|below|above)\s+35\b(?!\s*(?:mins?|minutes?|%|pounds|k\b|miles?|hours?|days?|weeks?))|\b35\s*(\+|or\s+over|or\s+older|plus)/i.exec(text);
+  if (bare && !negated(text, bare.index)) {
+    const under = /under|below/i.test(bare[1] ?? '');
+    return { age: null, band: under ? 'under_35' : '35_plus', at: bare.index, length: bare[0].length };
+  }
   return null;
 }
 
@@ -371,7 +386,6 @@ function readFlags(text: string, a: Applicant, flags: Flag[]) {
 const currentWords = (a: Applicant, key: string): string | null => {
   switch (key) {
     case 'budget': return a.budget_pcm ? `${money(a.budget_pcm)} pcm` : null;
-    case 'lha': return a.lha_band || null;
     case 'household': return a.household_type ? HOUSEHOLD_LABEL[a.household_type] ?? a.household_type : null;
     case 'children': return a.children ? String(a.children) : null;
     case 'adults': return a.adults && a.adults > 1 ? String(a.adults) : null;
@@ -403,7 +417,7 @@ function readNotesNow(a: Applicant): NotesReading {
   readFlags(text, a, flags);
   const out: Candidate[] = [];
   if (text.trim()) {
-    readBudget(text, out); readLha(text, out); readHousehold(text, out); readBenefits(text, a, out);
+    readBudget(text, out); readHousehold(text, out); readBenefits(text, a, out);
     readWork(text, out); readRegistration(text, out); readCouncil(text, out); readUrgency(text, out); readSituation(text, out);
   }
 

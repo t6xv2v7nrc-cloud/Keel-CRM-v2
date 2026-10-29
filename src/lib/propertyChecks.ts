@@ -95,7 +95,7 @@ export function papersFor(p: ForChecks, today = todayIso()): Papers {
   return { known: true, complete: missing.length === 0 && failing.length === 0, missing, failing };
 }
 
-export interface Flag { tone: 'red' | 'amber' | 'grey'; key: 'over_lha' | 'outside_london' | 'papers_lapsed' | 'not_ready'; words: string; detail?: string }
+export interface Flag { tone: 'red' | 'amber' | 'grey'; key: 'over_lha' | 'outside_london' | 'papers_lapsed' | 'not_ready' | 'stale'; words: string; detail?: string }
 
 export interface Checks {
   lha: LhaCheck | null;

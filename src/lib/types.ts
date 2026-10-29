@@ -51,6 +51,16 @@ export interface Applicant {
   postcode_area?: string | null;      // 0023: where they want to live, as postcode areas or districts ("HA1, HA2")
   age_band?: 'under_35' | '35_plus' | null; // 0023: when the date of birth is not known
   benefit_cap?: 'capped' | 'not_capped' | 'exempt' | null; // 0023
+  bedrooms_needed?: number | null;    // 0028: bedrooms they need (0 a studio); empty: read from their words
+  max_top_up?: number | null;         // 0030: the most they can add each month on top of their LHA (0 none)
+  anchor?: string | null;             // 0033: what they need to be near ("my mum, she cares for me", "Northwick Park Hospital")
+  anchor_postcode?: string | null;    // 0033: where that is
+  max_travel_mins?: number | null;    // 0033: the longest they will travel to it
+  female_only?: boolean | null;       // 0034: needs a women-only place
+  last_contact_at?: string | null;    // 0037: when Keel last got in touch with them (a message, a call, a property sent)
+  last_inbound_at?: string | null;    // 0037: when they (or the AI on their behalf) last messaged Keel
+  move_by?: string | null;            // 0038: the date they need to move by
+  wants_outdoor?: boolean | null;     // 0038: wants a garden or a balcony
   created_at: string;
   updated_at: string;
 }
@@ -95,6 +105,12 @@ export interface Property {
   photo_urls?: string[];          // 0024: up to 3 photo links, put in alerts
   not_ready_at?: string | null;   // 0025: marked not ready by hand (empty: ready, as the suppliers see to the checks)
   not_ready_note?: string | null;
+  availability_confirmed_at?: string | null; // 0031: when the provider last said it is still free
+  has_media?: boolean | null;     // 0032: photos or a video are in hand to send
+  media_url?: string | null;      // 0032: a link to the photos or video
+  female_only?: boolean | null;   // 0034: a women-only place
+  landlord_criteria?: LandlordCriteria | null; // 0035: who the landlord will take
+  bills_status?: BillsStatus | null; // 0036: bills included, excluded or some (the detail stays in `bills`)
   prs_landlord_id?: string | null;
   prs_property_id?: string | null;
   created_at: string;
@@ -102,6 +118,9 @@ export interface Property {
 }
 
 export type AccommodationType = 'self_contained' | 'shared_kitchen' | 'hmo_room';
+export type BillsStatus = 'included' | 'excluded' | 'partial';
+/** Who a landlord will take (0035): an age range and the benefits they accept (uc, pip, lcwra, hb, esa, working). Empty: anyone. */
+export interface LandlordCriteria { min_age?: number | null; max_age?: number | null; benefits?: string[] | null }
 
 export interface Activity {
   id: string;

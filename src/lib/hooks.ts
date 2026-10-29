@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { geoVersion, locate } from './geo';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from './supabase';
 import { isLocalProperty, localProperties, useLocalProperties } from './localProperties';
@@ -7,6 +8,9 @@ import type { AppSettings } from './settings';
 import { addDays, OUTCOME_LABEL, todayIso } from './calls';
 import { DEAL_LABEL, isLive, shortAddress, shouldAdvance, stageFromDeals, stepAfter, takesOver, viewingWords } from './progress';
 import { computeTier } from './tiering';
+import { autoFill, fillWords } from './autoFill';
+import type { BackfillRow } from './autoFill';
+import { writeDropping } from './columns';
 import { clockTime, moneyFee, shortDate } from './format';
 import type {
   Activity, Applicant, Call, CallOutcome, Deal, DealStatus, Profile, Property, Provider, ProviderRequest, Receivable, RequestStatus, RequestType,
@@ -73,23 +77,55 @@ export function useApplicant(id: string | undefined) {
 export function useUpdateTriage() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ applicant, patch, note }: { applicant: Applicant; patch: Partial<Applicant>; note: string }) => {
-      const merged = { ...applicant, ...patch };
-      const full: Partial<Applicant> = { ...patch };
+    mutationFn: async ({ applicant, patch, note }: { applicant: Applicant; patch: Partial<Applicant>; note: string }): Promise<{ filled: string | null }> => {
+      // new words in their notes or must-haves: fill in any empty answers they give (never one already answered, or set now)
+      const fill = 'notes' in patch || 'requirements' in patch
+        ? autoFill({ ...applicant, ...patch }, { ageBand: 'age_band' in applicant, bedrooms: 'bedrooms_needed' in applicant })
+        : { patch: {}, fills: [] };
+      const fills = fill.fills.filter((f) => !(f.field in patch));
+      const merged = { ...applicant, ...patch, ...Object.fromEntries(fills.map((f) => [f.field, f.to])) };
+      const full: Partial<Applicant> = { ...patch, ...Object.fromEntries(fills.map((f) => [f.field, f.to])) };
       if (!('tier' in patch) && !merged.tier_locked) full.tier = computeTier(merged);
-      let { error } = await supabase.from('applicants').update(full).eq('id', applicant.id);
-      if (error && /tier_locked/.test(error.message)) {
-        // before the 0005 update there is no lock flag: a stored tier simply stands
-        const rest = { ...full };
-        delete rest.tier_locked;
-        ({ error } = await supabase.from('applicants').update(rest).eq('id', applicant.id));
-      }
+      // before an update has been run (0005's lock flag, 0023's age band, 0028's bedrooms), that column is left out
+      const { error, dropped } = await writeDropping(full as Record<string, unknown>, (row) => supabase.from('applicants').update(row).eq('id', applicant.id));
       if (error) throw error;
-      await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: applicant.id, kind: 'updated', body: note });
+      const kept = fills.filter((f) => !dropped.includes(f.field));
+      const filled = kept.length ? fillWords(kept) : null;
+      await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: applicant.id, kind: 'updated', body: filled ? `${note}. Filled in from their notes: ${filled}` : note });
+      return { filled };
     },
     onSuccess: (_d, { applicant }) => {
       qc.invalidateQueries({ queryKey: ['applicants'] });
       qc.invalidateQueries({ queryKey: ['applicants', applicant.id] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+/** The one-off backfill (A9): write exactly the rows shown on Settings, each change on the client's timeline. A tier
+ *  set by hand stays; otherwise the tier follows the filled-in answers. Columns the database lacks are left out. */
+export function useApplyBackfill() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ rows, applicants }: { rows: BackfillRow[]; applicants: Applicant[] }): Promise<{ done: number; failed: string[] }> => {
+      const byId = new Map(applicants.map((a) => [a.id, a]));
+      let done = 0;
+      const failed: string[] = [];
+      for (const r of rows) {
+        const a = byId.get(r.id);
+        if (!a) continue;
+        const patch: Record<string, unknown> = Object.fromEntries(r.fills.map((f) => [f.field, f.to]));
+        if (!a.tier_locked) patch.tier = computeTier({ ...a, ...patch });
+        const { error, dropped } = await writeDropping(patch, (row) => supabase.from('applicants').update(row).eq('id', a.id));
+        if (error) { failed.push(`${a.full_name}: ${error.message}`); continue; }
+        const kept = r.fills.filter((f) => !dropped.includes(f.field));
+        if (kept.length) await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: a.id, kind: 'updated', body: `Filled in from their notes (one-off): ${fillWords(kept)}` });
+        done += 1;
+      }
+      return { done, failed };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['applicants'] });
       qc.invalidateQueries({ queryKey: ['activities'] });
     },
   });
@@ -238,6 +274,21 @@ export function useActivities(entityType: string, entityId: string | undefined) 
   });
 }
 
+/** Keel was in touch with a client just now (0037: last_contact_at): a contact note, a call, a WhatsApp send. Best
+ *  effort, and quiet before 0037 is run; the timeline row is the record either way. */
+async function touchContact(applicantIds: string[], at = new Date().toISOString()) {
+  for (const part of chunks([...new Set(applicantIds)])) {
+    const { error } = await supabase.from('applicants').update({ last_contact_at: at }).in('id', part);
+    if (error && !isMissingColumn(error)) throw error;
+  }
+}
+
+/** A client got in touch just now (0037: last_inbound_at): a call Keel missed. Best effort, quiet before 0037. */
+async function touchInbound(applicantId: string, at = new Date().toISOString()) {
+  const { error } = await supabase.from('applicants').update({ last_inbound_at: at }).eq('id', applicantId);
+  if (error && !isMissingColumn(error)) throw error;
+}
+
 /** Save a note on a client: how you spoke to them (or just a note) and what about. It goes on their timeline. */
 export function useAddNote() {
   const qc = useQueryClient();
@@ -246,8 +297,13 @@ export function useAddNote() {
       if (!text.trim()) throw new Error('Write the note first');
       const { error } = await supabase.from('activities').insert({ entity_type: 'applicant', entity_id: applicantId, ...noteActivity(channel, text) });
       if (error) throw error;
+      // speaking to them answers them (a plain note does not)
+      if (channel !== 'note') await touchContact([applicantId]);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['activities'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['activities'] });
+      qc.invalidateQueries({ queryKey: ['applicants'] });
+    },
   });
 }
 
@@ -311,8 +367,12 @@ export function useLogWhatsApp() {
         entity_type: 'applicant', entity_id: applicantId, kind: 'whatsapp', body: `Sent ${p.address_line} on WhatsApp`,
       })));
       if (error) throw error;
+      await touchContact([applicantId]);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['activities'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['activities'] });
+      qc.invalidateQueries({ queryKey: ['applicants'] });
+    },
   });
 }
 
@@ -470,6 +530,39 @@ export function useSetPropertyReady() {
         entity_type: 'property', entity_id: p.id, kind: 'updated',
         body: ready ? `${p.address_line}: marked ready to send` : `${p.address_line}: marked not ready${patch.not_ready_note ? `: ${patch.not_ready_note}` : ''}`,
       });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['properties'] });
+      qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+/** Places these postcodes and districts (geo.ts: only property postcodes and districts are ever sent), for distances
+ *  to a client's anchor (B6). Gives a number that goes up when new places are known, for useMemo to follow. */
+export function useLocated(keys: Array<string | null>): number {
+  const [version, setVersion] = useState(geoVersion());
+  const wanted = useMemo(() => [...new Set(keys.filter((k): k is string => !!k))].sort().join('|'), [keys]);
+  useEffect(() => {
+    const list = wanted ? wanted.split('|') : [];
+    if (!list.length) return;
+    let live = true;
+    locate(list).then(() => { if (live) setVersion(geoVersion()); }).catch(() => { /* offline: distances wait */ });
+    return () => { live = false; };
+  }, [wanted]);
+  return version;
+}
+
+/** The provider has just said a property is still free (0031): matches stop asking to check it for 7 days. */
+export function useConfirmAvailable() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (p: Property) => {
+      const patch = { availability_confirmed_at: new Date().toISOString() };
+      if (isLocalProperty(p.id)) { if (!localProperties.update([p.id], patch)) throw new Error('This browser would not save the change'); return; }
+      const { error } = await supabase.from('properties').update(patch).eq('id', p.id);
+      if (error) throw isMissingColumn(error) ? new Error('Confirming a property is still available needs a one-off database update: run supabase/migrations/0031_availability_confirmed.sql in the Supabase SQL Editor.') : error;
+      await supabase.from('activities').insert({ entity_type: 'property', entity_id: p.id, kind: 'updated', body: `${p.address_line}: confirmed still available` });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['properties'] });
@@ -1124,6 +1217,9 @@ export function useLogCall() {
       await supabase.from('activities').insert({
         entity_type: 'applicant', entity_id: applicant.id, kind: 'call', body: callBody(direction, outcome, notes, nextCallAt),
       });
+      // an answered call is a reply; a call of theirs that was missed is them getting in touch
+      if (outcome === 'answered' || direction === 'outgoing') await touchContact([applicant.id]);
+      else await touchInbound(applicant.id);
     },
     onSuccess: (_d, { applicant }) => {
       qc.invalidateQueries({ queryKey: ['calls'] });

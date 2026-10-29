@@ -3,12 +3,16 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader, Help, Icon, UpdateNote, useToast } from '../../components/ui';
 import type { IconName } from '../../components/ui';
+import type { HelpTopic } from '../../lib/help';
 import { useMoveStage, usePeople, useProviders, useUpdateTriage } from '../../lib/hooks';
 import { activeSettings } from '../../lib/settings';
 import { computeTier, HOUSEHOLD_LABEL, tierLabel, tierNumbers, tierReason, tierStyle, URGENCY_LABEL, WORK_STATUS_LABEL } from '../../lib/tiering';
 import { benefitCapOf, effectiveTier } from '../../lib/search';
 import { STAGE_ORDER } from '../../lib/progress';
-import { selfContainedFrom, withSelfContained } from '../../lib/propertyMatch';
+import { clientNeeds, selfContainedFrom, withSelfContained } from '../../lib/propertyMatch';
+import { householdCheck, rateOf, tierNeeds } from '../../lib/clientProfile';
+import { bedsWords } from '../../lib/autoFill';
+import { sizeWords } from '../../lib/lha';
 import { useFold } from '../../lib/collapse';
 import { shortDate } from '../../lib/format';
 import { confidenceWord, readNotes } from '../../lib/readNotes';
@@ -22,6 +26,7 @@ const STAGES: Array<[ApplicantStage, string]> = [
 const yesNoWord = (b: boolean | null | undefined) => (b === true ? 'yes' : b === false ? 'no' : 'not known');
 const AGE_BAND_WORDS: Record<string, string> = { under_35: 'Under 35', '35_plus': '35 or over' };
 const CAP_WORDS: Record<string, string> = { capped: 'Capped', not_capped: 'Not capped', exempt: 'Exempt from the cap' };
+const BEDROOM_CHOICES: Array<[string, string]> = [['0', 'Studio'], ['1', '1 bedroom'], ['2', '2 bedrooms'], ['3', '3 bedrooms'], ['4', '4 bedrooms'], ['5', '5 or more']];
 
 /** Everything about a client, edited in one place. Each box saves when you
  *  leave it; the tier follows the answers unless it was set by hand. */
@@ -51,7 +56,7 @@ export function ClientDetails({ applicant }: { applicant: Applicant }) {
     if ((a[key] ?? null) === value) return;
     save({ [key]: value } as Partial<Applicant>, value ? `${label} set to ${value}` : `${label} cleared`);
   };
-  const number = (label: string, key: 'adults' | 'children' | 'budget_pcm', format = (n: number) => String(n)) => (v: string) => {
+  const number = (label: string, key: 'adults' | 'children' | 'budget_pcm' | 'max_top_up' | 'max_travel_mins', format = (n: number) => String(n)) => (v: string) => {
     const n = v.trim() === '' ? null : Math.max(0, Math.round(Number(v)));
     if (n !== null && Number.isNaN(n)) return;
     if ((a[key] ?? null) === n) return;
@@ -69,6 +74,10 @@ export function ClientDetails({ applicant }: { applicant: Applicant }) {
   };
 
   const council = a.council || a.referring_borough || '';
+  const rate = rateOf(a);
+  const needs = tierNeeds(a);
+  const check = householdCheck(a);
+  const beds = clientNeeds(a).beds ?? { min: 0, max: 0, asked: false };
 
   return (
     <Card id="details" className="scroll-mt-28 lg:scroll-mt-20">
@@ -113,7 +122,7 @@ export function ClientDetails({ applicant }: { applicant: Applicant }) {
                 {canSetTier && <button type="button" onClick={() => save({ tier: auto, tier_locked: false }, `Tier back to the logic (${tierLabel(auto)})`)}
                   className="text-[var(--link)] hover:underline">Use the logic</button>}</>
             ) : (
-              <>From the answers below: {tierReason(a)} <Link to="/settings?tab=team" className="text-[var(--link)] hover:underline">See the logic</Link></>
+              <>{needs.length > 0 && <strong className="text-[var(--note-fg)]">Needs info: {needs.join(', ')}. </strong>}From the answers below: {tierReason(a)} <Link to="/settings?tab=team" className="text-[var(--link)] hover:underline">See the logic</Link></>
             )}
             {!canSetTier && <> Only {people.ownerName ?? 'the owner'} can set a tier by hand.</>}
           </p>
@@ -160,11 +169,25 @@ export function ClientDetails({ applicant }: { applicant: Applicant }) {
             <Choice value={a.household_type ?? ''} options={[['', 'Not known'], ...Object.entries(HOUSEHOLD_LABEL)]}
               onChange={(v) => save({ household_type: v || null }, `Household set to ${v ? HOUSEHOLD_LABEL[v].toLowerCase() : 'not known'}`)} />
           </Row>
+          {check && <Amber>{check}</Amber>}
           <Box label="Adults" value={a.adults != null ? String(a.adults) : ''} type="number" onSave={number('Adults', 'adults')} />
           <Box label="Children" value={a.children != null ? String(a.children) : ''} type="number" onSave={number('Children', 'children')} />
           <Box label="Budget pcm" value={a.budget_pcm != null ? String(a.budget_pcm) : ''} type="number" mono prefix="£"
             onSave={number('Budget', 'budget_pcm', (n) => `£${n.toLocaleString('en-GB')}`)} />
-          <Box label="LHA band" value={a.lha_band ?? ''} placeholder="e.g. 1-Bed" onSave={text('LHA band', 'lha_band')} />
+          {'bedrooms_needed' in a ? (
+            <Row label="Bedrooms needed">
+              <Choice value={a.bedrooms_needed != null ? String(a.bedrooms_needed) : ''}
+                options={[['', beds.asked ? `From their words: ${bedsWords(beds.min).toLowerCase()}` : 'Not known'], ...BEDROOM_CHOICES]}
+                onChange={(v) => save({ bedrooms_needed: v === '' ? null : Number(v) }, v === '' ? 'Bedrooms needed cleared' : `Bedrooms needed set to ${bedsWords(Number(v)).toLowerCase()}`)} />
+            </Row>
+          ) : null}
+          {/* the LHA rate they are paid is worked out, never typed (the old free-text band is no longer used) */}
+          <Row label="LHA rate">
+            <span className="text-right text-[15px] text-[var(--ink)]" title={rate.size.why}>
+              {rate.size.value ? `The ${sizeWords(rate.size.value)} rate` : <span className="text-[var(--ink-muted)]">{rate.size.why ? `Not known: ${rate.size.why}` : 'Not known yet'}</span>}
+              {rate.size.value && rate.size.why && <span className="block text-[12px] text-[var(--ink-muted)]">{rate.size.why}</span>}
+            </span>
+          </Row>
           {'age_band' in a && (
             <Row label="Age band">
               <Choice value={a.age_band ?? ''} options={[['', a.date_of_birth ? 'From date of birth' : 'Not known'], ...Object.entries(AGE_BAND_WORDS)]}
@@ -222,6 +245,41 @@ export function ClientDetails({ applicant }: { applicant: Applicant }) {
           )}
         </Section>
       </div>
+
+      <Section icon="key" title="What the home must be" help="homeNeeds">
+        {'move_by' in a && 'max_top_up' in a && 'anchor' in a && 'female_only' in a ? (
+          <div className="grid grid-cols-1 gap-x-6 md:grid-cols-2">
+            <Box label="Must move by" type="date" value={a.move_by ?? ''} onSave={(v) => {
+              const value = v || null;
+              if ((a.move_by ?? null) === value) return;
+              save({ move_by: value }, value ? `Must move by ${shortDate(value)}` : 'Move-by date cleared');
+            }} />
+            <Box label="Top-up they can pay" value={a.max_top_up != null ? String(a.max_top_up) : ''} type="number" mono prefix="£" placeholder="0"
+              onSave={number('Top-up a month', 'max_top_up', (n) => `£${n.toLocaleString('en-GB')}`)} />
+            <Box label="Must live near" value={a.anchor ?? ''} placeholder="e.g. mum, they care for her" onSave={text('Must live near', 'anchor')} />
+            <Box label="Its postcode" value={a.anchor_postcode ?? ''} mono placeholder="e.g. HA1 3UJ" onSave={(v) => {
+              const value = v.trim().toUpperCase() || null;
+              if ((a.anchor_postcode ?? null) === value) return;
+              save({ anchor_postcode: value }, value ? `Must live near ${value}` : 'Postcode they must live near cleared');
+            }} />
+            <Box label="Longest journey (minutes)" value={a.max_travel_mins != null ? String(a.max_travel_mins) : ''} type="number" mono placeholder="e.g. 30"
+              onSave={number('Longest journey', 'max_travel_mins', (n) => `${n} minutes`)} />
+            <Row label="Women only">
+              <YesNo value={a.female_only} onChange={(v) => save({ female_only: v }, `Women only set to ${yesNoWord(v)}`)} />
+            </Row>
+            {'wants_outdoor' in a && (
+              <Row label="Garden or balcony">
+                <YesNo value={a.wants_outdoor} onChange={(v) => save({ wants_outdoor: v }, `Garden or balcony set to ${yesNoWord(v)}`)} />
+              </Row>
+            )}
+          </div>
+        ) : (
+          <UpdateNote title="Move-by date, top-up, who they must live near and women only need one-off database updates."
+            file={!('max_top_up' in a) ? '0030_max_top_up.sql' : !('anchor' in a) ? '0033_anchor.sql' : !('female_only' in a) ? '0034_female_only.sql' : '0038_intake_wishes.sql'}>
+            Run each update from 0028 in order.
+          </UpdateNote>
+        )}
+      </Section>
 
       <Section icon="user" title="Housing officer" last>
         <div className="grid grid-cols-1 gap-x-6 md:grid-cols-3">
@@ -384,11 +442,20 @@ function NothingShared({ applicant, busy, onChange }: { applicant: Applicant; bu
   );
 }
 
-function Section({ icon, title, children, border = '', last = false }: { icon: IconName; title: string; children: ReactNode; border?: string; last?: boolean }) {
+/** A caution under a field: something to check, worded in the field's own terms. */
+function Amber({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex items-start gap-1.5 rounded-md px-2.5 py-1.5 text-[13px]" style={{ background: 'var(--note-bg)', color: 'var(--note-fg)' }}>
+      <Icon name="alert" size={14} className="mt-0.5 shrink-0" /><span className="min-w-0">{children}</span>
+    </div>
+  );
+}
+
+function Section({ icon, title, children, border = '', last = false, help }: { icon: IconName; title: string; children: ReactNode; border?: string; last?: boolean; help?: HelpTopic }) {
   return (
     <section className={`flex min-w-0 flex-col gap-1 p-4 sm:p-5 ${last ? '' : 'border-b border-[var(--line)]'} ${border} border-[var(--line)]`}>
       <h4 className="m-0 mb-1 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
-        <Icon name={icon} size={14} /> {title}
+        <Icon name={icon} size={14} /> {title}{help && <Help topic={help} />}
       </h4>
       {children}
     </section>
